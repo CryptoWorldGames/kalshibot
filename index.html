@@ -1762,22 +1762,23 @@ function renderPositionsTable(positions) {
       : `<span style="font-weight:700">${esc(p.title)}</span>`;
     const catTag = p.category ? `<span style="font-size:11px;color:#666;margin-left:6px">${esc(p.category)}</span>` : "";
 
-    // Sell button shows profit/loss only
+    // Sell button: shows sell value + profit/loss
     let sellBtnHtml;
-    if (pnlDol != null) {
-      const inProfit = pnlDol > 0.001;
-      const inLoss   = pnlDol < -0.001;
-      const sign     = inProfit ? "+" : "";
-      const label    = inProfit
-        ? `Sell all &nbsp;(${sign}$${pnlDol.toFixed(2)} profit)`
-        : inLoss
-        ? `Sell all &nbsp;(-$${Math.abs(pnlDol).toFixed(2)} loss)`
-        : `Sell all &nbsp;(even)`;
-      const pnlStr = pnlDol >= 0 ? `+$${pnlDol.toFixed(2)}` : `-$${Math.abs(pnlDol).toFixed(2)}`;
+    if (valNow != null) {
+      const inProfit = pnlDol != null && pnlDol > 0.001;
+      const inLoss   = pnlDol != null && pnlDol < -0.001;
+      const bg       = inProfit ? 'var(--green)' : inLoss ? 'var(--red)' : '#555';
+      const fg       = inProfit ? '#000' : '#fff';
+      const sellVal  = `$${valNow.toFixed(2)}`;
+      const pnlLine  = pnlDol != null
+        ? (inProfit ? `+$${pnlDol.toFixed(2)} profit` : inLoss ? `-$${Math.abs(pnlDol).toFixed(2)} loss` : `even`)
+        : "";
       sellBtnHtml = `<button id="${sid}" onclick="sellPos('${safeT}','${side}',${abs},'${sid}')"
-        style="background:${inProfit ? 'var(--green)' : inLoss ? 'var(--red)' : '#555'};color:${inProfit ? '#000' : '#fff'};border:none;border-radius:7px;padding:8px 14px;cursor:pointer;font-weight:700;font-size:13px;white-space:nowrap;line-height:1.3">Sell All<br><span style="font-size:11px;font-weight:600;opacity:.9">${pnlStr}</span></button>`;
+        style="background:${bg};color:${fg};border:none;border-radius:7px;padding:8px 14px;cursor:pointer;font-weight:700;font-size:14px;white-space:nowrap;line-height:1.4;text-align:center">
+        Sell All ${sellVal}${pnlLine ? `<br><span style="font-size:11px;opacity:.85">(${pnlLine})</span>` : ""}
+      </button>`;
     } else {
-      sellBtnHtml = `<button class="sell-btn" id="${sid}" onclick="sellPos('${safeT}','${side}',${abs},'${sid}')">Sell all</button>`;
+      sellBtnHtml = `<button class="sell-btn" id="${sid}" onclick="sellPos('${safeT}','${side}',${abs},'${sid}')">Sell All</button>`;
     }
 
     return `
