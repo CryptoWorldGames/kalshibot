@@ -493,7 +493,8 @@ def _monitor():
                             tracked[ticker]["sell_price"] = bid
                             tracked[ticker]["sold_by"]    = "bot_auto"  # auto-sell by strategy
                     _save_tracked()
-                    print(f"[monitor] Auto-sold {ticker} at {profit_pct:.1f}% profit (bid={bid}¢)")
+                    title = pos.get("title", ticker)
+                    print(f"[monitor] Auto-sold: {title} | bid={bid}¢ profit={profit_pct:.1f}% / ${profit_dollars:.2f}")
 
             except Exception as e:
                 print(f"[monitor] Error checking {ticker}: {e}")

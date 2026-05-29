@@ -1505,7 +1505,9 @@ async function sellPos(ticker, side, count, safeId) {
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "Sell failed");
-    toast(`Sold ${count} ${side.toUpperCase()} on ${ticker}`, "ok");
+    const soldPos = allPositions.find(p => p.ticker === ticker);
+    const marketTitle = soldPos?.title || ticker;
+    toast(`✓ Sold ${count} ${side.toUpperCase()} · ${marketTitle}`, "ok");
     if (preProfit) chaChing();
     selectedPosTickers.delete(ticker);
     // Immediately remove from allPositions so it doesn't reappear
