@@ -247,9 +247,16 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
     <span onclick="document.getElementById('filterBody').style.display = document.getElementById('filterBody').style.display === 'none' ? 'block' : 'none'" style="cursor:pointer;user-select:none">Filters <span style="font-size:11px;color:#666;margin-left:10px">◀ click to collapse</span></span>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <button id="saveSettingsBtn" onclick="saveSettings();this.textContent='✓ Saved!';this.style.background='var(--green)';this.style.color='#000';setTimeout(()=>{this.textContent='Save Settings';this.style.background='';this.style.color='';},2000)" class="sm ghost" style="font-size:13px;padding:6px 18px;font-weight:700">Save Settings</button>
-      <button class="sm ghost" style="font-size:12px;padding:6px 14px" onclick="document.getElementById('strategySlots').style.display=document.getElementById('strategySlots').style.display==='none'?'block':'none'">⭐ Favorites</button>
+      <button class="sm ghost" style="font-size:12px;padding:6px 14px" onclick="document.getElementById('strategySlots').style.display=document.getElementById('strategySlots').style.display==='none'?'block':'none'">⭐ Saved Strategies</button>
     </div>
   </div>
+
+  <!-- ── Strategy Memory Slots ── -->
+  <div id="strategySlots" style="display:none;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;background:#0a0a0a">
+    <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">10 Saved Strategies — click a name to load, hit Save to store current settings</div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px" id="stratSlotGrid"></div>
+  </div>
+
   <div id="filterBody" class="row" style="gap:18px 32px">
     <div class="col">
       <span class="label-sm">Win Probability Range</span>
@@ -470,46 +477,50 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
     </label>
 
     <!-- Option 2: Sell at % profit -->
-    <label class="radio-pill" id="pillProfit" onclick="setStrategy('profit')" style="flex-wrap:wrap;gap:8px;align-items:center">
+    <label class="radio-pill" id="pillProfit" onclick="setStrategy('profit')" style="align-items:center">
       <input type="radio" name="strat" value="profit">
       <span>📈 Sell at % profit:</span>
-      <div class="btn-group" id="profitGroup" style="margin:0" onclick="event.stopPropagation()">
+    </label>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding-left:12px" onclick="setStrategy('profit')">
+      <div class="btn-group" id="profitGroup" style="margin:0">
         <button class="pill" onclick="setProfit(5)">5%</button>
         <button class="pill active" onclick="setProfit(10)">10%</button>
         <button class="pill" onclick="setProfit(15)">15%</button>
         <button class="pill" onclick="setProfit(20)">20%</button>
         <button class="pill" onclick="setProfit(25)">25%</button>
       </div>
-      <div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:4px">
+      <div style="display:flex;align-items:center;gap:4px">
         <input type="number" id="profitCustom" value="10" min="1" step="1"
-          style="width:72px;background:#000;border:1px solid var(--green);border-radius:7px;color:#fff;font-size:15px;font-weight:700;padding:7px 10px"
-          placeholder="custom"
-          onblur="stratPct=parseFloat(this.value)||10;activatePills('profitGroup','');setStrategy('profit');saveSettings();pushStrategy()"
-          onclick="setStrategy('profit')">
-        <span style="color:#888;font-size:12px">%</span>
+          style="width:72px;background:#111;border:2px solid var(--green);border-radius:7px;color:var(--green);font-size:15px;font-weight:700;padding:7px 10px;outline:none"
+          placeholder="% custom"
+          onclick="event.stopPropagation();setStrategy('profit')"
+          onblur="stratPct=parseFloat(this.value)||10;activatePills('profitGroup','');setStrategy('profit');saveSettings();pushStrategy()">
+        <span style="color:var(--green);font-size:14px;font-weight:700">%</span>
       </div>
-    </label>
+    </div>
 
     <!-- Option 3: Sell at $ profit -->
-    <label class="radio-pill" id="pillProfitDol" onclick="setStrategy('profit_dollars')" style="flex-wrap:wrap;gap:8px;align-items:center">
+    <label class="radio-pill" id="pillProfitDol" onclick="setStrategy('profit_dollars')" style="align-items:center">
       <input type="radio" name="strat" value="profit_dollars">
       <span>💵 Sell at $ profit:</span>
-      <div class="btn-group" id="profitDolGroup" style="margin:0" onclick="event.stopPropagation()">
+    </label>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding-left:12px" onclick="setStrategy('profit_dollars')">
+      <div class="btn-group" id="profitDolGroup" style="margin:0">
         <button class="pill" onclick="setProfitDol(0.05)">$0.05</button>
         <button class="pill" onclick="setProfitDol(0.10)">$0.10</button>
         <button class="pill" onclick="setProfitDol(0.25)">$0.25</button>
         <button class="pill" onclick="setProfitDol(0.50)">$0.50</button>
         <button class="pill" onclick="setProfitDol(1.00)">$1.00</button>
       </div>
-      <div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:4px">
-        <span style="color:#888;font-size:12px">$</span>
+      <div style="display:flex;align-items:center;gap:4px">
+        <span style="color:var(--green);font-size:14px;font-weight:700">$</span>
         <input type="number" id="profitDolCustom" value="0.05" min="0.01" step="0.01"
-          style="width:80px;background:#000;border:1px solid var(--green);border-radius:7px;color:#fff;font-size:15px;font-weight:700;padding:7px 10px"
-          placeholder="custom"
-          onblur="setStrategy('profit_dollars');saveSettings();pushStrategy()"
-          onclick="setStrategy('profit_dollars')">
+          style="width:85px;background:#111;border:2px solid var(--green);border-radius:7px;color:var(--green);font-size:15px;font-weight:700;padding:7px 10px;outline:none"
+          placeholder="$ custom"
+          onclick="event.stopPropagation();setStrategy('profit_dollars')"
+          onblur="setStrategy('profit_dollars');saveSettings();pushStrategy()">
       </div>
-    </label>
+    </div>
 
   </div>
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
@@ -2495,6 +2506,45 @@ function setMaxBuys(n) {
   document.getElementById("maxBuysPerMarket").value = n;
 }
 
+// ── Strategy Memory Slots (10 saved strategies) ──────────────────────────
+
+function renderStratSlots() {
+  const grid = document.getElementById("stratSlotGrid");
+  if (!grid) return;
+  grid.innerHTML = Array.from({length:10},(_,i)=>{
+    const slot = JSON.parse(localStorage.getItem(`kb_strat_slot_${i}`) || "null");
+    const name = slot?.name || `Strategy ${i+1}`;
+    const hasData = !!slot;
+    return `<div style="display:flex;gap:4px;align-items:center">
+      <button onclick="loadStratSlot(${i})" style="flex:1;background:${hasData?'#1a2a1a':'#111'};border:1px solid ${hasData?'var(--green)':'var(--border)'};border-radius:6px;color:${hasData?'var(--green)':'#666'};padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${hasData?'Click to load: '+name:'Empty slot'}">
+        ${hasData?'✓ ':''}${name}
+      </button>
+      <button onclick="saveStratSlot(${i})" style="background:#0a1a0a;border:1px solid var(--border);border-radius:6px;color:var(--green);padding:6px 8px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap" title="Save current settings here">Save</button>
+    </div>`;
+  }).join("");
+}
+
+function saveStratSlot(i) {
+  const name = prompt(`Name for Strategy ${i+1}:`, JSON.parse(localStorage.getItem(`kb_strat_slot_${i}`)||"null")?.name || `Strategy ${i+1}`);
+  if (name === null) return;
+  const s = JSON.parse(localStorage.getItem("kb_settings_v2") || "{}");
+  s.name = name || `Strategy ${i+1}`;
+  localStorage.setItem(`kb_strat_slot_${i}`, JSON.stringify(s));
+  renderStratSlots();
+  toast(`✓ Saved as "${s.name}"`, "ok");
+}
+
+function loadStratSlot(i) {
+  const slot = JSON.parse(localStorage.getItem(`kb_strat_slot_${i}`) || "null");
+  if (!slot) { toast("Empty slot — save settings here first", ""); return; }
+  localStorage.setItem("kb_settings_v2", JSON.stringify(slot));
+  loadSettings();
+  pushStrategy();
+  pushSellSettings();
+  renderStratSlots();
+  toast(`✓ Loaded "${slot.name}" — ready, hit Start Bot`, "ok");
+}
+
 // ── Settings save/load ───────────────────────────────────────────────────
 
 const SETTINGS_KEY = "kb_settings_v2";
@@ -2613,6 +2663,7 @@ async function applyCoachSettings() {
 })();
 
 loadSettings();
+renderStratSlots();
 setProfit(parseFloat(document.getElementById("profitCustom")?.value) || 10);
 syncFabButtons();
 // Always push current sell strategy to Flask on page load (survives Flask restarts)
