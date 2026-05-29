@@ -1430,13 +1430,14 @@ async function sellPos(ticker, side, count, safeId) {
     if (preProfit) chaChing();
     selectedPosTickers.delete(ticker);
     // Immediately remove from allPositions so it doesn't reappear
-    // (Kalshi API has a brief delay before the sell reflects)
     allPositions = allPositions.filter(p => p.ticker !== ticker);
     filterPos();
-    setTimeout(() => loadBalanceThrottled(true), 3000); // delay refresh so Kalshi API catches up
+    setTimeout(() => loadBalanceThrottled(true), 3000);
   } catch(e) {
     toast(e.message,"err");
-    if (btn) { btn.disabled = false; btn.textContent = "Sell"; }
+    if (btn) { btn.disabled = false; btn.textContent = "Sell All"; }
+    // Restore the position if sell failed — put it back in the list
+    loadBalanceThrottled(true);
   }
 }
 
