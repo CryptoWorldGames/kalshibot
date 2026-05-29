@@ -457,48 +457,49 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
   <div class="card-title" onclick="document.getElementById('stratBody').style.display = document.getElementById('stratBody').style.display === 'none' ? 'block' : 'none'; this.style.cursor='pointer'" style="cursor:pointer;user-select:none">
     Sell Strategy <span style="font-weight:400;color:#aaa;font-size:12px">(applies to all new buys)</span> <span style="font-size:11px;color:#666;margin-left:10px">◀ click to collapse</span>
   </div>
-  <div id="stratBody" class="strat-row">
-    <label class="radio-pill active" id="pillResolution" onclick="setStrategy('resolution')">
+  <div id="stratBody" style="display:flex;flex-direction:column;gap:8px">
+
+    <!-- Option 1: Hold until resolution -->
+    <label class="radio-pill active" id="pillResolution" onclick="setStrategy('resolution')" style="align-items:center">
       <input type="radio" name="strat" value="resolution" checked>
-      Hold until resolution
+      <span>⏳ Wait for resolution</span>
+      <span style="font-size:11px;color:#888;margin-left:8px">bot holds until market closes</span>
     </label>
-    <label class="radio-pill" id="pillProfit" onclick="setStrategy('profit')">
+
+    <!-- Option 2: Sell at % profit -->
+    <label class="radio-pill" id="pillProfit" onclick="setStrategy('profit')" style="flex-wrap:wrap;gap:8px;align-items:center">
       <input type="radio" name="strat" value="profit">
-      Sell at profit:
-    </label>
-    <div class="profit-presets hidden" id="profitPresets">
-      <div style="display:flex;flex-direction:column;gap:10px">
-        <div>
-          <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">By % profit</div>
-          <div class="btn-group" id="profitGroup" style="margin-bottom:4px">
-            <button class="pill" onclick="setProfit(5)">5%</button>
-            <button class="pill active" onclick="setProfit(10)">10%</button>
-            <button class="pill" onclick="setProfit(15)">15%</button>
-            <button class="pill" onclick="setProfit(20)">20%</button>
-            <button class="pill" onclick="setProfit(25)">25%</button>
-          </div>
-          <div class="inline">
-            <input type="number" id="profitCustom" value="10" min="1" step="1" class="wide">
-            <span style="color:var(--muted);font-size:13px">% profit</span>
-          </div>
-        </div>
-        <div>
-          <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Or by $ profit (whichever hits first)</div>
-          <div class="btn-group" id="profitDolGroup" style="margin-bottom:4px">
-            <button class="pill" onclick="setProfitDol(0.05)">$0.05</button>
-            <button class="pill" onclick="setProfitDol(0.10)">$0.10</button>
-            <button class="pill" onclick="setProfitDol(0.25)">$0.25</button>
-            <button class="pill" onclick="setProfitDol(0.50)">$0.50</button>
-            <button class="pill" onclick="setProfitDol(1.00)">$1.00</button>
-          </div>
-          <div class="inline">
-            <span style="color:var(--muted);font-size:13px">$</span>
-            <input type="number" id="profitDolCustom" value="" min="0.01" step="0.01" style="width:80px" placeholder="off">
-            <span style="color:var(--muted);font-size:13px">profit · leave blank = off</span>
-          </div>
-        </div>
+      <span>📈 Sell at % profit:</span>
+      <div class="btn-group" id="profitGroup" style="margin:0" onclick="event.stopPropagation()">
+        <button class="pill" onclick="setProfit(5)">5%</button>
+        <button class="pill active" onclick="setProfit(10)">10%</button>
+        <button class="pill" onclick="setProfit(15)">15%</button>
+        <button class="pill" onclick="setProfit(20)">20%</button>
+        <button class="pill" onclick="setProfit(25)">25%</button>
       </div>
-    </div>
+      <div class="inline" onclick="event.stopPropagation()">
+        <input type="number" id="profitCustom" value="10" min="1" step="1" style="width:70px">
+        <span style="color:#aaa;font-size:13px">%</span>
+      </div>
+    </label>
+
+    <!-- Option 3: Sell at $ profit -->
+    <label class="radio-pill" id="pillProfitDol" onclick="setStrategy('profit_dollars')" style="flex-wrap:wrap;gap:8px;align-items:center">
+      <input type="radio" name="strat" value="profit_dollars">
+      <span>💵 Sell at $ profit:</span>
+      <div class="btn-group" id="profitDolGroup" style="margin:0" onclick="event.stopPropagation()">
+        <button class="pill" onclick="setProfitDol(0.05)">$0.05</button>
+        <button class="pill" onclick="setProfitDol(0.10)">$0.10</button>
+        <button class="pill" onclick="setProfitDol(0.25)">$0.25</button>
+        <button class="pill" onclick="setProfitDol(0.50)">$0.50</button>
+        <button class="pill" onclick="setProfitDol(1.00)">$1.00</button>
+      </div>
+      <div class="inline" onclick="event.stopPropagation()">
+        <span style="color:#aaa;font-size:13px">$</span>
+        <input type="number" id="profitDolCustom" value="0.05" min="0.01" step="0.01" style="width:80px">
+      </div>
+    </label>
+
   </div>
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
       <label class="check-row">
@@ -930,7 +931,8 @@ function setStrategy(mode) {
   stratMode = mode;
   document.getElementById("pillResolution").classList.toggle("active", mode === "resolution");
   document.getElementById("pillProfit").classList.toggle("active", mode === "profit");
-  document.getElementById("profitPresets").classList.toggle("hidden", mode === "resolution");
+  const dolPill = document.getElementById("pillProfitDol");
+  if (dolPill) dolPill.classList.toggle("active", mode === "profit_dollars");
   pushStrategy();
   saveSettings();
 }
@@ -963,10 +965,14 @@ document.getElementById("profitDolCustom").oninput = function() {
 async function pushStrategy() {
   const dolEl = document.getElementById("profitDolCustom");
   const dolVal = dolEl ? parseFloat(dolEl.value) || null : null;
+  // Map mode to backend: profit_dollars → profit with only dollar target
+  const backendMode = (stratMode === "profit_dollars") ? "profit" : stratMode;
+  const pct  = (stratMode === "profit")         ? stratPct : null;
+  const dol  = (stratMode === "profit_dollars") ? dolVal   : null;
   try {
     await fetch("/api/strategy", {
       method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({mode:stratMode, target_pct:stratPct, target_dollars: dolVal}),
+      body: JSON.stringify({mode: backendMode, target_pct: pct, target_dollars: dol}),
     });
   } catch(e){}
 }
