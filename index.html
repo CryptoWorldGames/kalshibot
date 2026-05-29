@@ -1,0 +1,2616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kalshi Scanner</title>
+<style>
+:root {
+  --bg:       #0a0a0a;
+  --card:     #141414;
+  --border:   #2a2a2a;
+  --hover:    #1e1e1e;
+  --text:     #ffffff;
+  --muted:    #ffffff;
+  --green:    #00d97e;
+  --red:      #ff4d4d;
+  --yellow:   #f5c542;
+  --blue:     #4f9eff;
+  --purple:   #a78bfa;
+  --radius:   10px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:20px;padding-top:64px}
+
+/* ── Top nav ── */
+nav{position:fixed;top:0;left:0;right:0;height:64px;background:#0f0f0f;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 28px;gap:0;z-index:100}
+.nav-logo{font-size:18px;font-weight:800;letter-spacing:-.3px;color:#fff;margin-right:32px}
+.nav-logo span{color:var(--green)}
+.nav-funds{display:flex;align-items:stretch;gap:0;margin-right:auto}
+.fund-block{display:flex;flex-direction:column;justify-content:center;padding:0 20px;cursor:default;border-right:1px solid var(--border)}
+.fund-block:first-child{border-left:1px solid var(--border)}
+.fund-amount{font-size:18px;font-weight:700;line-height:1.2;color:#fff}
+.fund-amount.port-val{color:var(--green)}
+.fund-amount.dim{color:var(--muted);font-size:14px;font-weight:400}
+.fund-label{font-size:11px;color:var(--muted);letter-spacing:.4px;text-transform:uppercase;margin-top:1px}
+button.nav-btn{background:transparent;border:1px solid var(--border);border-radius:7px;color:#fff;cursor:pointer;font-size:14px;font-weight:500;padding:8px 20px;transition:all .15s;margin-left:16px}
+button.nav-btn:hover{border-color:var(--green);color:var(--green)}
+button.nav-btn.active{background:var(--green);border-color:var(--green);color:#000;font-weight:700}
+
+/* ── Main content ── */
+.main{padding:16px 32px 80px;max-width:1600px;margin:0 auto}
+h1{font-size:28px;font-weight:700;margin-bottom:4px;color:#fff}
+.sub{color:var(--muted);font-size:16px;margin-bottom:12px}
+
+/* ── Cards ── */
+.card{background:var(--card);border:2px solid #ffffff;border-radius:var(--radius);padding:16px 20px;margin-bottom:10px}
+.card-title{font-size:16px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:#fff;margin-bottom:16px}
+
+/* ── Pill buttons ── */
+.btn-group{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px}
+.pill{background:#1e1e1e;border:1px solid var(--border);border-radius:7px;color:#fff;cursor:pointer;font-size:18px;padding:8px 20px;transition:all .15s}
+.pill:hover{border-color:#888;color:#fff}
+.pill.active{background:var(--green);border-color:var(--green);color:#000;font-weight:700}
+
+/* ── Inputs ── */
+input[type=number],input[type=text]{background:#000;border:1px solid var(--border);border-radius:7px;color:#fff;font-size:18px;font-weight:600;padding:9px 14px;outline:none;width:90px;min-width:90px;transition:border-color .15s}
+input[type=number]:focus,input[type=text]:focus{border-color:var(--green)}
+input.wide{width:110px}
+
+/* ── Checkbox ── */
+.check-row{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:18px;color:#fff}
+.check-row input{width:auto;accent-color:var(--green)}
+.check-row:hover{color:var(--green)}
+
+/* ── Buttons ── */
+button{background:var(--green);border:none;border-radius:7px;color:#000;cursor:pointer;font-size:18px;font-weight:700;padding:10px 24px;transition:opacity .15s,transform .1s;white-space:nowrap}
+button:hover{opacity:.85}
+button:active{transform:scale(.97)}
+button:disabled{opacity:.35;cursor:default}
+button.ghost{background:transparent;border:1px solid var(--green);color:var(--green)}
+button.ghost:hover{background:var(--green);color:#000}
+button.sell-btn{background:var(--red);color:#fff;padding:6px 16px;font-size:13px}
+button.sm{padding:6px 16px;font-size:13px}
+
+/* ── Floating Buttons ── */
+.fab-container{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:10px;z-index:50}
+.fab{padding:14px 28px;font-size:15px;font-weight:700;border-radius:10px;border:none;cursor:pointer;transition:all .2s;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.3)}
+.fab-scan{background:var(--green);color:#000}
+.fab-scan:hover{opacity:.9;transform:scale(1.05)}
+.fab-auto{background:var(--blue);color:#fff}
+.fab-auto:hover{opacity:.9;transform:scale(1.05)}
+
+/* ── Layout ── */
+.row{display:flex;flex-wrap:wrap;gap:14px 24px;align-items:flex-end}
+.col{display:flex;flex-direction:column;gap:7px}
+.label-sm{font-size:16px;color:#fff;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.inline{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+
+/* ── Two-column sections (Auto Mode + Sell Strategy side-by-side) ── */
+.two-col-section{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px}
+.two-col-section .card{margin-bottom:0}
+
+/* ── Sell strategy ── */
+.strat-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.radio-pill{display:flex;align-items:center;gap:6px;cursor:pointer;padding:10px 18px;border-radius:7px;border:1px solid var(--border);font-size:18px;transition:all .15s;background:#1a1a1a;color:#fff}
+.radio-pill:hover{border-color:#888;color:#fff}
+.radio-pill.active{border-color:var(--purple);color:var(--purple);background:#1e1a2e}
+.radio-pill input{display:none}
+.profit-presets{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.profit-presets.hidden{opacity:.55;pointer-events:none}
+
+/* ── Status ── */
+#scanStatus{font-size:15px;color:#fff;min-height:18px;margin-bottom:12px}
+#scanStatus.err{color:var(--red)}
+#scanStatus.ok{color:var(--green)}
+
+/* ── Tables ── */
+.tbl-wrap{border-radius:8px;border:1px solid var(--border)}
+table{width:100%;border-collapse:collapse;background:var(--card)}
+thead th{background:#181818;color:#fff;font-size:16px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:15px 18px;text-align:left;white-space:nowrap;position:sticky;top:64px;z-index:10;box-shadow:0 1px 0 var(--border)}
+tbody tr{border-top:1px solid var(--border);transition:background .1s}
+tbody tr:hover{background:var(--hover)}
+td{padding:16px 18px;vertical-align:middle;white-space:nowrap;color:#fff;font-size:18px}
+td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+
+.badge{display:inline-block;border-radius:5px;font-size:12px;font-weight:700;letter-spacing:.5px;padding:4px 10px}
+.badge.yes{background:#00d97e22;color:var(--green)}
+.badge.no{background:#ff4d4d22;color:var(--red)}
+
+.price-big{font-size:15px;font-weight:700}
+.cd{font-variant-numeric:tabular-nums;color:var(--yellow);font-size:13px}
+.cd.urgent{color:var(--red);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+.buy-inline{display:flex;align-items:center;gap:6px}
+.buy-inline input{width:68px}
+.row-msg{font-size:12px}
+.row-msg.ok{color:var(--green)}
+.row-msg.err{color:var(--red)}
+.pos{color:var(--green)}
+.neg{color:var(--red)}
+.neu{color:var(--muted)}
+
+/* ── Spinner ── */
+.spin{display:inline-block;width:13px;height:13px;border:2px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:5px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+
+/* ── Filter selects ── */
+.filter-sel{background:#1e1e1e;border:1px solid var(--border);border-radius:7px;color:#fff;font-size:16px;padding:8px 12px;outline:none;cursor:pointer}
+.filter-sel:focus{border-color:var(--green)}
+.src-bot{background:#4f9eff22;color:#4f9eff;border-radius:5px;padding:3px 9px;font-size:11px;font-weight:700;white-space:nowrap}
+.src-manual{background:#ffffff11;color:#fff;border-radius:5px;padding:4px 10px;font-size:14px;font-weight:700;white-space:nowrap}
+
+/* ── Buy summary bar ── */
+#buySummary{background:#0e1f12;border:1px solid #1e4a2a;border-radius:8px;padding:14px 20px;margin-top:12px;font-size:13px;display:none}
+#buySummary .sum-row{display:flex;gap:24px;flex-wrap:wrap;align-items:center}
+#buySummary .sum-item{display:flex;flex-direction:column;gap:2px}
+#buySummary .sum-label{font-size:14px;color:#fff;text-transform:uppercase;letter-spacing:.4px}
+#buySummary .sum-val{font-size:15px;font-weight:700;color:#fff}
+#buySummary .sum-val.green{color:var(--green)}
+#buySummary .sum-val.yellow{color:var(--yellow)}
+
+/* ── Toast ── */
+#toast{
+  position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(12px);
+  background:#1e1e1e;border:1px solid var(--border);border-radius:10px;
+  padding:14px 20px;font-size:13px;line-height:1.5;
+  width:min(520px, calc(100vw - 32px));
+  opacity:0;transition:opacity .2s,transform .2s;
+  pointer-events:auto;cursor:text;user-select:all;
+  z-index:500;box-shadow:0 8px 32px #0008;
+  word-break:break-all;white-space:pre-wrap;
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.ok{border-color:var(--green);color:var(--green)}
+#toast.err{border-color:var(--red);color:var(--red);border-width:2px}
+
+/* ── Floating Start FAB (bottom-right) ── */
+#fab{position:fixed;right:24px;bottom:24px;display:flex;flex-direction:column;gap:10px;z-index:400;align-items:flex-end}
+#fab .fab-scan,#fab .fab-auto{
+  border-radius:999px;font-weight:800;letter-spacing:.4px;
+  padding:14px 24px;font-size:15px;border:none;cursor:pointer;
+  box-shadow:0 8px 24px #000a, 0 0 0 1px #ffffff10;
+  display:flex;align-items:center;gap:10px;white-space:nowrap;
+  transition:transform .12s, box-shadow .15s, opacity .15s;
+}
+#fab .fab-scan:hover,#fab .fab-auto:hover{transform:translateY(-2px);box-shadow:0 12px 28px #000c, 0 0 0 1px #ffffff18}
+#fab .fab-scan{background:var(--green);color:#000}
+#fab .fab-auto{background:#1e3a5f;color:#4f9eff;border:1px solid #4f9eff}
+#fab .fab-auto.running{background:#3a1a1a;color:var(--red);border-color:var(--red)}
+#fab .fab-scan .fab-sub,#fab .fab-auto .fab-sub{font-weight:500;font-size:11px;opacity:.75;letter-spacing:.2px}
+#fab .fab-scan:disabled{opacity:.6;cursor:default;transform:none}
+
+/* ── Tabs ── */
+.tab-nav{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px}
+.tab-btn{background:transparent;border:none;border-bottom:3px solid transparent;margin-bottom:-2px;color:#fff;cursor:pointer;font-size:18px;font-weight:600;padding:12px 24px;transition:color .15s;white-space:nowrap}
+.tab-btn:hover{color:#fff}
+.tab-btn.active{border-bottom-color:var(--green);color:#fff}
+.tab-pane{display:none !important;width:100% !important;height:auto !important;margin:0;padding:0}
+.tab-pane.active{display:block !important;width:100% !important;height:auto !important;margin:0;padding:0}
+.pos-badge{background:var(--green);color:#000;border-radius:10px;font-size:10px;font-weight:800;padding:1px 7px;margin-left:5px;vertical-align:middle}
+</style>
+</head>
+<body>
+
+<!-- ── NAV ──────────────────────────────────────────────────────── -->
+<nav>
+  <span class="nav-logo">Kalshi<span>Bot</span></span>
+  <div class="nav-funds">
+    <div class="fund-block">
+      <span class="fund-amount" id="navCash">—</span>
+      <span class="fund-label">Cash</span>
+    </div>
+    <div class="fund-block">
+      <span class="fund-amount" id="navPositions" style="color:#4f9eff">—</span>
+      <span class="fund-label">Portfolio</span>
+    </div>
+    <div class="fund-block">
+      <span class="fund-amount port-val" id="navPortfolio">—</span>
+      <span class="fund-label">Portfolio+Cash</span>
+    </div>
+    <div class="fund-block" onclick="cyclePnlPeriod()" title="Click to cycle time period" style="cursor:pointer;user-select:none">
+      <span class="fund-amount" id="navPnl" style="color:var(--muted)">—</span>
+      <span class="fund-label">P&amp;L · <span id="navPnlPeriod">24h</span> <span style="opacity:.5;font-size:9px">▶</span></span>
+    </div>
+  </div>
+</nav>
+
+
+<!-- ── MAIN ─────────────────────────────────────────────────────── -->
+<div class="main">
+
+<div class="tab-nav">
+  <button class="tab-btn active" onclick="switchTab('scanner')">Scanner</button>
+  <button class="tab-btn" id="tabPositions" onclick="switchTab('positions')">Positions</button>
+  <button class="tab-btn" onclick="switchTab('stats')">Stats</button>
+  <button class="tab-btn" id="tabCoach" onclick="switchTab('coach')">Coach</button>
+</div>
+
+<div id="tab-scanner" class="tab-pane active">
+
+<!-- Inline Coach (always visible on main page) -->
+<div id="coachInline" style="background:#0c1612;border:1px solid #1f6045;border-radius:8px;padding:12px 14px;margin-bottom:14px;display:none">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+    <span style="font-size:14px">💡</span>
+    <span style="font-weight:700;font-size:13px;color:var(--green);text-transform:uppercase;letter-spacing:.5px">Coach</span>
+    <span style="font-size:11px;color:#888" id="coachInlineMeta"></span>
+    <a href="#" onclick="switchTab('coach');return false" style="margin-left:auto;color:var(--blue);font-size:12px;text-decoration:none">full report →</a>
+  </div>
+  <div id="coachInlineBody" style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:#ddd;line-height:1.45"></div>
+</div>
+
+<!-- Filters -->
+<div class="card">
+  <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+    <span onclick="document.getElementById('filterBody').style.display = document.getElementById('filterBody').style.display === 'none' ? 'block' : 'none'" style="cursor:pointer;user-select:none">Filters <span style="font-size:11px;color:#666;margin-left:10px">◀ click to collapse</span></span>
+    <button id="saveSettingsBtn" onclick="saveSettings();this.textContent='✓ Saved!';this.style.background='var(--green)';this.style.color='#000';setTimeout(()=>{this.textContent='Save Settings';this.style.background='';this.style.color='';},2000)" class="sm ghost" style="font-size:13px;padding:6px 18px;font-weight:700">Save Settings</button>
+  </div>
+  <div id="filterBody" class="row" style="gap:18px 32px">
+    <div class="col">
+      <span class="label-sm">Win Probability Range</span>
+      <!-- presets -->
+      <div class="btn-group" id="probGroup" style="margin-bottom:8px">
+        <button class="pill" onclick="setRange(80,95)">80–95%</button>
+        <button class="pill active" onclick="setRange(85,98)">85–98%</button>
+        <button class="pill" onclick="setRange(90,98)">90–98%</button>
+        <button class="pill" onclick="setRange(95,98)">95–98%</button>
+        <button class="pill" id="customProbPill" onclick="document.getElementById('minProb').focus()">Custom</button>
+      </div>
+      <!-- custom range -->
+      <div class="inline">
+        <span style="font-size:14px;color:#fff">From</span>
+        <input type="number" id="minProb" value="85" min="1" max="99" style="width:64px">
+        <span style="font-size:14px;color:#fff">% to</span>
+        <input type="number" id="maxProb" value="96" min="2" max="99" style="width:64px">
+        <span style="font-size:13px;color:#fff">% &nbsp;<span style="color:#bbb;font-size:12px">(99–100¢ auto-excluded)</span></span>
+      </div>
+    </div>
+    <div class="col">
+      <span class="label-sm">Ends Within</span>
+      <div class="btn-group" id="timeGroup">
+        <button class="pill" onclick="setTime(5)">5 min</button>
+        <button class="pill" onclick="setTime(10)">10 min</button>
+        <button class="pill active" onclick="setTime(15)">15 min</button>
+        <button class="pill" onclick="setTime(20)">20 min</button>
+        <button class="pill" onclick="setTime(30)">30 min</button>
+        <button class="pill" onclick="setTime(60,'1h')">1h</button>
+        <button class="pill" onclick="setTime(120,'2h')">2h</button>
+        <button class="pill" onclick="setTime(180,'3h')">3h</button>
+        <button class="pill" onclick="setTime(240,'4h')">4h</button>
+        <button class="pill" onclick="setTime(360,'6h')">6h</button>
+        <button class="pill" onclick="setTime(720,'12h')">12h</button>
+        <button class="pill" onclick="setTime(1440,'24h')">24h</button>
+        <div class="inline">
+          <button class="pill" onclick="setTime('custom')">Custom</button>
+          <input type="number" id="timeCustom" value="15" min="1" placeholder="min" style="display:none;width:70px">
+          <span id="timeCustomLabel" style="display:none;font-size:13px;color:var(--muted)">min</span>
+        </div>
+      </div>
+      <div style="margin-top:14px;display:flex;flex-direction:column;gap:8px">
+        <span class="label-sm">Started</span>
+        <div class="inline" style="gap:8px;flex-wrap:wrap">
+          <div class="inline" style="gap:6px">
+            <span style="font-size:14px;color:#fff">At least</span>
+            <input type="number" id="minAgeMins" value="" min="0" placeholder="any" style="width:70px" oninput="saveSettings()" title="Only show markets that have been open for at least this many minutes">
+            <span style="font-size:14px;color:#fff">min ago</span>
+          </div>
+          <div class="inline" style="gap:6px">
+            <span style="font-size:14px;color:#fff">At most</span>
+            <input type="number" id="maxAgeMins" value="" min="0" placeholder="any" style="width:70px" oninput="saveSettings()" title="Only show markets that opened within this many minutes ago">
+            <span style="font-size:14px;color:#fff">min ago</span>
+          </div>
+        </div>
+        <div style="font-size:11px;color:#555">Leave blank = no restriction on when market opened</div>
+      </div>
+      <div style="margin-top:14px">
+        <span class="label-sm">Skip If Too Close To End</span>
+        <div class="inline" style="gap:6px;margin-top:8px">
+          <span style="font-size:14px;color:#fff">Don't buy if less than</span>
+          <input type="number" id="noBuyWithinMins" value="" min="0" placeholder="off" style="width:70px" oninput="saveSettings()" title="Skip markets expiring in less than this many minutes">
+          <span style="font-size:14px;color:#fff">min left</span>
+        </div>
+        <div style="font-size:11px;color:#555;margin-top:4px">e.g. set 2 = skip markets expiring in &lt;2 min (too late to act)</div>
+      </div>
+    </div>
+    <div class="col" style="flex:1;min-width:320px">
+      <span class="label-sm" style="margin-bottom:8px;display:block">Show Categories <span style="font-size:11px;color:#666;font-weight:400;text-transform:none">(all on = show everything, uncheck to hide)</span></span>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px 16px;margin-bottom:12px">
+        <label class="check-row"><input type="checkbox" id="showCrypto" checked onchange="saveSettings()"> Crypto</label>
+        <label class="check-row"><input type="checkbox" id="showSports" checked onchange="saveSettings()"> Sports</label>
+        <label class="check-row"><input type="checkbox" id="showPolitics" checked onchange="saveSettings()"> Politics</label>
+        <label class="check-row"><input type="checkbox" id="showEconomics" checked onchange="saveSettings()"> Economics</label>
+        <label class="check-row"><input type="checkbox" id="showEntertainment" checked onchange="saveSettings()"> Entertainment</label>
+        <label class="check-row"><input type="checkbox" id="showWeather" checked onchange="saveSettings()"> Weather</label>
+        <label class="check-row"><input type="checkbox" id="showNFL" checked onchange="saveSettings()"> NFL</label>
+        <label class="check-row"><input type="checkbox" id="showNBA" checked onchange="saveSettings()"> NBA</label>
+        <label class="check-row"><input type="checkbox" id="showMLB" checked onchange="saveSettings()"> MLB</label>
+        <label class="check-row"><input type="checkbox" id="showNHL" checked onchange="saveSettings()"> NHL</label>
+        <label class="check-row"><input type="checkbox" id="showSoccer" checked onchange="saveSettings()"> Soccer</label>
+        <label class="check-row"><input type="checkbox" id="showGolf" checked onchange="saveSettings()"> Golf</label>
+        <label class="check-row"><input type="checkbox" id="showTennis" checked onchange="saveSettings()"> Tennis</label>
+        <label class="check-row"><input type="checkbox" id="showMMA" checked onchange="saveSettings()"> MMA/UFC</label>
+        <label class="check-row"><input type="checkbox" id="showCombo" checked onchange="saveSettings()"> Combo/Parlay</label>
+      </div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <label class="check-row" title="Requires ≥10 open interest. Skips thin markets.">
+          <input type="checkbox" id="goodLiq" checked onchange="saveSettings()"> Active only (skip thin) <span style="color:var(--green);font-size:11px;margin-left:4px">✓</span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="yesOnly" checked onchange="saveSettings()"> YES side only <span style="color:var(--green);font-size:11px;margin-left:4px">✓</span>
+        </label>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Scan + Buy Settings (unified for both modes) -->
+<div class="card">
+  <div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:14px;align-items:center;border:2px solid #fff;border-radius:8px;padding:12px;background:#0f1419">
+    <div style="display:flex;align-items:center;gap:6px">
+      <span style="color:#fff;font-size:14px;font-weight:600">Max spend per purchase:</span>
+      <input type="number" id="buyAmount" value="1.00" min="0.01" step="0.01" style="width:72px">
+      <div style="display:flex;gap:3px">
+        <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setAmt(1)">$1</button>
+        <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setAmt(2)">$2</button>
+        <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setAmt(3)">$3</button>
+        <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setAmt(5)">$5</button>
+        <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setAmt(10)">$10</button>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <span style="color:#fff;font-size:14px;font-weight:600">Max buys per game:</span>
+      <input type="number" id="maxBuysPerMarket" value="1" min="1" max="5" style="width:60px">
+      <div style="display:flex;gap:3px">
+        <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setMaxBuys(1)">1</button>
+        <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setMaxBuys(2)">2</button>
+        <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setMaxBuys(3)">3</button>
+        <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setMaxBuys(4)">4</button>
+        <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setMaxBuys(5)">5</button>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:6px">
+      <span style="color:#fff;font-size:14px;font-weight:600">Max</span>
+      <input type="number" id="autoMaxPerScan" value="20" min="1" style="width:60px" title="Max games to BUY per scan cycle (scanner always scans everything)">
+      <span style="color:#fff;font-size:14px;font-weight:600">max buys per scan cycle</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <span style="color:#fff;font-size:14px;font-weight:600">Hold max</span>
+      <input type="number" id="autoMaxConcurrent" value="20" min="1" style="width:60px" title="Max open positions across all games">
+      <span style="color:#fff;font-size:14px;font-weight:600">positions</span>
+    </div>
+  </div>
+
+  <!-- Auto Mode + Sell Strategy (side-by-side) -->
+  <div class="two-col-section">
+    <!-- Auto Mode Settings -->
+    <div class="card" style="margin-bottom:0">
+      <div class="card-title" style="margin-bottom:10px">Auto Mode <span style="color:var(--blue);text-transform:none;letter-spacing:0;font-weight:400;font-size:12px">— scans + auto-buys</span></div>
+    <span id="autoModeStatus" style="font-size:13px;font-weight:600;color:var(--yellow);margin-bottom:12px;display:block"></span>
+    <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">
+
+      <!-- Run until -->
+      <div>
+        <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Run until</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <label class="radio-pill active" id="rpTime" onclick="setRunMode('time')"><input type="radio" name="runMode" value="time" checked>
+            Run for minutes
+          </label>
+          <label class="radio-pill" id="rpBuys" onclick="setRunMode('buys')"><input type="radio" name="runMode" value="buys">
+            <input type="number" id="autoBuysMax" value="10" min="1" style="width:52px;margin:0 4px" onclick="event.stopPropagation()"> buys
+          </label>
+          <label class="radio-pill" id="rpForever" onclick="setRunMode('forever')"><input type="radio" name="runMode" value="forever">
+            Until stopped
+          </label>
+        </div>
+        <!-- Minutes picker — shown when "Run for minutes" is selected -->
+        <div id="minsPickerWrap" style="margin-top:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <span style="font-size:13px;color:#aaa">How many minutes:</span>
+          <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setAutoMins(5)">5</button>
+          <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setAutoMins(15)">15</button>
+          <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setAutoMins(30)">30</button>
+          <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setAutoMins(60)">1h</button>
+          <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setAutoMins(120)">2h</button>
+          <input type="number" id="autoMins" value="30" min="1" style="width:70px" oninput="updateMinsHint();saveSettings()">
+          <span style="font-size:13px;color:#aaa">min</span>
+          <span id="autoMinsHint" style="font-size:11px;color:#888"></span>
+        </div>
+      </div>
+
+      <!-- Stop if -->
+      <div>
+        <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Stop if</div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <label class="check-row" style="font-size:13px;width:80px"><input type="checkbox" id="stopProfitDolChk" style="accent-color:var(--green)"> Profit ≥</label>
+            <span style="color:#aaa;font-size:13px">$</span>
+            <input type="number" id="stopProfitDol" value="100" min="0.01" step="0.01" style="width:100px">
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <label class="check-row" style="font-size:13px;width:80px"><input type="checkbox" id="stopProfitPctChk" style="accent-color:var(--green)"> Profit ≥</label>
+            <input type="number" id="stopProfitPct" value="20" min="0.1" step="0.1" style="width:100px">
+            <span style="color:#aaa;font-size:13px">%</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+            <label class="check-row" style="font-size:13px;width:80px"><input type="checkbox" id="stopLossDolChk" style="accent-color:var(--red)"> Loss ≥</label>
+            <span style="color:#aaa;font-size:13px">$</span>
+            <input type="number" id="stopLossDol" value="10" min="0.01" step="0.01" style="width:100px">
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <label class="check-row" style="font-size:13px;width:80px"><input type="checkbox" id="stopLossPctChk" style="accent-color:var(--red)"> Loss ≥</label>
+            <input type="number" id="stopLossPct" value="20" min="0.1" step="0.1" style="width:100px">
+            <span style="color:#aaa;font-size:13px">%</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    </div>
+    <!-- /Auto Mode card -->
+
+    <!-- Sell Strategy -->
+    <div class="card" style="margin-bottom:0">
+  <div class="card-title" onclick="document.getElementById('stratBody').style.display = document.getElementById('stratBody').style.display === 'none' ? 'block' : 'none'; this.style.cursor='pointer'" style="cursor:pointer;user-select:none">
+    Sell Strategy <span style="font-weight:400;color:#aaa;font-size:12px">(applies to all new buys)</span> <span style="font-size:11px;color:#666;margin-left:10px">◀ click to collapse</span>
+  </div>
+  <div id="stratBody" class="strat-row">
+    <label class="radio-pill active" id="pillResolution" onclick="setStrategy('resolution')">
+      <input type="radio" name="strat" value="resolution" checked>
+      Hold until resolution
+    </label>
+    <label class="radio-pill" id="pillProfit" onclick="setStrategy('profit')">
+      <input type="radio" name="strat" value="profit">
+      Sell at profit:
+    </label>
+    <div class="profit-presets hidden" id="profitPresets">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div>
+          <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">By % profit</div>
+          <div class="btn-group" id="profitGroup" style="margin-bottom:4px">
+            <button class="pill" onclick="setProfit(5)">5%</button>
+            <button class="pill active" onclick="setProfit(10)">10%</button>
+            <button class="pill" onclick="setProfit(15)">15%</button>
+            <button class="pill" onclick="setProfit(20)">20%</button>
+            <button class="pill" onclick="setProfit(25)">25%</button>
+          </div>
+          <div class="inline">
+            <input type="number" id="profitCustom" value="10" min="1" step="1" class="wide">
+            <span style="color:var(--muted);font-size:13px">% profit</span>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Or by $ profit (whichever hits first)</div>
+          <div class="btn-group" id="profitDolGroup" style="margin-bottom:4px">
+            <button class="pill" onclick="setProfitDol(0.05)">$0.05</button>
+            <button class="pill" onclick="setProfitDol(0.10)">$0.10</button>
+            <button class="pill" onclick="setProfitDol(0.25)">$0.25</button>
+            <button class="pill" onclick="setProfitDol(0.50)">$0.50</button>
+            <button class="pill" onclick="setProfitDol(1.00)">$1.00</button>
+          </div>
+          <div class="inline">
+            <span style="color:var(--muted);font-size:13px">$</span>
+            <input type="number" id="profitDolCustom" value="" min="0.01" step="0.01" style="width:80px" placeholder="off">
+            <span style="color:var(--muted);font-size:13px">profit · leave blank = off</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+      <label class="check-row">
+        <input type="checkbox" id="skipAutoSellNearResolution" checked onchange="pushSellSettings()"> Don't auto-sell if resolves in
+        <input type="number" id="skipAutoSellMinutes" value="1" min="1" style="width:60px;margin:0 6px" onchange="pushSellSettings()">
+        <span style="color:#fff;font-size:14px">min or less</span>
+      </label>
+    </div>
+    </div>
+    <!-- /Sell Strategy card -->
+  </div>
+  <!-- /two-col-section -->
+
+<!-- Recent Buys (60s sticky) -->
+<div id="recentBuysWrap" style="display:none;margin-bottom:14px"></div>
+
+<!-- Status + Results -->
+<div id="scanStatus"></div>
+<div id="marketsWrap"></div>
+<div id="buySummary">
+  <div class="sum-row" id="sumRow"></div>
+</div>
+
+</div><!-- /tab-scanner -->
+
+<!-- ── Positions tab ────────────────────────────────────────────── -->
+<div id="tab-positions" class="tab-pane">
+  <div id="recentlySoldWrap" style="margin-bottom:14px"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div class="card-title" style="margin:0;font-size:15px;color:#fff;font-weight:700">Open Positions</div>
+      <select id="posSort" class="filter-sel" onchange="filterPos();saveSettings()" style="font-size:13px;padding:6px 10px">
+        <option value="recent">↓ Most Recent</option>
+        <option value="profit_desc">↓ Most Profit Now (sell today)</option>
+        <option value="profit_asc">↑ Biggest Loss Now</option>
+        <option value="maxprofit_desc">↓ Most Profit Potential (if wins)</option>
+        <option value="maxprofit_asc">↑ Least Profit Potential</option>
+        <option value="captured_desc">↓ Most Captured %</option>
+        <option value="captured_asc">↑ Least Captured %</option>
+        <option value="time_asc">↑ Soonest Expiry</option>
+        <option value="time_desc">↓ Latest Expiry</option>
+        <option value="value_desc">↓ Highest Value Now</option>
+        <option value="value_asc">↑ Lowest Value Now</option>
+        <option value="price_desc">↓ Highest Odds</option>
+        <option value="price_asc">↑ Lowest Odds</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <select id="posFilterSource" class="filter-sel" onchange="filterPos()">
+        <option value="">All Sources</option>
+        <option value="bot">KalshiBot</option>
+        <option value="kalshi">Kalshi</option>
+      </select>
+      <select id="posFilterCat" class="filter-sel" onchange="filterPos()">
+        <option value="">All Categories</option>
+      </select>
+      <button class="sm ghost" id="sellSelBtn" onclick="sellSelected()" disabled>Sell Selected (0)</button>
+      <button class="sm" onclick="confirmSellAll()" style="background:var(--red);color:#fff;border:none">Sell All</button>
+    </div>
+  </div>
+  <div id="posWrap"><div style="text-align:center;color:var(--muted);padding:40px;font-size:14px">No open positions — buy something in the Scanner tab.</div></div>
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin:22px 0 10px;flex-wrap:wrap;gap:10px">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div class="card-title" style="margin:0;font-size:14px" id="settlementsTitle">Recent Settlements</div>
+      <div style="display:flex;gap:4px">
+        <button class="pill sm" id="sFilter1h"  onclick="setSettleFilter(1,'1h')"   style="padding:4px 10px;font-size:12px">1h</button>
+        <button class="pill sm" id="sFilter4h"  onclick="setSettleFilter(4,'4h')"   style="padding:4px 10px;font-size:12px">4h</button>
+        <button class="pill sm active" id="sFilter24h" onclick="setSettleFilter(24,'24h')" style="padding:4px 10px;font-size:12px">24h</button>
+        <button class="pill sm" id="sFilter7d"  onclick="setSettleFilter(168,'7d')" style="padding:4px 10px;font-size:12px">7d</button>
+        <button class="pill sm" id="sFilter30d" onclick="setSettleFilter(720,'30d')" style="padding:4px 10px;font-size:12px">30d</button>
+      </div>
+    </div>
+    <div id="settlementsSummary" style="font-size:13px;color:var(--muted)"></div>
+  </div>
+  <div id="settlementsWrap"><div style="text-align:center;color:var(--muted);padding:24px;font-size:13px">No settlements in the last 24 hours.</div></div>
+</div><!-- /tab-positions -->
+
+<!-- ── Stats tab ─────────────────────────────────────────────────── -->
+<div id="tab-stats" class="tab-pane">
+  <div class="card">
+    <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+      Performance Stats
+      <div style="display:flex;align-items:center;gap:10px">
+        <span id="scanLogInfo" style="color:#666;font-size:11px;font-weight:400;text-transform:none;letter-spacing:0">—</span>
+        <button class="sm ghost" style="font-size:12px;padding:4px 14px" onclick="loadStats()">Refresh</button>
+      </div>
+    </div>
+    <div id="statsContent" style="color:#fff;font-size:14px">Loading…</div>
+  </div>
+  <div class="card" style="margin-top:0">
+    <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+      Live Scan Preview
+      <div style="display:flex;gap:6px">
+        <button class="sm ghost" style="font-size:12px;padding:4px 14px" onclick="runDebugScan()">Run Preview</button>
+        <button class="sm ghost" style="font-size:12px;padding:4px 14px;display:none" onclick="copyDebugScan()" id="copyDebugBtn">Copy</button>
+      </div>
+    </div>
+    <div style="font-size:12px;color:#666;margin-bottom:10px">Shows what the scanner sees right now — all markets expiring soon, with filter reasons</div>
+    <div id="debugScanOut" style="color:var(--muted);font-size:12px;font-family:monospace;max-height:400px;overflow-y:auto;white-space:pre-wrap">Click "Run Preview" to see what markets are available right now.</div>
+  </div>
+</div><!-- /tab-stats -->
+
+<!-- ── Coach tab ─────────────────────────────────────────────────── -->
+<div id="tab-coach" class="tab-pane">
+  <div class="card" style="background:var(--card);border:2px solid #ffffff;border-radius:var(--radius);padding:16px 20px;margin-bottom:10px">
+    <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;font-size:16px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:#fff;margin-bottom:16px">
+      Stats Coach <span style="font-weight:400;color:var(--muted);font-size:12px">— learns from your buys & settlements, recommends strategy</span>
+      <div style="display:flex;gap:8px">
+        <button id="coachApplyBtn" onclick="applyCoachSettings()" style="background:var(--green);color:#000;border:none;border-radius:7px;padding:6px 18px;font-size:13px;font-weight:800;cursor:pointer">⚡ Apply Coach Settings</button>
+        <button class="sm ghost" style="font-size:12px;padding:4px 14px" onclick="loadCoach()">Refresh</button>
+      </div>
+    </div>
+    <div id="coachTotals" style="font-size:13px;color:#bbb;margin-bottom:14px"></div>
+    <div id="coachRecs" style="margin-bottom:18px"></div>
+    <div style="margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--border)">
+      <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px;font-weight:700">Ranked Strategy Recommendations</div>
+      <div id="coachStrategies" style="display:flex;flex-direction:column;gap:10px"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:16px">
+      <div>
+        <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">By Category</div>
+        <div id="coachCats"></div>
+      </div>
+      <div>
+        <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">By Price Band</div>
+        <div id="coachBands"></div>
+      </div>
+      <div>
+        <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">By Side</div>
+        <div id="coachSides"></div>
+      </div>
+      <div>
+        <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">By Hour (UTC)</div>
+        <div id="coachHours"></div>
+      </div>
+    </div>
+  </div>
+</div><!-- /tab-coach -->
+
+</div><!-- /main -->
+
+<!-- ── Sell Notifications (bottom-left, stacked) ───────────────── -->
+<div id="sellPopupStack" style="position:fixed;bottom:18px;left:18px;display:flex;flex-direction:column;gap:8px;z-index:200;max-width:320px"></div>
+
+<!-- ── Floating Coach Hint (bottom-left) ───────────────────────── -->
+<div id="clippy" style="position:fixed;bottom:18px;left:18px;width:300px;background:#0f1612;border:1px solid #1f6045;border-radius:10px;padding:12px 14px;box-shadow:0 8px 24px rgba(0,0,0,.5);z-index:100;display:none">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="width:28px;height:28px;border-radius:50%;background:var(--green);color:#000;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px">💡</div>
+      <div style="font-weight:700;font-size:13px;color:var(--green)">Coach tip</div>
+    </div>
+    <button onclick="dismissClippy()" style="background:none;border:none;color:#888;font-size:18px;cursor:pointer;line-height:1;padding:0">×</button>
+  </div>
+  <div id="clippyMsg" style="font-size:13px;color:#ddd;line-height:1.45"></div>
+  <div style="margin-top:8px;font-size:11px;color:#666">From your last <span id="clippyN">0</span> trades · <a href="#" onclick="switchTab('coach');return false" style="color:var(--blue);text-decoration:none">see full Coach →</a></div>
+</div>
+
+<!-- ── Floating Start FAB ──────────────────────────────────────── -->
+<div id="fab">
+  <button class="fab-auto" id="fabAuto" onclick="toggleAutoMode()" title="Loop: scan every 10s AND auto-buy what matches">
+    <span style="font-size:18px" id="fabAutoIcon">▶</span>
+    <span><span id="fabAutoText">Start Bot</span><div class="fab-sub" id="fabAutoSub">scan + buy on a loop</div></span>
+  </button>
+  <button class="fab-scan" id="scanBtn" onclick="scan()" title="One-time scan — does NOT buy anything">
+    <span style="font-size:18px">⟳</span>
+    <span>Scan Now<div class="fab-sub">one-time · no buying</div></span>
+  </button>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────
+let markets            = [];
+let allPositions       = [];
+let selMin             = 85;
+let selMax             = 98;
+let selTime            = 15;
+let stratMode          = "resolution";
+let stratPct           = 10;
+let scanTimer          = null;
+let posTimer           = null;
+let cdTimer            = null;
+let scanInProgress     = false;
+let selectedPosTickers = new Set();
+let selectedMarkets    = new Set();
+
+// ── PnL tracking ─────────────────────────────────────────────────────────
+
+const PNL_PERIODS = ["1h","4h","6h","12h","24h","7d","30d"];
+let pnlPeriodIdx  = 4;   // default 24h
+let pnlPastValues = {};  // {period: dollars_at_start_of_window}
+
+function cyclePnlPeriod() {
+  pnlPeriodIdx = (pnlPeriodIdx + 1) % PNL_PERIODS.length;
+  document.getElementById("navPnlPeriod").textContent = PNL_PERIODS[pnlPeriodIdx];
+  refreshPnlDisplay();
+}
+
+function refreshPnlDisplay() {
+  const cur  = parseFloat((document.getElementById("navPortfolio").textContent || "0").replace("$",""));
+  if (!cur) return;
+  const period = PNL_PERIODS[pnlPeriodIdx];
+  const past   = pnlPastValues[period];
+  const el     = document.getElementById("navPnl");
+  if (past == null) { el.textContent = "—"; el.style.color = "var(--muted)"; return; }
+  const pnl = cur - past;
+  el.textContent  = `${pnl >= 0 ? "+" : "-"}$${Math.abs(pnl).toFixed(2)}`;
+  el.style.color  = pnl >= 0 ? "var(--green)" : "var(--red)";
+}
+
+async function loadPnl() {
+  try {
+    const r = await fetch("/api/pnl");
+    const d = await r.json();
+    pnlPastValues = d.past_values || {};
+    refreshPnlDisplay();
+  } catch(e) {}
+}
+
+// ── Nav balance ───────────────────────────────────────────────────────────
+
+let _settleHours = 24;
+let _lastBalanceCall = 0;
+let _waitingForCash = false;
+let _waitForCashAmt = 1.0;
+let _recentlySold = []; // {title, ticker, side, profit, soldAt, kalshi_url}
+const BALANCE_THROTTLE_MS = 30000; // max once every 30s
+function loadBalanceThrottled(force=false) {
+  const now = Date.now();
+  if (!force && now - _lastBalanceCall < BALANCE_THROTTLE_MS) return;
+  _lastBalanceCall = now;
+  loadBalance();
+}
+
+function setSettleFilter(hours, label) {
+  _settleHours = hours;
+  ["1h","4h","24h","7d","30d"].forEach(l => {
+    const el = document.getElementById("sFilter" + l);
+    if (el) el.classList.toggle("active", l === label);
+  });
+  const title = document.getElementById("settlementsTitle");
+  if (title) title.textContent = `Recent Settlements (${label})`;
+  loadBalanceThrottled(true); // force refresh when changing settlement period
+}
+
+async function loadBalance() {
+  try {
+    const r = await fetch(`/api/portfolio?settlement_hours=${_settleHours}`);
+    const d = await r.json();
+    if (d.balance != null) {
+      const el = document.getElementById("navCash");
+      el.textContent = "$" + d.balance.toFixed(2);
+      el.className = "fund-amount cash-val";
+    }
+    if (d.positions_value != null) {
+      const el = document.getElementById("navPositions");
+      if (el) { el.textContent = "$" + d.positions_value.toFixed(2); }
+    }
+    if (d.portfolio_value != null) {
+      const el = document.getElementById("navPortfolio");
+      el.textContent = "$" + d.portfolio_value.toFixed(2);
+      el.className = "fund-amount port-val";
+    }
+    // Detect auto-sells: bot-bought positions that disappeared and were in profit
+    const prev = allPositions;
+    const nextTickers = new Set((d.positions || []).map(p => p.ticker));
+    prev.forEach(p => {
+      if (p.bot_bought && !nextTickers.has(p.ticker)) {
+        if (p.buy_price != null) {
+          const side   = (p.quantity ?? 0) > 0 ? "yes" : "no";
+          const cur    = side === "yes" ? p.current_yes : p.current_no;
+          const qty    = Math.abs(p.quantity ?? 0);
+          const profit = cur != null ? qty * (cur - p.buy_price) / 100 : null;
+          if (profit != null && profit > 0) chaChing();
+          showSellPopup(p.title || p.ticker, profit);
+          // Keep in recently-sold list for 2 min
+          _recentlySold.unshift({ title: p.title||p.ticker, ticker: p.ticker, side, profit, soldAt: Date.now(), kalshi_url: p.kalshi_url||"", qty, buy_price: p.buy_price });
+          if (_recentlySold.length > 20) _recentlySold = _recentlySold.slice(0,20);
+        }
+      }
+    });
+    renderBotPositions(d.positions || []);
+    renderRecentlySold();
+    window._lastSettlements = d.recent_settlements || [];
+    renderSettlements(window._lastSettlements);
+    checkAutoStopConditions();
+    refreshPnlDisplay();
+    // Auto-restart if we were waiting for cash and now have enough
+    if (_waitingForCash && !autoModeOn) {
+      const cashNow = parseFloat((document.getElementById("navCash")?.textContent || "0").replace("$","")) || 0;
+      if (cashNow >= _waitForCashAmt) {
+        _waitingForCash = false;
+        toast(`💰 Cash available ($${cashNow.toFixed(2)}) — restarting bot!`, "ok");
+        startAutoMode();
+      }
+    }
+  } catch(e) {}
+}
+
+let _settleSortBy = "recent";
+
+function renderSettlements(rows) {
+  const wrap = document.getElementById("settlementsWrap");
+  const sum  = document.getElementById("settlementsSummary");
+  if (!wrap) return;
+  if (!rows.length) {
+    wrap.innerHTML = `<div style="text-align:center;color:var(--muted);padding:24px;font-size:13px">No settlements in this period.</div>`;
+    if (sum) sum.textContent = "";
+    return;
+  }
+  let wins = 0, losses = 0, totalPnl = 0;
+  rows.forEach(r => {
+    if ((r.pnl || 0) > 0.001)  wins++;
+    else if ((r.pnl || 0) < -0.001) losses++;
+    totalPnl += (r.pnl || 0);
+  });
+  const pnlCls = totalPnl > 0 ? "pos" : totalPnl < 0 ? "neg" : "neu";
+  if (sum) {
+    sum.innerHTML = `${rows.length} settled · <span class="pos">${wins} won</span> · <span class="neg">${losses} lost</span> · P&amp;L: <span class="${pnlCls}" style="font-weight:700;font-size:14px">${totalPnl >= 0 ? "+" : ""}$${totalPnl.toFixed(2)}</span>`;
+  }
+
+  // Sort settlements
+  const sorted = [...rows].sort((a, b) => {
+    if (_settleSortBy === "pnl_desc")   return (b.pnl||0) - (a.pnl||0);
+    if (_settleSortBy === "pnl_asc")    return (a.pnl||0) - (b.pnl||0);
+    if (_settleSortBy === "won_desc")   return (b.won?1:0) - (a.won?1:0);
+    if (_settleSortBy === "won_asc")    return (a.won?1:0) - (b.won?1:0);
+    if (_settleSortBy === "recent_asc") return (a.settled_time||"").localeCompare(b.settled_time||"");
+    return (b.settled_time||"").localeCompare(a.settled_time||""); // default: newest first
+  });
+  rows = sorted;
+  const body = rows.map(r => {
+    const won = r.won;
+    const pnl = r.pnl || 0;
+    const pnlCls = pnl > 0 ? "pos" : pnl < 0 ? "neg" : "neu";
+    const pnlStr = `${pnl >= 0 ? "+" : ""}$${pnl.toFixed(2)}`;
+    const badge = won === true
+      ? `<span class="badge yes" style="background:rgba(0,200,150,.15);color:var(--green)">WON</span>`
+      : won === false
+        ? `<span class="badge no" style="background:rgba(255,80,80,.15);color:var(--red)">LOST</span>`
+        : `<span class="badge" style="background:#333;color:#aaa">—</span>`;
+    const titleHtml = r.kalshi_url
+      ? `<a href="${r.kalshi_url}" target="_blank" style="color:#ccc;text-decoration:none" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='#ccc'">${esc(r.title)}<span style="font-size:10px;margin-left:4px;opacity:.5">↗</span></a>`
+      : esc(r.title);
+    const catTag = r.category ? `<div style="font-size:11px;color:#666;margin-top:3px">${esc(r.category)}</div>` : "";
+    return `
+      <tr>
+        <td class="wrap">${titleHtml}${catTag}</td>
+        <td>${badge}</td>
+        <td><span style="font-size:11px;font-weight:700;padding:3px 8px;border-radius:5px;background:${r.sold_by==='Bot Auto-Sell'?'#00d97e22':r.sold_by==='KalshiBot'?'#4f9eff22':'#ffffff11'};color:${r.sold_by==='Bot Auto-Sell'?'var(--green)':r.sold_by==='KalshiBot'?'#4f9eff':'#aaa'}">${r.sold_by||'Kalshi'}</span></td>
+        <td><span class="badge ${r.side}">${(r.side||"").toUpperCase()}</span></td>
+        <td>${(r.count||0).toFixed(2)}</td>
+        <td>$${(r.cost||0).toFixed(2)}</td>
+        <td>$${(r.revenue||0).toFixed(2)}</td>
+        <td class="${pnlCls}" style="font-weight:600;font-size:13px">${pnlStr}</td>
+        <td style="font-size:11px;color:#666;white-space:nowrap">${toCDT(r.settled_time)}</td>
+      </tr>`;
+  }).join("");
+  wrap.innerHTML = `
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <span style="font-size:12px;color:#888">Sort:</span>
+      <button onclick="_settleSortBy=_settleSortBy==='recent_asc'?'recent':'recent_asc';renderSettlements(window._lastSettlements||[])" class="sm ghost" style="font-size:11px;padding:3px 10px">Date ↕</button>
+      <button onclick="_settleSortBy=_settleSortBy==='pnl_desc'?'pnl_asc':'pnl_desc';renderSettlements(window._lastSettlements||[])" class="sm ghost" style="font-size:11px;padding:3px 10px">P&amp;L ↕</button>
+      <button onclick="_settleSortBy=_settleSortBy==='won_desc'?'won_asc':'won_desc';renderSettlements(window._lastSettlements||[])" class="sm ghost" style="font-size:11px;padding:3px 10px">Result ↕</button>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr>
+        <th>Market</th><th>Result</th><th>How Sold</th><th>Side</th><th>Qty</th><th>Cost</th><th>Revenue</th><th>P&L</th><th>Settled (CDT)</th>
+      </tr></thead>
+      <tbody>${body}</tbody>
+    </table></div>`;
+}
+// Show cached positions immediately while API loads
+try {
+  const cached = localStorage.getItem("kb_positions");
+  if (cached) renderBotPositions(JSON.parse(cached));
+} catch(e) {}
+loadBalance();
+loadPnl();
+setInterval(loadBalance, 30000);
+setInterval(loadPnl, 300000); // refresh PnL data every 5 min
+
+
+// ── Filter pills ──────────────────────────────────────────────────────────
+
+function setRange(min, max) {
+  selMin = min; selMax = max;
+  document.getElementById("minProb").value = min;
+  document.getElementById("maxProb").value = max;
+  activatePills("probGroup", `${min}–${max}%`);
+  saveSettings();
+}
+
+document.getElementById("minProb").oninput = function() {
+  selMin = parseFloat(this.value) || 85;
+  const label = `${selMin}–${selMax}%`;
+  const presets = ["80–95%","85–98%","90–98%","95–98%"];
+  activatePills("probGroup", presets.includes(label) ? label : "Custom");
+  saveSettings();
+};
+document.getElementById("maxProb").oninput = function() {
+  selMax = parseFloat(this.value) || 98;
+  const label = `${selMin}–${selMax}%`;
+  const presets = ["80–95%","85–98%","90–98%","95–98%"];
+  activatePills("probGroup", presets.includes(label) ? label : "Custom");
+  saveSettings();
+};
+
+function setTime(val, label) {
+  selTime = val === "custom" ? parseInt(document.getElementById("timeCustom").value) : val;
+  activatePills("timeGroup", val === "custom" ? "Custom" : (label || val + " min"));
+  const c = val === "custom";
+  document.getElementById("timeCustom").style.display      = c ? "inline-block" : "none";
+  document.getElementById("timeCustomLabel").style.display = c ? "inline" : "none";
+  if (c) document.getElementById("timeCustom").oninput = () => { selTime = parseInt(document.getElementById("timeCustom").value) || 15; };
+}
+
+function activatePills(groupId, label) {
+  document.querySelectorAll(`#${groupId} .pill`).forEach(p => {
+    p.classList.toggle("active", p.textContent.trim() === String(label));
+  });
+}
+
+// ── Sell strategy ─────────────────────────────────────────────────────────
+
+function setStrategy(mode) {
+  stratMode = mode;
+  document.getElementById("pillResolution").classList.toggle("active", mode === "resolution");
+  document.getElementById("pillProfit").classList.toggle("active", mode === "profit");
+  document.getElementById("profitPresets").classList.toggle("hidden", mode === "resolution");
+  pushStrategy();
+  saveSettings();
+}
+
+function setProfit(pct) {
+  stratPct = pct;
+  document.getElementById("profitCustom").value = pct;
+  activatePills("profitGroup", pct + "%");
+  pushStrategy();
+}
+
+function setProfitDol(dol) {
+  document.getElementById("profitDolCustom").value = dol.toFixed(2);
+  activatePills("profitDolGroup", "$" + dol.toFixed(2));
+  pushStrategy();
+}
+
+document.getElementById("profitCustom").oninput = function() {
+  stratPct = parseFloat(this.value) || 10;
+  activatePills("profitGroup", "");
+  pushStrategy();
+};
+
+document.getElementById("profitDolCustom").oninput = function() {
+  activatePills("profitDolGroup", "");
+  pushStrategy();
+  saveSettings();
+};
+
+async function pushStrategy() {
+  const dolEl = document.getElementById("profitDolCustom");
+  const dolVal = dolEl ? parseFloat(dolEl.value) || null : null;
+  try {
+    await fetch("/api/strategy", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({mode:stratMode, target_pct:stratPct, target_dollars: dolVal}),
+    });
+  } catch(e){}
+}
+
+async function pushSellSettings() {
+  try {
+    const skip = document.getElementById("skipAutoSellNearResolution").checked;
+    const mins = parseInt(document.getElementById("skipAutoSellMinutes").value) || 1;
+    await fetch("/api/sell-settings", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({skip_auto_sell_near_resolution: skip, skip_auto_sell_minutes: mins}),
+    });
+  } catch(e){}
+}
+
+// ── Scan ──────────────────────────────────────────────────────────────────
+
+function syncFabButtons() {
+  const fabAuto     = document.getElementById("fabAuto");
+  const fabAutoText = document.getElementById("fabAutoText");
+  const fabAutoIcon = document.getElementById("fabAutoIcon");
+  const fabAutoSub  = document.getElementById("fabAutoSub");
+  if (!fabAuto) return;
+  const onScanner = localStorage.getItem("activeTab") !== "positions" &&
+                    localStorage.getItem("activeTab") !== "stats" &&
+                    localStorage.getItem("activeTab") !== "coach";
+  const scanBtn2 = document.getElementById("scanBtn");
+  if (autoModeOn) {
+    fabAuto.classList.add("running");
+    fabAutoText.textContent = "Stop Bot";
+    fabAutoIcon.textContent = "■";
+    fabAutoSub.textContent  = "bot running — click to stop";
+    fabAuto.style.display = "";  // always show Stop Bot
+    if (scanBtn2) scanBtn2.style.display = onScanner ? "" : "none";
+  } else {
+    fabAuto.classList.remove("running");
+    fabAutoText.textContent = "Start Bot";
+    fabAutoIcon.textContent = "▶";
+    fabAutoSub.textContent  = "scan + buy on a loop";
+    fabAuto.style.display = onScanner ? "" : "none";  // hide Start Bot on non-scanner
+    if (scanBtn2) scanBtn2.style.display = onScanner ? "" : "none";
+  }
+}
+
+let _lastScanResultsTs = 0; // timestamp of last scan that found results
+
+async function scan() {
+  if (scanInProgress) return;
+  scanInProgress = true;
+  const btn = document.getElementById("scanBtn");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>Scanning…';
+  setStatus("Scanning…","");
+
+  // Only clear markets if last results are older than 60 seconds
+  if (Date.now() - _lastScanResultsTs > 60000) clearMarkets();
+
+  const chk = id => { const el = document.getElementById(id); return el ? el.checked : true; };
+  const showCrypto    = chk("showCrypto");
+  const showCombo     = chk("showCombo");
+  const showSports    = chk("showSports") || chk("showNFL") || chk("showNBA") || chk("showMLB") || chk("showNHL") || chk("showSoccer") || chk("showGolf") || chk("showTennis") || chk("showMMA");
+  const showPolitics  = chk("showPolitics");
+  const showEconomics = chk("showEconomics");
+  const goodLiq       = chk("goodLiq");
+  try {
+    const minAge       = document.getElementById("minAgeMins")?.value || "";
+    const maxAge       = document.getElementById("maxAgeMins")?.value || "";
+    const noBuyWithin  = document.getElementById("noBuyWithinMins")?.value || "";
+    const timeParams   = (minAge ? `&min_age_mins=${minAge}` : "") + (maxAge ? `&max_age_mins=${maxAge}` : "") + (noBuyWithin ? `&no_buy_within_mins=${noBuyWithin}` : "");
+    const r = await fetch(`/api/scan?min_thr=${selMin}&max_thr=${selMax}&minutes=${selTime}&show_crypto=${showCrypto}&show_combo=${showCombo}&show_sports=${showSports}&show_politics=${showPolitics}&show_economics=${showEconomics}&good_liq=${goodLiq}${timeParams}`);
+    let data = await r.json();
+    if (!r.ok) throw new Error(data.error || "Scan failed");
+    // Frontend YES-only filter
+    if (document.getElementById("yesOnly")?.checked) {
+      data = data.filter(m => m.side === "yes");
+    }
+    markets = data;
+    if (!markets.length) {
+      setStatus(`No live markets ${selMin}–${selMax}% closing in ≤${selTime}min${autoModeOn?" · auto-buys waiting…":""}`, "");
+    } else {
+      _lastScanResultsTs = Date.now();
+      setStatus(`${markets.length} live market${markets.length>1?"s":""} found — showing for 60 seconds`, "ok");
+      renderMarkets();
+      const _bab2 = document.getElementById("buyAllBtn"); if (_bab2) _bab2.disabled = false;
+      showScanResultsNotif(markets.length);
+      // Auto-clear results after 60 seconds if no new scan found anything
+      setTimeout(() => {
+        if (Date.now() - _lastScanResultsTs >= 59000) clearMarkets();
+      }, 60000);
+
+      // Auto Mode: buy everything found, then keep scanning
+      if (autoModeOn) {
+        // Time-mode expiry check
+        if (autoRunMode === "time" && autoModeStartTime) {
+          const mins = parseInt(document.getElementById("autoMins").value) || 30;
+          if (Date.now() >= autoModeStartTime + mins * 60 * 1000) { stopAutoMode("Time limit reached"); return; }
+        }
+        {
+          // Buy-count limit: check before buying
+          if (autoRunMode === "buys") {
+            const max = parseInt(document.getElementById("autoBuysMax").value) || 10;
+            if (autoModeBought >= max) { stopAutoMode(`Buy limit reached (${max})`); return; }
+          }
+          const autoAmt      = parseFloat(document.getElementById("buyAmount").value) || 1;
+          // Check cash balance before buying — only if balance has loaded (not "—")
+          const cashEl = document.getElementById("navCash");
+          const cashText = cashEl?.textContent || "";
+          if (cashText && cashText !== "—") {
+            const cashNow = parseFloat(cashText.replace("$","")) || 0;
+            if (cashNow < autoAmt) {
+              if (autoRunMode === "forever") {
+                // "Until stopped" — never stop, just skip this cycle and wait
+                setStatus(`⏳ Waiting for cash (have $${cashNow.toFixed(2)}, need $${autoAmt.toFixed(2)}) — will retry`, "");
+                return;
+              } else {
+                stopAutoMode(`⛔ Paused — waiting for cash (need $${autoAmt.toFixed(2)}, have $${cashNow.toFixed(2)})`);
+                _waitingForCash = true;
+                _waitForCashAmt = autoAmt;
+                return;
+              }
+            }
+          }
+          const maxPerScan   = parseInt(document.getElementById("autoMaxPerScan").value) || 3;
+          const maxConcur    = parseInt(document.getElementById("autoMaxConcurrent").value) || 999;
+          const openNow      = allPositions.filter(p => Math.abs(p.quantity ?? 0) > 0.001).length;
+          const slotsLeft    = Math.max(0, maxConcur - openNow);
+          if (slotsLeft <= 0) {
+            setStatus(`At concurrent cap (${openNow}/${maxConcur}) — waiting for positions to settle`, "");
+            return;
+          }
+          // Dedup: skip exact tickers already held, enforce max buys per event per session
+          {
+            const before = selectedMarkets.size;
+            const openTickers = new Set(allPositions.map(p => p.ticker));
+            const maxPerGame = parseInt(document.getElementById("maxBuysPerMarket")?.value) || 1;
+            // Count how many times we've already bought from each event this session
+            const eventBuyCount = {};
+            for (const t of autoModeBoughtSet) {
+              if (!t.startsWith("event:")) {
+                const m2 = [...autoModeBoughtSet].find(k => !k.startsWith("event:") && k === t);
+                // count by event prefix
+                const evtKey = t.replace(/-[^-]+$/, "");
+                eventBuyCount[evtKey] = (eventBuyCount[evtKey] || 0) + 1;
+              }
+            }
+            selectedMarkets = new Set([...selectedMarkets].filter(i => {
+              const m = markets[i];
+              if (!m) return false;
+              if (openTickers.has(m.ticker)) return false;
+              if (autoModeBoughtSet.has(m.ticker)) return false;
+              // Enforce max buys per event
+              const evtKey = m.event_ticker || m.ticker.replace(/-[^-]+$/, "");
+              const alreadyBought = eventBuyCount[evtKey] || 0;
+              if (alreadyBought >= maxPerGame) return false;
+              return true;
+            }));
+            const skipped = before - selectedMarkets.size;
+            if (skipped > 0) console.log(`[auto] skipped ${skipped} (already held, event cap, or session dedup)`);
+          }
+          const cap = Math.min(maxPerScan, slotsLeft);
+          await buyAll(autoAmt, cap);
+          const bought = markets.filter((_, i) =>
+            document.getElementById(`msg-${i}`)?.textContent.startsWith("✓")
+          ).length;
+          autoModeBought += bought;
+          // Buy-count limit: check after buying
+          if (autoRunMode === "buys") {
+            const max = parseInt(document.getElementById("autoBuysMax").value) || 10;
+            if (autoModeBought >= max) stopAutoMode(`Buy limit reached (${max} buys)`);
+          }
+        }
+      }
+    }
+  } catch(e) {
+    setStatus(e.message, "err");
+  } finally {
+    scanInProgress = false;
+    btn.disabled = false;
+    btn.textContent = "Scan Now";
+  }
+}
+
+function toggleAutoRefresh() {
+  const on = document.getElementById("autoRefresh").checked;
+  if (on) {
+    if (!scanTimer) scanTimer = setInterval(scan, 10000);
+  } else {
+    if (autoModeOn) {
+      // Auto Mode owns the scan timer — don't let the checkbox kill it
+      document.getElementById("autoRefresh").checked = true;
+      toast("Auto Mode controls scanning. Stop Auto Mode first to disable.", "");
+      return;
+    }
+    clearInterval(scanTimer); scanTimer = null;
+  }
+}
+
+// ── Auto Mode ─────────────────────────────────────────────────────────────
+
+let autoModeOn        = false;
+let autoModeStopTime  = null;
+let autoModeStartTime = null;
+let autoModeBoughtSet = new Set();   // tickers bought during current auto-mode run — never re-buy
+let autoModeCountdown = null;
+let autoModeBought    = 0;
+let autoModeStartVal  = null;   // total portfolio value when auto started
+let autoRunMode       = "time"; // "time" | "buys" | "forever"
+
+
+function setRunMode(mode) {
+  autoRunMode = mode;
+  ["rpTime","rpBuys","rpForever"].forEach(id => document.getElementById(id).classList.remove("active"));
+  document.getElementById({time:"rpTime",buys:"rpBuys",forever:"rpForever"}[mode]).classList.add("active");
+  const wrap = document.getElementById("minsPickerWrap");
+  if (wrap) wrap.style.display = mode === "time" ? "flex" : "none";
+  saveSettings();
+}
+
+function setAutoMins(n) {
+  document.getElementById("autoMins").value = n;
+  updateMinsHint();
+  saveSettings();
+}
+
+function updateMinsHint() {
+  const mins = parseInt(document.getElementById("autoMins").value) || 0;
+  const el   = document.getElementById("autoMinsHint");
+  if (!el) return;
+  if (mins >= 60) {
+    const h = (mins / 60).toFixed(mins % 60 === 0 ? 0 : 1);
+    el.textContent = `(${h}h)`;
+  } else {
+    el.textContent = "";
+  }
+}
+
+function toggleAutoMode() {
+  autoModeOn ? stopAutoMode("Stopped manually") : startAutoMode();
+}
+
+function startAutoMode() {
+  autoModeOn     = true;
+  autoModeBought = 0;
+  localStorage.setItem("kb_bot_was_running", "1");
+  const note = document.getElementById("autoRefreshNote");
+  if (note) note.style.display = "inline";
+
+  // Record starting portfolio value for P&L stop conditions
+  const portEl = document.getElementById("navPortfolio");
+  autoModeStartVal = parseFloat((portEl.textContent || "0").replace("$","")) || null;
+
+  autoModeStartTime = Date.now();
+  autoModeBoughtSet = new Set();   // fresh session — clear "already bought" memory
+
+  syncFabButtons();
+
+  const refreshChk = document.getElementById("autoRefresh");
+  if (refreshChk) refreshChk.checked = true;
+  if (!scanTimer) scanTimer = setInterval(scan, 10000);
+
+  autoModeCountdown = setInterval(updateAutoStatus, 1000);
+  updateAutoStatus();
+  scan();
+}
+
+function stopAutoMode(reason) {
+  autoModeOn = false;
+  clearInterval(autoModeCountdown);
+  const note = document.getElementById("autoRefreshNote");
+  if (note) note.style.display = "none";
+  autoModeCountdown = null;
+
+  // Stop the periodic scan that startAutoMode enabled. Symmetric — if the user
+  // wants no-buy periodic scans, they can re-check the box manually after stopping.
+  if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
+  const refreshChk = document.getElementById("autoRefresh");
+  if (refreshChk) refreshChk.checked = false;
+
+  syncFabButtons();
+
+  localStorage.removeItem("kb_bot_was_running");
+  const r = reason || "Stopped";
+  document.getElementById("autoModeStatus").textContent =
+    `${r} · ${autoModeBought} buy(s) made`;
+  // Always show a persistent toast so user sees exactly why it stopped
+  const el = document.getElementById("toast");
+  if (el) {
+    el.textContent = `⛔ Bot stopped: ${r}`;
+    el.className = "show err";
+    // Don't auto-dismiss this one — user must see it
+    clearTimeout(window._toast);
+    window._toast = setTimeout(() => { el.className = ""; }, 60000); // 60s
+  }
+  console.warn("[bot stopped]", r, new Date().toLocaleTimeString());
+}
+
+function updateAutoStatus() {
+  if (!autoModeOn) return;
+
+  let timeStr = "Running";
+  if (autoRunMode === "time" && autoModeStartTime) {
+    const mins = parseInt(document.getElementById("autoMins").value) || 30;
+    const rem  = autoModeStartTime + mins * 60000 - Date.now();
+    if (rem <= 0) { stopAutoMode("Time limit reached"); return; }
+    const m = Math.floor(rem / 60000);
+    const s = Math.floor((rem % 60000) / 1000);
+    timeStr = `${m}m ${String(s).padStart(2,"0")}s left`;
+  } else if (autoRunMode === "buys") {
+    const max = parseInt(document.getElementById("autoBuysMax").value) || 10;
+    timeStr = `${autoModeBought}/${max} buys`;
+  } else {
+    timeStr = "Running (manual stop)";
+  }
+
+  document.getElementById("autoModeStatus").textContent =
+    `${timeStr} · ${autoModeBought} bought`;
+}
+
+function checkAutoStopConditions() {
+  if (!autoModeOn || autoModeStartVal == null) return;
+  const portEl = document.getElementById("navPortfolio");
+  const cur    = parseFloat((portEl.textContent || "0").replace("$",""));
+  if (isNaN(cur) || cur <= 0) return;  // skip if value looks wrong/loading
+  // Skip if value changed too dramatically (likely a calculation glitch)
+  if (autoModeStartVal > 0 && Math.abs(cur - autoModeStartVal) / autoModeStartVal > 0.95) return;
+  const pnl    = cur - autoModeStartVal;
+  const pnlPct = autoModeStartVal > 0 ? (pnl / autoModeStartVal * 100) : 0;
+
+  if (document.getElementById("stopProfitDolChk").checked && pnl > 0) {
+    const dolT = parseFloat(document.getElementById("stopProfitDol").value) || Infinity;
+    if (pnl >= dolT) return stopAutoMode(`Profit target hit (+$${pnl.toFixed(2)})`);
+  }
+  if (document.getElementById("stopProfitPctChk").checked && pnl > 0) {
+    const pctT = parseFloat(document.getElementById("stopProfitPct").value) || Infinity;
+    if (pnlPct >= pctT) return stopAutoMode(`Profit target hit (+${pnlPct.toFixed(1)}%)`);
+  }
+  if (document.getElementById("stopLossDolChk").checked && pnl < 0) {
+    const dolL = parseFloat(document.getElementById("stopLossDol").value) || Infinity;
+    if (Math.abs(pnl) >= dolL) return stopAutoMode(`Loss limit hit (-$${Math.abs(pnl).toFixed(2)})`);
+  }
+  if (document.getElementById("stopLossPctChk").checked && pnl < 0) {
+    const pctL = parseFloat(document.getElementById("stopLossPct").value) || Infinity;
+    if (Math.abs(pnlPct) >= pctL) return stopAutoMode(`Loss limit hit (-${Math.abs(pnlPct).toFixed(1)}%)`);
+  }
+}
+
+// ── Buy ───────────────────────────────────────────────────────────────────
+
+async function buyOne(idx, override=false) {
+  const m     = markets[idx];
+  let   amt   = parseFloat(document.getElementById(`amt-${idx}`).value);
+  const btn   = document.getElementById(`btn-${idx}`);
+  const msgEl = document.getElementById(`msg-${idx}`);
+  if (!amt || amt <= 0) { toast("Enter a dollar amount","err"); return; }
+  btn.disabled = true; btn.textContent = "…"; msgEl.textContent = "";
+  try {
+    const r = await fetch("/api/buy", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ticker:m.ticker, side:m.side, amount:amt, price:m.price, title:m.title, category:m.category, override}),
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      if (d.can_override) {
+        msgEl.innerHTML = `Already holding — <button onclick="buyOne(${idx},true);this.disabled=true;this.textContent='Used'" style="background:var(--yellow);color:#000;border:none;border-radius:5px;padding:3px 10px;font-size:12px;font-weight:700;cursor:pointer">Override: Buy Once</button>`;
+        btn.disabled = false; btn.textContent = "Buy";
+        // Add to session set so auto-bot won't keep buying this event
+        if (autoModeOn) {
+          autoModeBoughtSet.add(m.ticker);
+          if (m.event_ticker) autoModeBoughtSet.add("event:" + m.event_ticker);
+        }
+        return;
+      }
+      throw new Error(d.error || "Failed");
+    }
+    msgEl.textContent = `✓ ${d.contracts} contracts · $${d.spent}`;
+    msgEl.className = "row-msg ok";
+    toast(`✓ Bought ${d.contracts} ${m.side.toUpperCase()} · ${m.title || m.ticker}`, "ok");
+    // Flash the row green so it's obvious the bot bought it
+    const row = document.getElementById(`btn-${idx}`)?.closest("tr");
+    if (row) {
+      row.style.transition = "background .3s";
+      row.style.background = "#00d97e44";
+      row.style.outline = "2px solid var(--green)";
+      setTimeout(() => { row.style.background = "#0a1a10"; row.style.outline = ""; }, 3000);
+    }
+    // Throttled refresh — max once per 5s to avoid flooding API with 20+ position calls
+    loadBalanceThrottled();
+    addRecentBuy({
+      ticker: m.ticker, title: m.title, market_q: m.market_q, category: m.category,
+      side: m.side, price: m.price, contracts: d.contracts, spent: d.spent,
+      kalshi_url: m.kalshi_url, ts: Date.now(),
+    });
+    // Per-session dup guard: while auto mode is running, never re-buy this ticker
+    if (autoModeOn) {
+      autoModeBoughtSet.add(m.ticker);
+      if (m.event_ticker) autoModeBoughtSet.add("event:" + m.event_ticker);
+    }
+    loadBalanceThrottled();
+    startPosMon();
+  } catch(e) {
+    msgEl.textContent = e.message;
+    msgEl.className = "row-msg err";
+    toast(e.message,"err");
+    // Stop bot if out of cash
+    if (e.message.toLowerCase().includes("insufficient") || e.message.toLowerCase().includes("balance")) {
+      if (autoModeOn && autoRunMode !== "forever") stopAutoMode("⛔ Stopped — insufficient balance");
+      else if (autoModeOn) setStatus("⏳ Insufficient balance — will retry next scan", "");
+    }
+  } finally {
+    btn.disabled = false; btn.textContent = "Buy";
+  }
+}
+
+async function buyAll(overrideAmount, maxItems) {
+  let idxs = [...selectedMarkets];
+  if (!idxs.length) {
+    if (autoModeOn) { setStatus("Bot skipped — already bought or holding these markets", ""); }
+    else { toast("No markets selected — check the checkboxes","err"); }
+    return;
+  }
+  const amount = overrideAmount ?? parseFloat(document.getElementById("buyAmount").value);
+  if (!amount || amount <= 0) { toast("Enter a buy amount","err"); return; }
+  if (maxItems && idxs.length > maxItems) idxs = idxs.slice(0, maxItems);
+  const btn = document.getElementById("buyAllBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "Buying…"; }
+  for (const i of idxs) {
+    const el = document.getElementById(`amt-${i}`);
+    if (el) el.value = amount.toFixed(2);
+    await buyOne(i);
+    await delay(250);
+  }
+  if (btn) { btn.disabled = false; btn.textContent = "Buy All"; }
+}
+
+// ── Sell (positions) ─────────────────────────────────────────────────────
+
+async function sellPos(ticker, side, count, safeId) {
+  const btn = document.getElementById(safeId);
+  if (btn) { btn.disabled = true; btn.textContent = "…"; }
+  // Capture pre-sell P&L: if positive, ring the bell when the sale lands
+  const prePos = allPositions.find(p => p.ticker === ticker);
+  let preProfit = false;
+  if (prePos && prePos.buy_price != null) {
+    const cur = side === "yes" ? prePos.current_yes : prePos.current_no;
+    if (cur != null) preProfit = cur > prePos.buy_price;
+  }
+  try {
+    const r = await fetch("/api/sell", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ticker, side, count}),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Sell failed");
+    toast(`Sold ${count} ${side.toUpperCase()} on ${ticker}`, "ok");
+    if (preProfit) chaChing();
+    selectedPosTickers.delete(ticker);
+    loadBalanceThrottled(true); // force refresh after sell
+  } catch(e) {
+    toast(e.message,"err");
+    if (btn) { btn.disabled = false; btn.textContent = "Sell"; }
+  }
+}
+
+// ── Market results table ──────────────────────────────────────────────────
+
+function renderMarkets() {
+  if (cdTimer) clearInterval(cdTimer);
+  // Hide markets you already own — don't waste time showing them
+  markets = markets.filter(m => !allPositions.some(p => p.ticker === m.ticker));
+  // All selected by default, except markets you already own
+  selectedMarkets = new Set(
+    markets.map((_, i) => i).filter(i => !allPositions.some(p => p.ticker === markets[i].ticker))
+  );
+
+  const defAmt = document.getElementById("buyAmount").value || "1.00";
+  const rows = markets.map((m,i) => {
+    const price_d     = m.price / 100;
+    const contracts   = Math.floor(parseFloat(defAmt) / price_d);
+    const cost        = contracts > 0 ? (contracts * price_d).toFixed(2) : "—";
+    const fee         = contracts > 0 ? (contracts * 0.01).toFixed(2) : "—";
+    const grossProfit = contracts > 0 ? contracts * (1 - price_d) : 0;
+    const netProfit   = contracts > 0 ? (grossProfit - contracts * 0.01).toFixed(2) : "—";
+    const netPct      = contracts > 0 ? ((grossProfit - contracts * 0.01) / (contracts * price_d) * 100).toFixed(1) : "—";
+    const mainTitle = m.title || m.ticker;
+    const subQ      = m.market_q && m.market_q !== mainTitle
+      ? `<div style="font-size:11px;color:#888;margin-top:3px;font-style:italic">${esc(m.market_q.length > 80 ? m.market_q.slice(0,80)+"…" : m.market_q)}</div>` : "";
+    const titleHtml = m.kalshi_url
+      ? `<a href="${m.kalshi_url}" target="_blank" style="color:#fff;text-decoration:none;font-weight:600" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='#fff'">${esc(mainTitle)}<span style="font-size:10px;margin-left:3px;opacity:.5">↗</span></a>${subQ}`
+      : `<span style="font-weight:600">${esc(mainTitle)}</span>${subQ}`;
+    const catTag  = m.category ? `<div style="font-size:11px;color:#666;margin-top:2px">${esc(m.category)}</div>` : "";
+    const owned   = allPositions.some(p => p.ticker === m.ticker);
+    const ownedBadge = owned
+      ? `<span style="background:#00d97e22;color:var(--green);border:1px solid #00d97e55;border-radius:5px;font-size:11px;font-weight:700;padding:2px 8px;margin-left:6px;vertical-align:middle">OWNED</span>`
+      : "";
+    const lowOddsBadge = m.price < 50
+      ? `<div style="display:inline-block;background:#f5c54222;color:var(--yellow);border:1px solid #f5c54255;border-radius:5px;font-size:11px;font-weight:700;padding:2px 8px;margin-top:3px">⚠ LOW ODDS ${m.price}¢</div>`
+      : "";
+
+    return `
+    <tr${owned ? ' style="background:#0a1a10"' : ''}>
+      <td style="padding:10px 8px;width:36px"><input type="checkbox" ${owned ? "" : "checked"} id="mchk-${i}" style="accent-color:var(--green);width:15px;height:15px;cursor:pointer" onchange="updateMarketCheck(${i},this.checked)"></td>
+      <td class="wrap">${titleHtml}${ownedBadge}${lowOddsBadge}${catTag}</td>
+      <td><span class="badge ${m.side}">${m.side.toUpperCase()}</span></td>
+      <td class="price-big">${m.price}¢</td>
+      <td><span class="cd" id="cd-${i}" data-secs="${m.secs_left}"></span></td>
+      <td style="font-size:13px;color:#ddd;line-height:1.7">
+        <span id="preview-${i}">
+          ${contracts} contracts · cost <b style="color:#fff">$${cost}</b> · fee <b style="color:var(--yellow)">$${fee}</b><br>
+          net profit <b style="color:var(--green)">+$${netProfit}</b> <span style="color:#bbb">(+${netPct}%)</span>
+        </span>
+      </td>
+      <td>
+        <div class="buy-inline">
+          <span style="color:var(--muted)">$</span>
+          <input type="number" id="amt-${i}" value="${defAmt}" min="0.01" step="0.01" oninput="updatePreview(${i},${m.price});updateBuySummary()">
+          <button class="sm" id="btn-${i}" onclick="buyOne(${i})">Buy</button>
+        </div>
+      </td>
+      <td><span class="row-msg" id="msg-${i}"></span></td>
+    </tr>`;
+  }).join("");
+
+  document.getElementById("marketsWrap").innerHTML = `
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th style="width:36px"><input type="checkbox" checked id="mAllChk" style="accent-color:var(--green)" onchange="toggleAllMarkets(this.checked)"></th>
+          <th>Market</th><th>Side</th><th>Price</th><th>Closes In</th><th>If it wins</th><th>Buy</th><th>Result</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+
+  cdTimer = setInterval(tickCd, 1000);
+  tickCd();
+  updateBuySummary();
+}
+
+function updateMarketCheck(idx, checked) {
+  checked ? selectedMarkets.add(idx) : selectedMarkets.delete(idx);
+  updateBuySummary();
+}
+
+function toggleAllMarkets(checked) {
+  markets.forEach((_, i) => {
+    checked ? selectedMarkets.add(i) : selectedMarkets.delete(i);
+    const el = document.getElementById(`mchk-${i}`);
+    if (el) el.checked = checked;
+  });
+  updateBuySummary();
+}
+
+function updateBuySummary() {
+  const sumEl = document.getElementById("buySummary");
+  const rowEl = document.getElementById("sumRow");
+  const sel   = markets.filter((_, i) => selectedMarkets.has(i));
+  if (!sel.length) { sumEl.style.display = "none"; return; }
+
+  const defAmt = parseFloat(document.getElementById("buyAmount").value) || 1;
+  let totalCost = 0, totalContracts = 0, totalNetRes = 0;
+  for (const m of sel) {
+    const price_d   = m.price / 100;
+    const contracts = Math.floor(defAmt / price_d);
+    if (contracts < 1) continue;
+    totalCost      += contracts * price_d;
+    totalContracts += contracts;
+    totalNetRes    += contracts * (1 - price_d) - contracts * 0.01;
+  }
+  if (!totalContracts) { sumEl.style.display = "none"; return; }
+
+  const pctHtml = [5, 10, 20].map(p => {
+    const profit = (totalCost * p / 100).toFixed(2);
+    return `<div class="sum-item"><div class="sum-label">Sell @+${p}%</div><div class="sum-val yellow">+$${profit}</div></div>`;
+  }).join("");
+
+  rowEl.innerHTML = `
+    <div class="sum-item"><div class="sum-label">${sel.length} selected · ${totalContracts} contracts</div><div class="sum-val">Cost: <b>$${totalCost.toFixed(2)}</b></div></div>
+    <div style="width:1px;background:var(--border);align-self:stretch;margin:0 4px"></div>
+    ${pctHtml}
+    <div class="sum-item"><div class="sum-label">Hold → resolution</div><div class="sum-val green">+$${totalNetRes.toFixed(2)}</div></div>`;
+  sumEl.style.display = "block";
+}
+
+function tickCd() {
+  markets.forEach((_,i) => {
+    const el = document.getElementById(`cd-${i}`);
+    if (!el) return;
+    let s = Math.max(0, parseInt(el.dataset.secs,10) - 1);
+    el.dataset.secs = s;
+    el.textContent  = fmtSecs(s);
+    el.className    = "cd" + (s < 120 ? " urgent" : "");
+  });
+}
+
+function fmtSecs(s) {
+  if (s <= 0) return "Closed";
+  return `${Math.floor(s/60)}m ${String(s%60).padStart(2,"0")}s`;
+}
+
+function clearMarkets() {
+  document.getElementById("marketsWrap").innerHTML = "";
+  document.getElementById("buySummary").style.display = "none";
+  const _bab = document.getElementById("buyAllBtn"); if (_bab) _bab.disabled = true;
+  markets = []; selectedMarkets.clear();
+  if (cdTimer) { clearInterval(cdTimer); cdTimer = null; }
+}
+
+// ── Open positions ────────────────────────────────────────────────────────
+
+function startPosMon() {
+  if (posTimer) return;
+  posTimer = setInterval(loadBalance, 30000);
+}
+
+function renderBotPositions(positions) {
+  allPositions = positions;
+  try { localStorage.setItem("kb_positions", JSON.stringify(positions)); } catch(e) {}
+  const catSel = document.getElementById("posFilterCat");
+  if (catSel) {
+    const cur  = catSel.value;
+    const cats = [...new Set(positions.map(p => p.category).filter(Boolean))].sort();
+    catSel.innerHTML = '<option value="">All Categories</option>' +
+      cats.map(c => `<option value="${esc(c)}"${c === cur ? " selected" : ""}>${esc(c)}</option>`).join("");
+  }
+  filterPos();
+  // Flash the sort label so user knows list just re-sorted
+  const sortEl = document.getElementById("posSort");
+  if (sortEl) { sortEl.style.borderColor = "var(--green)"; setTimeout(() => { sortEl.style.borderColor = ""; }, 800); }
+}
+
+function filterPos() {
+  const src  = document.getElementById("posFilterSource")?.value || "";
+  const cat  = document.getElementById("posFilterCat")?.value   || "";
+  const sort = document.getElementById("posSort")?.value || "recent";
+
+  let filtered = allPositions.filter(p => {
+    if (src === "bot"    && !p.bot_bought) return false;
+    if (src === "kalshi" &&  p.bot_bought) return false;
+    if (cat && p.category !== cat)         return false;
+    return true;
+  });
+
+  // Sort
+  const getPnl = p => {
+    const qty  = Math.abs(p.quantity ?? 0);
+    const side = (p.quantity ?? 0) > 0 ? "yes" : "no";
+    const cur  = side === "yes" ? p.current_yes : p.current_no;
+    if (p.buy_price != null && cur != null) return qty * (cur - p.buy_price) / 100;
+    return null;
+  };
+  filtered.sort((a, b) => {
+    if (sort === "recent") {
+      return (b.bought_at || "").localeCompare(a.bought_at || "");
+    } else if (sort === "profit_desc") {
+      return (getPnl(b) ?? -999) - (getPnl(a) ?? -999);
+    } else if (sort === "profit_asc") {
+      return (getPnl(a) ?? 999) - (getPnl(b) ?? 999);
+    } else if (sort === "value_desc") {
+      const side = p => (p.quantity ?? 0) > 0 ? "yes" : "no";
+      const val  = p => Math.abs(p.quantity ?? 0) * ((side(p) === "yes" ? p.current_yes : p.current_no) ?? 0) / 100;
+      return val(b) - val(a);
+    } else if (sort === "price_desc") {
+      const cur = p => { const s = (p.quantity??0)>0?"yes":"no"; return s==="yes"?p.current_yes:p.current_no; };
+      return (cur(b) ?? 0) - (cur(a) ?? 0);
+    } else if (sort === "captured_desc") {
+      const getCap = p => {
+        const qty = Math.abs(p.quantity??0), side = (p.quantity??0)>0?"yes":"no";
+        const cur = side==="yes"?p.current_yes:p.current_no;
+        const spent = p.buy_price!=null ? qty*p.buy_price/100 : null;
+        const valNow = cur!=null ? qty*cur/100 : null;
+        const maxWin = spent!=null ? qty*0.99-spent : null;
+        const curP = (spent!=null&&valNow!=null) ? valNow-spent : null;
+        return (curP!=null&&maxWin!=null&&maxWin>0) ? curP/maxWin : null;
+      };
+      return (getCap(b)??-999) - (getCap(a)??-999);
+    } else if (sort === "time_asc") {
+      return (a.close_time||"zzzz").localeCompare(b.close_time||"zzzz");
+    } else if (sort === "time_desc") {
+      return (b.close_time||"").localeCompare(a.close_time||"");
+    } else if (sort === "maxprofit_desc" || sort === "maxprofit_asc") {
+      const getMax = p => { const abs=Math.abs(p.quantity??0),spent=p.buy_price!=null?abs*p.buy_price/100:null; return spent!=null?abs*0.99-spent:null; };
+      const diff = (getMax(b)??-999) - (getMax(a)??-999);
+      return sort === "maxprofit_desc" ? diff : -diff;
+    } else if (sort === "boughtat_desc" || sort === "boughtat_asc") {
+      const diff = (b.buy_price??0) - (a.buy_price??0);
+      return sort === "boughtat_desc" ? diff : -diff;
+    } else if (sort === "spent_desc" || sort === "spent_asc") {
+      const getSpent = p => Math.abs(p.quantity??0) * (p.buy_price??0) / 100;
+      const diff = getSpent(b) - getSpent(a);
+      return sort === "spent_desc" ? diff : -diff;
+    } else if (sort === "captured_asc") {
+      const getCap = p => {
+        const qty = Math.abs(p.quantity??0), side = (p.quantity??0)>0?"yes":"no";
+        const cur = side==="yes"?p.current_yes:p.current_no;
+        const spent = p.buy_price!=null ? qty*p.buy_price/100 : null;
+        const valNow = cur!=null ? qty*cur/100 : null;
+        const maxWin = spent!=null ? qty*0.99-spent : null;
+        const curP = (spent!=null&&valNow!=null) ? valNow-spent : null;
+        return (curP!=null&&maxWin!=null&&maxWin>0) ? curP/maxWin : null;
+      };
+      return (getCap(a)??999) - (getCap(b)??999);
+    } else if (sort === "value_asc") {
+      const side = p => (p.quantity ?? 0) > 0 ? "yes" : "no";
+      const val  = p => Math.abs(p.quantity ?? 0) * ((side(p) === "yes" ? p.current_yes : p.current_no) ?? 0) / 100;
+      return val(a) - val(b);
+    } else if (sort === "price_asc") {
+      const cur = p => { const s = (p.quantity??0)>0?"yes":"no"; return s==="yes"?p.current_yes:p.current_no; };
+      return (cur(a) ?? 0) - (cur(b) ?? 0);
+    }
+    return 0;
+  });
+
+  renderPositionsTable(filtered);
+}
+
+function renderPositionsTable(positions) {
+  const wrap = document.getElementById("posWrap");
+  if (!wrap) return;
+  updatePosTabBadge(allPositions.length);
+  if (!allPositions.length) {
+    wrap.innerHTML = '<div style="text-align:center;color:var(--muted);padding:40px;font-size:14px">No open positions — buy something in the Scanner tab.</div>';
+    return;
+  }
+  if (!positions.length) {
+    wrap.innerHTML = '<div style="text-align:center;color:var(--muted);padding:24px;font-size:14px">No positions match filter</div>';
+    return;
+  }
+  const rows = positions.map((p, i) => {
+    const qty  = p.quantity ?? 0;
+    const side = qty > 0 ? "yes" : "no";
+    const abs  = Math.abs(qty);
+    const cur  = side === "yes" ? p.current_yes : p.current_no;
+
+    const spent   = p.buy_price != null ? abs * p.buy_price / 100 : null;
+    const valNow  = cur != null ? abs * cur / 100 : null;
+    const maxWin  = spent != null ? abs * 0.99 - spent : null;
+    // "Captured" = current unrealized profit ÷ max possible profit
+    const curProfit = (spent != null && valNow != null) ? valNow - spent : null;
+    const captured  = (curProfit != null && maxWin != null && maxWin > 0) ? curProfit / maxWin : null;
+    const pnlDol  = (spent != null && valNow != null) ? valNow - spent : null;
+
+    const safeT = p.ticker.replace(/\\/g,"\\\\").replace(/'/g,"\\'");
+    const sid   = `sp${i}`;
+    const chk   = selectedPosTickers.has(p.ticker) ? "checked" : "";
+    const trBg  = pnlDol != null && pnlDol > 0.001 ? 'style="background:#071a0f"'
+                : pnlDol != null && pnlDol < -0.001 ? 'style="background:#1a0707"' : "";
+
+    const titleHtml = p.kalshi_url
+      ? `<a href="${p.kalshi_url}" target="_blank" style="color:#fff;text-decoration:none;font-weight:700" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='#fff'">${esc(p.title)}<span style="font-size:10px;margin-left:4px;opacity:.5">↗</span></a>`
+      : `<span style="font-weight:700">${esc(p.title)}</span>`;
+    const catTag = p.category ? `<span style="font-size:11px;color:#666;margin-left:6px">${esc(p.category)}</span>` : "";
+
+    // Sell button shows profit/loss only
+    let sellBtnHtml;
+    if (pnlDol != null) {
+      const inProfit = pnlDol > 0.001;
+      const inLoss   = pnlDol < -0.001;
+      const sign     = inProfit ? "+" : "";
+      const label    = inProfit
+        ? `Sell all &nbsp;(${sign}$${pnlDol.toFixed(2)} profit)`
+        : inLoss
+        ? `Sell all &nbsp;(-$${Math.abs(pnlDol).toFixed(2)} loss)`
+        : `Sell all &nbsp;(even)`;
+      const pnlStr = pnlDol >= 0 ? `+$${pnlDol.toFixed(2)}` : `-$${Math.abs(pnlDol).toFixed(2)}`;
+      sellBtnHtml = `<button id="${sid}" onclick="sellPos('${safeT}','${side}',${abs},'${sid}')"
+        style="background:${inProfit ? 'var(--green)' : inLoss ? 'var(--red)' : '#555'};color:${inProfit ? '#000' : '#fff'};border:none;border-radius:7px;padding:8px 14px;cursor:pointer;font-weight:700;font-size:13px;white-space:nowrap;line-height:1.3">Sell All<br><span style="font-size:11px;font-weight:600;opacity:.9">${pnlStr}</span></button>`;
+    } else {
+      sellBtnHtml = `<button class="sell-btn" id="${sid}" onclick="sellPos('${safeT}','${side}',${abs},'${sid}')">Sell all</button>`;
+    }
+
+    return `
+      <tr ${trBg}>
+        <td style="padding:10px 8px;width:36px"><input type="checkbox" ${chk} style="accent-color:var(--green);width:15px;height:15px;cursor:pointer" onchange="updatePosCheck('${safeT}',this.checked)"></td>
+        <td class="wrap">${titleHtml}${catTag}
+          <div style="margin-top:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <span class="badge ${side}">${side.toUpperCase()}</span>
+            ${p.bot_bought ? '<span class="src-bot">KalshiBot</span>' : '<span class="src-manual">Kalshi</span>'}
+          </div>
+        </td>
+        <td style="font-size:15px;font-weight:600">${abs}</td>
+        <td style="font-size:15px;font-weight:600">${p.buy_price != null ? p.buy_price + "¢" : "—"}</td>
+        <td style="font-size:15px;font-weight:600">${spent != null ? "$" + spent.toFixed(2) : "—"}</td>
+        <td style="font-size:15px;font-weight:700;color:${cur != null && cur >= 90 ? "var(--green)" : cur != null && cur <= 30 ? "var(--red)" : "#fff"}">${valNow != null ? "$" + valNow.toFixed(2) : "—"}</td>
+        <td style="font-size:16px;font-weight:800;color:${pnlDol == null ? '#555' : pnlDol > 0.001 ? 'var(--green)' : pnlDol < -0.001 ? 'var(--red)' : '#888'}">${pnlDol != null ? (pnlDol >= 0 ? '+' : '') + '$' + pnlDol.toFixed(2) : '—'}</td>
+        <td style="font-size:15px;color:${maxWin != null && maxWin > 0 ? 'var(--green)' : '#aaa'};font-weight:600">${maxWin != null ? (maxWin >= 0 ? '+' : '') + '$' + maxWin.toFixed(2) : '—'}</td>
+        <td style="white-space:nowrap">${captured != null ? capturedBadge(captured) : '—'}</td>
+        <td style="font-size:13px;white-space:nowrap">${p.close_time ? fmtTimeLeft(p.close_time) : '—'}</td>
+        <td>${sellBtnHtml}</td>
+      </tr>`;
+  }).join("");
+  wrap.innerHTML = `
+    <div class="tbl-wrap"><table>
+      <thead><tr>
+        <th style="width:36px"><input type="checkbox" style="accent-color:var(--green)" onchange="toggleAllPos(this.checked)"></th>
+        <th>Market</th>
+        <th>Qty</th>
+        <th onclick="setSortAndFilter('boughtat_desc')" style="cursor:pointer" title="Click to sort">Bought@ ↕</th>
+        <th onclick="setSortAndFilter('spent_desc')" style="cursor:pointer" title="Click to sort">Spent ↕</th>
+        <th onclick="setSortAndFilter('value_desc')" style="cursor:pointer" title="Click to sort">Value Now ↕</th>
+        <th onclick="setSortAndFilter('profit_desc')" style="cursor:pointer;color:var(--green)" title="Current profit if you sell right now — click to sort highest to lowest">Profit Now ↕</th>
+        <th onclick="setSortAndFilter('maxprofit_desc')" style="cursor:pointer" title="Max profit if held to resolution — click to sort">Max Profit ↕</th>
+        <th onclick="setSortAndFilter('captured_desc')" style="cursor:pointer" title="Click to sort — high % = captured most of upside">Captured ↕</th>
+        <th onclick="setSortAndFilter('time_asc')" style="cursor:pointer" title="Click to sort by time remaining">Time Left ↕</th>
+        <th></th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+  updateSellSelBtn();
+}
+
+function updatePosCheck(ticker, checked) {
+  checked ? selectedPosTickers.add(ticker) : selectedPosTickers.delete(ticker);
+  updateSellSelBtn();
+}
+
+function toggleAllPos(checked) {
+  const src = document.getElementById("posFilterSource")?.value || "";
+  const cat = document.getElementById("posFilterCat")?.value   || "";
+  allPositions.filter(p => {
+    if (src === "bot"    && !p.bot_bought) return false;
+    if (src === "kalshi" &&  p.bot_bought) return false;
+    if (cat && p.category !== cat)         return false;
+    return true;
+  }).forEach(p => checked ? selectedPosTickers.add(p.ticker) : selectedPosTickers.delete(p.ticker));
+  filterPos();
+}
+
+function updateSellSelBtn() {
+  const btn = document.getElementById("sellSelBtn");
+  if (!btn) return;
+  const n = selectedPosTickers.size;
+  btn.textContent = `Sell Selected (${n})`;
+  btn.disabled    = n === 0;
+}
+
+async function sellSelected() {
+  if (!selectedPosTickers.size) return;
+  const tickers = [...selectedPosTickers];
+  if (!confirm(`Sell ${tickers.length} position(s)?`)) return;
+  for (const ticker of tickers) {
+    const pos  = allPositions.find(p => p.ticker === ticker);
+    if (!pos) continue;
+    const qty  = pos.quantity ?? 0;
+    const side = qty > 0 ? "yes" : "no";
+    const abs  = Math.abs(qty);
+    try {
+      const r = await fetch("/api/sell", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ticker,side,count:abs})});
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Failed");
+      selectedPosTickers.delete(ticker);
+      toast(`Sold ${abs} ${side.toUpperCase()} on ${ticker}`, "ok");
+    } catch(e) { toast(`${ticker}: ${e.message}`, "err"); }
+    await delay(300);
+  }
+  loadBalanceThrottled(true);
+}
+
+async function confirmSellAll() {
+  if (!allPositions.length) return;
+  if (!confirm(`Sell ALL ${allPositions.length} open position(s)?`)) return;
+  for (const pos of allPositions) {
+    const qty  = pos.quantity ?? 0;
+    const side = qty > 0 ? "yes" : "no";
+    const abs  = Math.abs(qty);
+    try {
+      const r = await fetch("/api/sell", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ticker:pos.ticker,side,count:abs})});
+      if (!r.ok) { const d = await r.json(); toast(`${pos.ticker}: ${d.error||"failed"}`, "err"); }
+    } catch(e) { toast(`${pos.ticker}: ${e.message}`, "err"); }
+    await delay(300);
+  }
+  selectedPosTickers.clear();
+  loadBalanceThrottled(true);
+}
+
+// ── Scan Results Notification (30s sticky) ────────────────────────────────
+
+const SCAN_NOTIF_TTL_MS = 30_000;  // 30 seconds
+let scanNotifTimer = null;
+
+function showScanResultsNotif(count) {
+  const el = document.getElementById("scanResultsNotif");
+  if (!el) {
+    // Create notification element if it doesn't exist
+    const notif = document.createElement("div");
+    notif.id = "scanResultsNotif";
+    notif.style.cssText = "background:#0c1612;border:1px solid #1f6045;border-radius:8px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px;font-size:13px;color:#0f0";
+    notif.innerHTML = `<span style="font-weight:700">✓ Scan ready:</span> <span id="scanNotifMsg"></span> <span style="margin-left:auto;color:#666;font-size:11px" id="scanNotifTimer"></span>`;
+    const statusEl = document.getElementById("scanStatus");
+    if (statusEl && statusEl.parentNode) {
+      statusEl.parentNode.insertBefore(notif, statusEl.nextSibling);
+    }
+  }
+  document.getElementById("scanNotifMsg").textContent = `${count} market${count > 1 ? "s" : ""} ready to buy`;
+
+  if (scanNotifTimer) clearInterval(scanNotifTimer);
+  const startTime = Date.now();
+  scanNotifTimer = setInterval(() => {
+    const elapsed = Date.now() - startTime;
+    const remaining = Math.max(0, Math.round((SCAN_NOTIF_TTL_MS - elapsed) / 1000));
+    const timerEl = document.getElementById("scanNotifTimer");
+    if (timerEl) timerEl.textContent = `(${remaining}s)`;
+    if (remaining <= 0 && el) {
+      el.style.display = "none";
+      clearInterval(scanNotifTimer);
+      scanNotifTimer = null;
+    }
+  }, 500);
+}
+
+// ── Recent Buys (2min sticky card) ─────────────────────────────────────────
+
+const RECENT_BUY_TTL_MS = 120_000;  // 2 minutes
+let recentBuys = [];
+let recentBuysTimer = null;
+
+function addRecentBuy(b) {
+  recentBuys.unshift(b);
+  // Keep at most 10
+  if (recentBuys.length > 10) recentBuys = recentBuys.slice(0, 10);
+  renderRecentBuys();
+  if (!recentBuysTimer) recentBuysTimer = setInterval(renderRecentBuys, 2000);
+}
+
+function renderRecentBuys() {
+  const now = Date.now();
+  recentBuys = recentBuys.filter(b => now - b.ts < RECENT_BUY_TTL_MS);
+  const wrap = document.getElementById("recentBuysWrap");
+  if (!wrap) return;
+  if (!recentBuys.length) {
+    wrap.style.display = "none";
+    wrap.innerHTML = "";
+    if (recentBuysTimer) { clearInterval(recentBuysTimer); recentBuysTimer = null; }
+    return;
+  }
+  wrap.style.display = "block";
+  const cards = recentBuys.map(b => {
+    const ageMs   = now - b.ts;
+    const ageS    = Math.max(0, Math.round((RECENT_BUY_TTL_MS - ageMs) / 1000));
+    // Look up live bid for current % chance
+    const livePos = allPositions.find(p => p.ticker === b.ticker);
+    const liveBid = livePos ? (b.side === "yes" ? livePos.current_yes : livePos.current_no) : null;
+    const maxPayout = (b.contracts * 1).toFixed(2);
+    const fee       = (b.contracts * 0.01).toFixed(2);
+    const netIfWin  = (b.contracts * (1 - b.price / 100) - b.contracts * 0.01).toFixed(2);
+    const titleHtml = b.kalshi_url
+      ? `<a href="${b.kalshi_url}" target="_blank" style="color:#fff;text-decoration:none;font-weight:700">${esc(b.title || b.ticker)}</a>`
+      : `<span style="font-weight:700">${esc(b.title || b.ticker)}</span>`;
+    const subQ = b.market_q && b.market_q !== b.title
+      ? `<div style="font-size:11px;color:#aaa;margin-top:2px;font-style:italic">${esc(b.market_q.length > 90 ? b.market_q.slice(0,90)+"…" : b.market_q)}</div>` : "";
+    return `
+      <div style="background:#0c1a14;border:1px solid #1f6045;border-radius:8px;padding:12px 14px;display:grid;grid-template-columns:1fr auto;gap:8px;align-items:start">
+        <div style="min-width:0">
+          ${titleHtml}
+          ${subQ}
+          <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:8px;font-size:12.5px;color:#ddd">
+            <div><span style="color:#888">Side</span> <b class="${b.side === 'yes' ? 'pos' : 'neg'}">${b.side.toUpperCase()}</b></div>
+            <div><span style="color:#888">Shares</span> <b>${b.contracts}</b></div>
+            <div><span style="color:#888">Cost</span> <b>$${(+b.spent).toFixed(2)}</b></div>
+            <div><span style="color:#888">% chance at buy</span> <b>${b.price}¢</b></div>
+            ${liveBid != null ? `<div><span style="color:#888">Now</span> <b>${liveBid}¢</b></div>` : ""}
+            <div><span style="color:#888">Max payout</span> <b style="color:var(--green)">$${maxPayout}</b></div>
+            <div><span style="color:#888">Fee</span> <b style="color:var(--yellow)">$${fee}</b></div>
+            <div><span style="color:#888">Net if wins</span> <b style="color:var(--green)">+$${netIfWin}</b></div>
+            ${b.category ? `<div><span style="color:#888">Cat</span> <b>${esc(b.category)}</b></div>` : ""}
+          </div>
+        </div>
+        <div style="text-align:right;font-size:11px;color:#666;white-space:nowrap">
+          <div style="color:var(--green);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px">Just bought</div>
+          <div style="margin-top:4px">${ageS}s left</div>
+        </div>
+      </div>`;
+  }).join("");
+  wrap.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px">${cards}</div>`;
+}
+
+// ── Cha-ching audio (WebAudio synth, no external file) ──────────────────
+
+let _audioCtx = null;
+function chaChing() {
+  try {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = _audioCtx;
+    const now = ctx.currentTime;
+    // Two-note bell-like "cha-CHING"
+    [
+      {freq: 1175, t: 0,    dur: 0.12, vol: 0.18},  // D6
+      {freq: 1568, t: 0.10, dur: 0.35, vol: 0.22},  // G6
+      {freq: 1976, t: 0.10, dur: 0.40, vol: 0.14},  // B6 overtone
+    ].forEach(n => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.value = n.freq;
+      gain.gain.setValueAtTime(0, now + n.t);
+      gain.gain.linearRampToValueAtTime(n.vol, now + n.t + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + n.t + n.dur);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now + n.t);
+      osc.stop(now + n.t + n.dur + 0.02);
+    });
+  } catch(e) {}
+}
+
+// ── Clippy-style floating coach hint ─────────────────────────────────────
+
+let _clippyLast = null;
+async function refreshClippy() {
+  try {
+    const r = await fetch("/api/coach");
+    const d = await r.json();
+    const recs = (d.recommendations || []).filter(rc => rc.type !== "info");
+
+    // Always update the inline panel on the Scanner page — never dismissable, always there
+    const inline = document.getElementById("coachInline");
+    const body   = document.getElementById("coachInlineBody");
+    const meta   = document.getElementById("coachInlineMeta");
+    if (inline && body) {
+      if (recs.length) {
+        body.innerHTML = recs.slice(0, 3).map(rc => {
+          const color = rc.type === "prefer" ? "var(--green)" : rc.type === "avoid" ? "var(--red)" : "var(--blue)";
+          const icon  = rc.type === "prefer" ? "↑" : rc.type === "avoid" ? "↓" : "ⓘ";
+          const msg   = rc.msg.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+          return `<div style="display:flex;gap:8px;align-items:flex-start"><span style="color:${color};font-weight:700;min-width:14px">${icon}</span><span>${msg}</span></div>`;
+        }).join("");
+        if (meta) meta.textContent = `based on ${d.totals?.trades || 0} settled trades`;
+        inline.style.display = "block";
+      } else {
+        body.innerHTML = '<div style="color:#888;font-size:12px">Not enough data yet — recommendations sharpen as more trades settle.</div>';
+        if (meta) meta.textContent = "";
+        inline.style.display = "block";
+      }
+    }
+
+    // Floating Clippy: only the top recommendation, dismissable per-rec
+    if (!recs.length) return;
+    const pick = recs[0];
+    const sig  = pick.msg;
+    const dismissed = localStorage.getItem("kb_clippy_dismissed_" + sig);
+    if (dismissed) return;
+    const el = document.getElementById("clippy");
+    if (!el) return;
+    if (sig !== _clippyLast) {
+      document.getElementById("clippyMsg").innerHTML = pick.msg.replace(/\*\*(.+?)\*\*/g, '<b style="color:var(--green)">$1</b>');
+      document.getElementById("clippyN").textContent = d.totals?.trades || 0;
+      el.style.display = "block";
+      _clippyLast = sig;
+      // Auto-dismiss after 2 minutes
+      clearTimeout(window._clippyTimer);
+      window._clippyTimer = setTimeout(() => dismissClippy(), 120000);
+    }
+  } catch(e) {}
+}
+function dismissClippy() {
+  const el = document.getElementById("clippy");
+  if (_clippyLast) localStorage.setItem("kb_clippy_dismissed_" + _clippyLast, "1");
+  if (el) el.style.display = "none";
+}
+// Show coach tip once per 6 hours max
+const _lastClippy = parseInt(localStorage.getItem("kb_clippy_last_shown") || "0");
+if (Date.now() - _lastClippy > 6 * 3600 * 1000) {
+  setTimeout(refreshClippy, 4000);
+  localStorage.setItem("kb_clippy_last_shown", Date.now());
+}
+
+// ── Coach tab ────────────────────────────────────────────────────────────
+
+async function loadCoach() {
+  try {
+    const r = await fetch("/api/coach");
+    const d = await r.json();
+    const t = d.totals || {};
+    const totalsEl = document.getElementById("coachTotals");
+    const wr = t.win_rate != null ? `${t.win_rate}%` : "—";
+    const pnlCls = (t.total_pnl || 0) > 0 ? "pos" : (t.total_pnl || 0) < 0 ? "neg" : "neu";
+    totalsEl.innerHTML = `
+      <span>${t.trades || 0} settled trades · </span>
+      <span class="pos">${t.wins || 0} won</span> · <span class="neg">${t.losses || 0} lost</span>
+      · win rate <b>${wr}</b>
+      · total <span class="${pnlCls}" style="font-weight:700">${(t.total_pnl||0) >= 0 ? "+" : ""}$${(t.total_pnl||0).toFixed(2)}</span>
+    `;
+
+    const recsEl = document.getElementById("coachRecs");
+    const recs = d.recommendations || [];
+    if (!recs.length) {
+      recsEl.innerHTML = '<div style="color:var(--muted);font-size:13px">No recommendations yet — need more data.</div>';
+    } else {
+      recsEl.innerHTML = recs.map(rc => {
+        const color = rc.type === "prefer" ? "var(--green)" : rc.type === "avoid" ? "var(--red)" : "var(--blue)";
+        const icon  = rc.type === "prefer" ? "↑" : rc.type === "avoid" ? "↓" : "i";
+        const msg   = rc.msg.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+        return `<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 12px;background:#0c0c0e;border-left:3px solid ${color};border-radius:4px;margin-bottom:6px;font-size:13px"><span style="color:${color};font-weight:700;min-width:14px">${icon}</span><span>${msg}</span></div>`;
+      }).join("");
+    }
+
+    const stratEl = document.getElementById("coachStrategies");
+    const strats = d.strategies || [];
+    if (!strats.length) {
+      stratEl.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">No strategies yet — need more trading data.</div>';
+    } else {
+      stratEl.innerHTML = strats.map(s => {
+        const riskColor = s.risk === "Low" ? "var(--green)" : s.risk === "Medium" ? "var(--yellow)" : "var(--red)";
+        const rankBadge = ["🥇", "🥈", "🥉", "🏅", "⭐"][s.rank - 1] || "•";
+        const desc = s.description.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+        return `<div style="background:#0c0c0e;border:1px solid var(--border);border-radius:6px;padding:12px 14px;margin-bottom:8px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <span style="font-size:18px">${rankBadge}</span>
+            <span style="font-weight:700;font-size:14px;color:#fff">${s.name}</span>
+            <span style="margin-left:auto;background:${riskColor}22;color:${riskColor};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">${s.risk} Risk</span>
+          </div>
+          <div style="font-size:13px;color:#ccc;margin-bottom:6px;line-height:1.4">${desc}</div>
+          <div style="display:flex;gap:14px;font-size:12px;color:#aaa">
+            <span><b style="color:#fff">${s.expected_wr}%</b> expected win rate</span>
+            <span>✓ ${s.pros}</span>
+          </div>
+        </div>`;
+      }).join("");
+    }
+
+    coachBucketTable("coachCats",   d.by_category   || [], "Category");
+    coachBucketTable("coachBands",  d.by_price_band || [], "Band");
+    coachBucketTable("coachSides",  d.by_side       || [], "Side");
+    coachBucketTable("coachHours",  d.by_hour_utc   || [], "Hour");
+  } catch(e) {
+    document.getElementById("coachTotals").textContent = "Coach unavailable: " + e.message;
+  }
+}
+
+function coachBucketTable(elId, rows, label) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  if (!rows.length) { el.innerHTML = '<div style="color:#555;font-size:12px;padding:8px 0">No data</div>'; return; }
+  const body = rows.map(r => {
+    const pnlCls = r.total_pnl > 0 ? "pos" : r.total_pnl < 0 ? "neg" : "neu";
+    return `<tr>
+      <td>${esc(String(r.key))}</td>
+      <td>${r.n}</td>
+      <td>${r.win_rate}%</td>
+      <td class="${pnlCls}" style="font-weight:600">${r.total_pnl >= 0 ? "+" : ""}$${r.total_pnl.toFixed(2)}</td>
+    </tr>`;
+  }).join("");
+  el.innerHTML = `<div class="tbl-wrap"><table>
+    <thead><tr><th>${label}</th><th>n</th><th>WR</th><th>P&L</th></tr></thead>
+    <tbody>${body}</tbody></table></div>`;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+function setStatus(msg, cls) {
+  const el = document.getElementById("scanStatus");
+  el.textContent = msg; el.className = cls;
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+let _toast;
+function toast(msg, cls) {
+  const el = document.getElementById("toast");
+  el.textContent = msg; el.className = `show ${cls}`;
+  clearTimeout(_toast);
+  _toast = setTimeout(() => { el.className = ""; }, 15000);
+}
+
+const delay = ms => new Promise(r => setTimeout(r, ms));
+
+function setAmt(n) {
+  document.getElementById("buyAmount").value = n.toFixed(2);
+  markets.forEach((m, i) => {
+    const el = document.getElementById(`amt-${i}`);
+    if (el) { el.value = n.toFixed(2); updatePreview(i, m.price); }
+  });
+  updateBuySummary();
+}
+
+function updatePreview(idx, price_c) {
+  const amt       = parseFloat(document.getElementById(`amt-${idx}`).value) || 0;
+  const price_d   = price_c / 100;
+  const contracts = Math.floor(amt / price_d);
+  const el        = document.getElementById(`preview-${idx}`);
+  if (!el) return;
+  if (contracts < 1) { el.innerHTML = `<span style="color:var(--red)">Too small for 1 contract at ${price_c}¢</span>`; return; }
+  const cost      = (contracts * price_d).toFixed(2);
+  const fee       = (contracts * 0.01).toFixed(2);
+  const gross     = contracts * (1 - price_d);
+  const net       = (gross - contracts * 0.01).toFixed(2);
+  const netPct    = ((gross - contracts * 0.01) / (contracts * price_d) * 100).toFixed(1);
+  el.innerHTML = `${contracts} contracts · cost <b style="color:#fff">$${cost}</b> · fee <b style="color:var(--yellow)">$${fee}</b><br>net profit <b style="color:var(--green)">+$${net}</b> <span style="color:#bbb">(+${netPct}%)</span>`;
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────
+
+const SOLD_TTL = 120000; // show for 2 minutes
+
+function renderRecentlySold() {
+  const wrap = document.getElementById("recentlySoldWrap");
+  if (!wrap) return;
+  const now = Date.now();
+  _recentlySold = _recentlySold.filter(s => now - s.soldAt < SOLD_TTL);
+  if (!_recentlySold.length) { wrap.innerHTML = ""; return; }
+
+  const cards = _recentlySold.map((s, i) => {
+    const secsLeft = Math.max(0, Math.round((SOLD_TTL - (now - s.soldAt)) / 1000));
+    const isProfit = s.profit != null && s.profit > 0;
+    const isLoss   = s.profit != null && s.profit < 0;
+    const color    = isProfit ? "var(--green)" : isLoss ? "var(--red)" : "#888";
+    const bg       = isProfit ? "#071a0f" : isLoss ? "#1a0707" : "#0a0a0a";
+    const border   = isProfit ? "#1f6045" : isLoss ? "#6a1a1a" : "#333";
+    const pnl      = s.profit != null ? `${s.profit >= 0 ? "+" : ""}$${s.profit.toFixed(2)}` : "—";
+    const titleHtml = s.kalshi_url
+      ? `<a href="${s.kalshi_url}" target="_blank" style="color:#fff;text-decoration:none;font-weight:700">${esc(s.title)}</a>`
+      : `<b>${esc(s.title)}</b>`;
+    return `<div style="background:${bg};border:1px solid ${border};border-radius:8px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <div style="min-width:0">
+        <div style="font-size:11px;color:${color};font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">🤖 KalshiBot Sold · ${secsLeft}s left</div>
+        <div style="font-size:13px;color:#ddd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${titleHtml}</div>
+        <div style="margin-top:3px;font-size:11px;color:#777"><span class="badge ${s.side}">${s.side.toUpperCase()}</span> · ${s.qty} contracts · bought at ${s.buy_price}¢</div>
+      </div>
+      <div style="text-align:right;white-space:nowrap">
+        <div style="font-size:22px;font-weight:800;color:${color}">${pnl}</div>
+        <div style="font-size:11px;color:#555">profit</div>
+      </div>
+      <button onclick="_recentlySold.splice(${i},1);renderRecentlySold()" style="background:none;border:none;color:#555;font-size:18px;cursor:pointer;flex-shrink:0">×</button>
+    </div>`;
+  }).join("");
+  wrap.innerHTML = cards;
+}
+
+function showSellPopup(title, profitDol) {
+  const stack = document.getElementById("sellPopupStack");
+  if (!stack) return;
+  const isProfit = profitDol != null && profitDol > 0;
+  const isLoss   = profitDol != null && profitDol < 0;
+  const color    = isProfit ? "var(--green)" : isLoss ? "var(--red)" : "#888";
+  const bg       = isProfit ? "#071a0f" : isLoss ? "#1a0707" : "#111";
+  const border   = isProfit ? "#1f6045" : isLoss ? "#6a1a1a" : "#333";
+  const icon     = isProfit ? "💰" : isLoss ? "📉" : "✓";
+  const pnlText  = profitDol != null
+    ? `<span style="font-size:18px;font-weight:800;color:${color}">${profitDol >= 0 ? "+" : ""}$${profitDol.toFixed(2)}</span>`
+    : "";
+
+  const popup = document.createElement("div");
+  popup.style.cssText = `background:${bg};border:1px solid ${border};border-radius:10px;padding:12px 14px;box-shadow:0 8px 24px rgba(0,0,0,.6);animation:fadeIn .2s ease`;
+  popup.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:18px">${icon}</span>
+        <span style="font-weight:700;font-size:13px;color:${color};text-transform:uppercase;letter-spacing:.5px">${isProfit ? "Sold — Profit!" : isLoss ? "Sold — Loss" : "Sold"}</span>
+      </div>
+      <button onclick="this.closest('div[data-popup]').remove()" style="background:none;border:none;color:#888;font-size:18px;cursor:pointer;line-height:1;padding:0">×</button>
+    </div>
+    <div style="font-size:13px;color:#ddd;margin-bottom:6px;line-height:1.4">${esc(title.length > 50 ? title.slice(0,50)+"…" : title)}</div>
+    ${pnlText}
+    <div style="margin-top:4px;font-size:11px;color:#555">Auto-sold by bot · disappears in <span class="popup-timer">30</span>s</div>
+  `;
+  popup.setAttribute("data-popup", "1");
+  stack.appendChild(popup);
+
+  // Countdown and auto-remove after 30s
+  let secs = 30;
+  const timerEl = popup.querySelector(".popup-timer");
+  const iv = setInterval(() => {
+    secs--;
+    if (timerEl) timerEl.textContent = secs;
+    if (secs <= 0) { clearInterval(iv); popup.remove(); }
+  }, 1000);
+  // Wire up close button properly
+  popup.querySelector("button").onclick = () => { clearInterval(iv); popup.remove(); };
+}
+
+function capturedBadge(ratio) {
+  const pct = ratio * 100;
+  const absR = Math.abs(ratio);
+  let color, label, hint;
+  if (ratio < 0) {
+    color = "var(--red)"; label = `${pct.toFixed(0)}%`; hint = "losing";
+  } else if (absR >= 0.8) {
+    color = "var(--green)"; label = `${pct.toFixed(0)}%`; hint = "💰 sell?";
+  } else if (absR >= 0.5) {
+    color = "var(--yellow)"; label = `${pct.toFixed(0)}%`; hint = "hold?";
+  } else {
+    color = "#888"; label = `${pct.toFixed(0)}%`; hint = "early";
+  }
+  return `<span style="color:${color};font-size:13px;font-weight:700" title="You've captured ${pct.toFixed(1)}% of max profit">${label}</span> <span style="color:#666;font-size:11px">${hint}</span>`;
+}
+
+function setSortAndFilter(sortVal) {
+  const sel = document.getElementById("posSort");
+  if (!sel) return;
+  // Toggle: if already sorted by this, flip to opposite direction
+  const opposites = {
+    profit_desc: "profit_asc",       profit_asc: "profit_desc",
+    captured_desc: "captured_asc",   captured_asc: "captured_desc",
+    time_asc: "time_desc",           time_desc: "time_asc",
+    value_desc: "value_asc",         value_asc: "value_desc",
+    price_desc: "price_asc",         price_asc: "price_desc",
+    maxprofit_desc: "maxprofit_asc", maxprofit_asc: "maxprofit_desc",
+    boughtat_desc: "boughtat_asc",   boughtat_asc: "boughtat_desc",
+    spent_desc: "spent_asc",         spent_asc: "spent_desc",
+  };
+  const current = sel.value;
+  sel.value = current === sortVal && opposites[sortVal] ? opposites[sortVal] : sortVal;
+  filterPos();
+  saveSettings();
+}
+
+function fmtTimeLeft(isoStr) {
+  if (!isoStr) return "—";
+  try {
+    const secs = Math.max(0, Math.floor((new Date(isoStr) - Date.now()) / 1000));
+    if (secs <= 0) return '<span style="color:var(--red)">Expired</span>';
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    const color = secs < 300 ? "var(--red)" : secs < 900 ? "var(--yellow)" : "var(--green)";
+    if (h > 0) return `<span style="color:${color}">${h}h ${m}m</span>`;
+    if (m > 0) return `<span style="color:${color}">${m}m ${String(s).padStart(2,"0")}s</span>`;
+    return `<span style="color:var(--red);font-weight:700">${s}s</span>`;
+  } catch(e) { return "—"; }
+}
+
+function toCDT(isoStr) {
+  if (!isoStr) return "—";
+  try {
+    const d = new Date(isoStr);
+    const withTz = d.toLocaleString("en-US", {
+      timeZone: "America/Chicago",
+      month: "numeric", day: "numeric",
+      hour: "numeric", minute: "2-digit", hour12: true,
+      timeZoneName: "short",
+    });
+    // withTz looks like "5/28, 9:33 PM CDT" — just return it
+    return withTz;
+  } catch(e) { return "—"; }
+}
+
+function switchTab(name) {
+  document.querySelectorAll(".tab-btn").forEach(b => {
+    const m = b.getAttribute("onclick")?.match(/'(\w+)'/);
+    b.classList.toggle("active", m?.[1] === name);
+  });
+  document.querySelectorAll(".tab-pane").forEach(p => {
+    p.classList.toggle("active", p.id === "tab-" + name);
+  });
+  localStorage.setItem("activeTab", name);
+  if (name === "stats")     loadStats();
+  if (name === "coach")     loadCoach();
+  if (name === "positions") loadBalanceThrottled();
+  // Hide Start Bot on non-scanner tabs, show Stop Bot everywhere
+  const fab = document.getElementById("fab");
+  const scanBtn = document.getElementById("scanBtn");
+  if (fab) {
+    const fabAuto = document.getElementById("fabAuto");
+    if (name !== "scanner") {
+      if (scanBtn) scanBtn.style.display = "none";
+      if (fabAuto && !autoModeOn) fabAuto.style.display = "none";
+      else if (fabAuto) fabAuto.style.display = "";
+    } else {
+      if (scanBtn) scanBtn.style.display = "";
+      if (fabAuto) fabAuto.style.display = "";
+    }
+  }
+}
+
+function updatePosTabBadge(count) {
+  const btn = document.getElementById("tabPositions");
+  if (!btn) return;
+  const existing = btn.querySelector(".pos-badge");
+  if (existing) existing.remove();
+  if (count > 0) {
+    const badge = document.createElement("span");
+    badge.className = "pos-badge";
+    badge.textContent = count;
+    btn.appendChild(badge);
+  }
+}
+
+async function runDebugScan() {
+  const el = document.getElementById("debugScanOut");
+  el.textContent = "Fetching (probing series — takes ~15s)…";
+  try {
+    const r = await fetch("/api/debug_scan");
+    const d = await r.json();
+    if (d.error) { el.textContent = "Error: " + d.error; return; }
+
+    let out = "";
+
+    // Series probe results
+    const sp = d.series_probe || [];
+    if (sp.length) {
+      out += `=== SERIES PROBE: ${sp.length} series have open markets ===\n`;
+      sp.forEach(s => {
+        out += `  ${s.series} (${s.count} mkts)  sample: ${s.sample_ticker}  close: ${s.sample_close ? toCDT(s.sample_close) : "—"}  yes=${s.yes_ask ?? "?"} no=${s.no_ask ?? "?"}\n`;
+      });
+    } else {
+      out += `=== SERIES PROBE: 0 hits — none of the known series returned markets ===\n`;
+    }
+    out += "\n";
+
+    // Timestamp filter results
+    const ts = d.ts_filter_24h || {};
+    if (ts.error) {
+      out += `=== TIMESTAMP FILTER: error — ${ts.error} ===\n`;
+    } else {
+      out += `=== TIMESTAMP FILTER (24h): ${ts.count ?? 0} total, ${ts.non_kxmv ?? 0} non-KXMV ===\n`;
+      (ts.sample || []).forEach(m => {
+        out += `  ${m.is_kxmv ? "[KXMV]" : "[REAL]"} ${m.ticker}  close: ${m.close_time ? toCDT(m.close_time) : "—"}  yes=${m.yes_ask ?? "?"} no=${m.no_ask ?? "?"}\n`;
+      });
+    }
+    out += "\n";
+
+    // 60-min window
+    const w = d.window_60min || {};
+    out += `=== 60-MIN WINDOW (flat pagination): ${w.count ?? 0} markets ===\n`;
+    (w.markets || []).forEach(m => {
+      out += `[${String(Math.floor(m.secs_left/60)).padStart(2)}m] ${m.ticker}  yes=${m.yes_ask ?? "?"}¢ no=${m.no_ask ?? "?"}¢  crypto=${m.is_crypto} combo=${m.is_combo}\n`;
+    });
+
+    el.textContent = out || "No data.";
+    // Show copy button when there's content
+    document.getElementById("copyDebugBtn").style.display = "block";
+  } catch(e) {
+    el.textContent = "Error: " + e.message;
+    document.getElementById("copyDebugBtn").style.display = "none";
+  }
+}
+
+function copyDebugScan() {
+  const el = document.getElementById("debugScanOut");
+  const text = el.textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    toast("Debug scan copied to clipboard!", "ok");
+  }).catch(() => {
+    toast("Failed to copy", "err");
+  });
+}
+
+async function loadStats() {
+  const el = document.getElementById("statsContent");
+  if (!el) return;
+  el.textContent = "Loading…";
+  try {
+    const r = await fetch("/api/stats");
+    const d = await r.json();
+    if (!d.rows || !d.rows.length) {
+      el.innerHTML = '<span style="color:var(--muted)">No completed trades yet.</span>';
+    } else {
+      const rows = d.rows.map(row => `
+        <tr>
+          <td>${esc(row.category)}</td>
+          <td>${row.buys}</td>
+          <td style="color:var(--blue)">${row.open}</td>
+          <td>${row.sold}</td>
+          <td class="${row.wins > 0 ? "pos" : "neu"}">${row.wins}</td>
+          <td class="${row.losses > 0 ? "neg" : "neu"}">${row.losses}</td>
+          <td style="color:#aaa">${row.win_rate != null ? row.win_rate + "%" : "—"}</td>
+          <td class="${row.total_pnl > 0 ? "pos" : row.total_pnl < 0 ? "neg" : "neu"}" style="font-weight:600">${row.total_pnl >= 0 ? "+" : ""}$${row.total_pnl.toFixed(2)}</td>
+        </tr>`).join("");
+      el.innerHTML = `
+        <div class="tbl-wrap"><table>
+          <thead><tr>
+            <th>Category</th><th>Buys</th><th>Open</th><th>Sold</th>
+            <th>Wins</th><th>Losses</th><th>Win%</th><th>P&amp;L</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>
+        <div style="margin-top:10px;font-size:12px;color:#666">
+          Total: ${d.total_buys} buys · ${d.total_open} open · ${d.total_sold} sold
+        </div>`;
+    }
+    const logEl = document.getElementById("scanLogInfo");
+    if (logEl && d.scan_log_count != null) {
+      logEl.textContent = `${d.scan_log_count} scan${d.scan_log_count !== 1 ? "s" : ""} recorded`;
+    }
+  } catch(e) {
+    el.textContent = "Error loading stats.";
+  }
+}
+
+function setMaxBuys(n) {
+  document.getElementById("maxBuysPerMarket").value = n;
+}
+
+// ── Settings save/load ───────────────────────────────────────────────────
+
+const SETTINGS_KEY = "kb_settings_v2";
+const SETTINGS_CHECKBOXES = ["showCrypto","showSports","showPolitics","showEconomics",
+  "showEntertainment","showWeather","showNFL","showNBA","showMLB","showNHL",
+  "showSoccer","showGolf","showTennis","showMMA","showCombo","goodLiq","yesOnly",
+  "stopProfitDolChk","stopProfitPctChk","stopLossDolChk","stopLossPctChk",
+  "skipAutoSellNearResolution"];
+const SETTINGS_INPUTS = ["buyAmount","maxBuysPerMarket","autoMaxPerScan","autoMaxConcurrent","posSort",
+  "autoMins","autoBuysMax","profitCustom","profitDolCustom","minProb","maxProb","timeCustom",
+  "stopProfitDol","stopProfitPct","stopLossDol","stopLossPct","skipAutoSellMinutes",
+  "minAgeMins","maxAgeMins","noBuyWithinMins"];
+
+function saveSettings() {
+  const s = { stratMode, stratPct, selMin, selMax, selTime, autoRunMode };
+  SETTINGS_CHECKBOXES.forEach(id => { const el = document.getElementById(id); if (el) s[id] = el.checked; });
+  SETTINGS_INPUTS.forEach(id => { const el = document.getElementById(id); if (el) s[id] = el.value; });
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch(e) {}
+}
+
+function loadSettings() {
+  let s;
+  try { s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "null"); } catch(e) {}
+  if (!s) return;
+  SETTINGS_CHECKBOXES.forEach(id => { const el = document.getElementById(id); if (el && s[id] != null) el.checked = s[id]; });
+  SETTINGS_INPUTS.forEach(id => { const el = document.getElementById(id); if (el && s[id] != null) el.value = s[id]; });
+  if (s.stratMode) setStrategy(s.stratMode);
+  if (s.stratPct)  setProfit(parseFloat(s.stratPct));
+  // Restore $ profit target pill highlight
+  const dolEl = document.getElementById("profitDolCustom");
+  if (dolEl && dolEl.value && parseFloat(dolEl.value) > 0) {
+    activatePills("profitDolGroup", "$" + parseFloat(dolEl.value).toFixed(2));
+    pushStrategy();
+  }
+  // Derive selMin/selMax from the input fields (single source of truth)
+  const minEl = document.getElementById("minProb"), maxEl = document.getElementById("maxProb");
+  if (minEl && maxEl) {
+    selMin = parseFloat(minEl.value) || 85;
+    selMax = parseFloat(maxEl.value) || 98;
+    const presets = ["80–95%","85–98%","90–98%","95–98%"];
+    const label = `${selMin}–${selMax}%`;
+    activatePills("probGroup", presets.includes(label) ? label : "Custom");
+  }
+  if (s.selTime) { selTime = parseInt(s.selTime); activatePills("timeGroup", selTime < 60 ? selTime + " min" : (selTime/60)+"h"); }
+  if (s.autoRunMode) setRunMode(s.autoRunMode);
+}
+
+// ── Coach → Apply Settings ───────────────────────────────────────────────
+
+async function applyCoachSettings() {
+  const btn = document.getElementById("coachApplyBtn");
+  if (btn) { btn.textContent = "Applying…"; btn.disabled = true; }
+  try {
+    const d = await fetch("/api/coach").then(r => r.json());
+
+    // Best price band by win rate (need ≥3 trades)
+    const bands = (d.by_price_band || []).filter(b => b.n >= 3).sort((a,b) => b.win_rate - a.win_rate);
+    if (bands.length) {
+      const best = bands[0].key; // e.g. "90-95¢"
+      const m = best.match(/(\d+)[–\-](\d+)/);
+      if (m) { selMin = parseInt(m[1]); selMax = parseInt(m[2]); document.getElementById("minProb").value = selMin; document.getElementById("maxProb").value = selMax; activatePills("probGroup","Custom"); }
+    } else {
+      // Default safe range
+      setRange(85, 96);
+    }
+
+    // Best side
+    const sides = (d.by_side || []).sort((a,b) => b.win_rate - a.win_rate);
+    if (sides.length && sides[0].key === "no") {
+      document.getElementById("yesOnly").checked = false;
+    } else {
+      document.getElementById("yesOnly").checked = true;
+    }
+
+    // 24h window to capture most opportunities
+    setTime(1440, "24h");
+
+    // Cap at $1 per bet
+    document.getElementById("buyAmount").value = "1.00";
+
+    // All categories on
+    ["showCrypto","showSports","showPolitics","showEconomics","showEntertainment",
+     "showWeather","showNFL","showNBA","showMLB","showNHL","showSoccer","showGolf",
+     "showTennis","showMMA","showCombo"].forEach(id => {
+      const el = document.getElementById(id); if (el) el.checked = true;
+    });
+
+    // Keep goodLiq on
+    document.getElementById("goodLiq").checked = true;
+
+    saveSettings();
+    if (autoModeOn) {
+      toast("✓ Coach settings applied — bot will use them on next scan", "ok");
+      if (btn) { btn.textContent = "✓ Settings Applied"; btn.style.background = "var(--green)"; btn.style.color = "#000"; }
+    } else {
+      toast("✓ Coach settings applied! Hit Start Bot when ready.", "ok");
+      if (btn) { btn.textContent = "✓ Applied — hit Start Bot!"; btn.style.background = "var(--green)"; btn.style.color = "#000"; }
+    }
+    switchTab("scanner");
+  } catch(e) {
+    toast("Coach settings error: " + e.message, "err");
+    if (btn) { btn.textContent = "Apply Coach Settings"; btn.disabled = false; }
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+
+// Fix tab nesting: browser may nest tabs inside tab-scanner due to unclosed tags.
+// Move all tab-panes to be direct children of .main.
+(function fixTabNesting() {
+  const main = document.querySelector(".main");
+  if (!main) return;
+  document.querySelectorAll(".tab-pane").forEach(p => {
+    if (p.parentElement !== main) main.appendChild(p);
+  });
+})();
+
+loadSettings();
+setProfit(parseFloat(document.getElementById("profitCustom")?.value) || 10);
+syncFabButtons();
+// Always push current sell strategy to Flask on page load (survives Flask restarts)
+setTimeout(() => { pushStrategy(); pushSellSettings(); }, 1000);
+// Auto-restart bot if it was running before the refresh
+if (localStorage.getItem("kb_bot_was_running")) {
+  setTimeout(() => {
+    toast("🤖 Bot restarting after refresh…", "ok");
+    startAutoMode();
+  }, 2000);
+}
+// Save on any input change
+document.querySelectorAll("input[type=number], input[type=text]").forEach(el => el.addEventListener("change", saveSettings));
+const saved = localStorage.getItem("activeTab");
+if (saved && saved !== "scanner") switchTab(saved);
+setTimeout(() => { loadStats(); loadCoach(); }, 200);
+setTimeout(() => {
+  const saved = localStorage.getItem("activeTab");
+  if (saved && saved !== "scanner") switchTab(saved);
+}, 100);
+
+// ── Keep scanning even when browser tab is not visible ────────────────────
+let _lastScanTime = 0;
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && autoModeOn) {
+    // Tab became visible — if scan is overdue, run immediately
+    if (Date.now() - _lastScanTime > 12000) scan();
+    // Restart the interval fresh (browser may have throttled it)
+    if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
+    scanTimer = setInterval(scan, 10000);
+  }
+});
+// Track last scan time
+const _origScan = scan;
+// Patch scan to track timing
+(function() {
+  const _realScan = scan;
+  window._patchedScan = async function() {
+    _lastScanTime = Date.now();
+    return _realScan();
+  };
+})();
+</script>
+
+</body>
+</html>
