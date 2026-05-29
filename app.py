@@ -166,8 +166,13 @@ def _get_market(ticker: str) -> dict:
     cached = _market_cache.get(ticker)
     if cached and (now - cached["ts"]) < _MARKET_CACHE_TTL:
         return cached["data"]
-    data = _get_market(ticker)
-    _market_cache[ticker] = {"data": data, "ts": now}
+    try:
+        data = kalshi_get(f"/markets/{ticker}").get("market", {})
+    except Exception:
+        data = {}
+    # Only cache successful responses (non-empty)
+    if data:
+        _market_cache[ticker] = {"data": data, "ts": now}
     return data
 
 def _get_sold_by(ticker: str) -> str:
