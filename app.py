@@ -156,6 +156,20 @@ print(f"[strategy] loaded: mode={sell_strategy.get('mode')} target_pct={sell_str
 # In-memory cache of event_ticker → clean title
 _event_cache: dict = {}
 
+# Market data cache — avoid hitting /markets/{ticker} more than once per 60s
+_market_cache: dict = {}   # ticker → {"data": {...}, "ts": float}
+_MARKET_CACHE_TTL = 60.0   # seconds
+
+def _get_market(ticker: str) -> dict:
+    """Fetch market data with 60s cache to reduce Kalshi API calls."""
+    now = time.time()
+    cached = _market_cache.get(ticker)
+    if cached and (now - cached["ts"]) < _MARKET_CACHE_TTL:
+        return cached["data"]
+    data = _get_market(ticker)
+    _market_cache[ticker] = {"data": data, "ts": now}
+    return data
+
 def _get_sold_by(ticker: str) -> str:
     """Return how a position was closed: Bot Auto-Sell, Bot (manual), or Human."""
     pos = tracked.get(ticker)
@@ -387,7 +401,7 @@ def _market_bid(m: dict, side: str) -> float | None:
 
 def _monitor():
     while True:
-        time.sleep(30)
+        time.sleep(45)  # 45s — cached market data means no extra Kalshi calls
         with _lock:
             tickers = list(tracked.keys())
 
@@ -647,7 +661,7 @@ def portfolio():
             close_time   = None
             time.sleep(0.15)  # rate limit: 20 positions × 0.15s = 3s max, avoids 429
             try:
-                mkt          = kalshi_get(f"/markets/{ticker}").get("market", {})
+                mkt          = _get_market(ticker)
                 event_ticker = mkt.get("event_ticker", "")
                 market_title = _event_title(event_ticker) or mkt.get("title", ticker)
                 category     = mkt.get("category", "")
@@ -712,7 +726,7 @@ def portfolio():
         current_yes  = None
         current_no   = None
         try:
-            mkt        = kalshi_get(f"/markets/{ticker}").get("market", {})
+            mkt        = _get_market(ticker)
             mkt_status = (mkt.get("status") or "").lower()
             if mkt_status in ("settled", "resolved", "finalized", "closed"):
                 with _lock:
@@ -814,7 +828,7 @@ def _recent_settlements(hours: int = 24) -> list:
                 title  = _event_title(evt) or ticker
                 category = ""
                 try:
-                    mkt = kalshi_get(f"/markets/{ticker}").get("market", {})
+                    mkt = _get_market(ticker)
                     title    = title or mkt.get("title", ticker)
                     category = mkt.get("category", "")
                 except Exception:
@@ -1546,7 +1560,7 @@ def sell():
 
     try:
         # Fetch current bid to include as price (Kalshi requires it)
-        mkt_data = kalshi_get(f"/markets/{ticker}").get("market", {})
+        mkt_data = _get_market(ticker)
         if side == "yes":
             bid_d = mkt_data.get("yes_bid_dollars") or mkt_data.get("yes_ask_dollars")
         else:
@@ -1592,7 +1606,7 @@ def positions():
         if pos["status"] != "open":
             continue
         try:
-            m     = kalshi_get(f"/markets/{ticker}").get("market", {})
+            m     = _get_market(ticker)
             bid_d = m.get("yes_bid_dollars") if pos["side"] == "yes" else m.get("no_bid_dollars")
             bid   = _dollars_to_cents(bid_d)
             if bid is not None:

@@ -728,7 +728,7 @@ let _lastBalanceCall = 0;
 let _waitingForCash = false;
 let _waitForCashAmt = 1.0;
 let _recentlySold = []; // {title, ticker, side, profit, soldAt, kalshi_url}
-const BALANCE_THROTTLE_MS = 30000; // max once every 30s
+const BALANCE_THROTTLE_MS = 60000; // max once every 60s (reduces Kalshi API calls)
 function loadBalanceThrottled(force=false) {
   const now = Date.now();
   if (!force && now - _lastBalanceCall < BALANCE_THROTTLE_MS) return;
@@ -881,7 +881,7 @@ try {
 } catch(e) {}
 loadBalance();
 loadPnl();
-setInterval(loadBalance, 30000);
+setInterval(loadBalance, 60000);
 setInterval(loadPnl, 300000); // refresh PnL data every 5 min
 
 
@@ -1589,7 +1589,7 @@ function clearMarkets() {
 
 function startPosMon() {
   if (posTimer) return;
-  posTimer = setInterval(loadBalance, 30000);
+  posTimer = setInterval(loadBalance, 60000);
 }
 
 function renderBotPositions(positions) {
