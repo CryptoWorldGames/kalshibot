@@ -1429,7 +1429,11 @@ async function sellPos(ticker, side, count, safeId) {
     toast(`Sold ${count} ${side.toUpperCase()} on ${ticker}`, "ok");
     if (preProfit) chaChing();
     selectedPosTickers.delete(ticker);
-    loadBalanceThrottled(true); // force refresh after sell
+    // Immediately remove from allPositions so it doesn't reappear
+    // (Kalshi API has a brief delay before the sell reflects)
+    allPositions = allPositions.filter(p => p.ticker !== ticker);
+    filterPos();
+    setTimeout(() => loadBalanceThrottled(true), 3000); // delay refresh so Kalshi API catches up
   } catch(e) {
     toast(e.message,"err");
     if (btn) { btn.disabled = false; btn.textContent = "Sell"; }
