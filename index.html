@@ -1108,11 +1108,12 @@ async function scan() {
           if (cashText && cashText !== "—") {
             const cashNow = parseFloat(cashText.replace("$","")) || 0;
             if (cashNow < autoAmt) {
-              // Pause scan timer for 1 min, then retry every 1 min until cash available
+              // Stop scan timer for 1 min, then retry
               if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
               _waitingForCash = true;
               _waitForCashAmt = autoAmt;
-              setStatus(`⏸ Insufficient cash — paused, checking every 1 min (have $${cashNow.toFixed(2)}, need $${autoAmt.toFixed(2)})`, "");
+              toast(`⏸ Insufficient cash ($${cashNow.toFixed(2)}) — pausing 1 min then retrying`, "err");
+              setStatus(`⏸ Insufficient cash — pausing 1 min (have $${cashNow.toFixed(2)}, need $${autoAmt.toFixed(2)})`, "");
               if (_cashPauseTimer) clearInterval(_cashPauseTimer);
               let pauseSecs = 60;
               _cashPauseTimer = setInterval(() => {
@@ -1522,7 +1523,7 @@ function renderMarkets() {
     return `
     <tr${owned ? ' style="background:#0a1a10"' : ''}>
       <td style="padding:10px 8px;width:36px"><input type="checkbox" ${owned ? "" : "checked"} id="mchk-${i}" style="accent-color:var(--green);width:15px;height:15px;cursor:pointer" onchange="updateMarketCheck(${i},this.checked)"></td>
-      <td class="wrap" style="overflow:visible">${titleHtml}${ownedBadge}${catTag}${lowOddsBadge}</td>
+      <td class="wrap">${titleHtml}${ownedBadge}${catTag}<div style="margin-top:3px">${lowOddsBadge}</div></td>
       <td><span class="badge ${m.side}">${m.side.toUpperCase()}</span></td>
       <td class="price-big">${m.price}¢</td>
       <td><span class="cd" id="cd-${i}" data-secs="${m.secs_left}"></span></td>
@@ -1635,7 +1636,12 @@ function startPosMon() {
   posTimer = setInterval(loadBalance, 60000);
 }
 
+let _lastPositionsHash = "";
 function renderBotPositions(positions) {
+  // Skip full re-render if positions data hasn't meaningfully changed (prevents flicker)
+  const newHash = positions.map(p => `${p.ticker}:${p.current_yes}:${p.current_no}:${p.quantity}`).join("|");
+  const changed = newHash !== _lastPositionsHash;
+  _lastPositionsHash = newHash;
   allPositions = positions;
   try { localStorage.setItem("kb_positions", JSON.stringify(positions)); } catch(e) {}
   const catSel = document.getElementById("posFilterCat");
@@ -1645,10 +1651,10 @@ function renderBotPositions(positions) {
     catSel.innerHTML = '<option value="">All Categories</option>' +
       cats.map(c => `<option value="${esc(c)}"${c === cur ? " selected" : ""}>${esc(c)}</option>`).join("");
   }
-  filterPos();
-  // Flash the sort label so user knows list just re-sorted
-  const sortEl = document.getElementById("posSort");
-  if (sortEl) { sortEl.style.borderColor = "var(--green)"; setTimeout(() => { sortEl.style.borderColor = ""; }, 800); }
+  // Only re-render if data changed (prevents flicker on every 60s poll)
+  if (changed) {
+    filterPos();
+  }
 }
 
 function filterPos() {
