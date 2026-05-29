@@ -738,6 +738,7 @@ let _settleHours = 24;
 let _lastBalanceCall = 0;
 let _waitingForCash = false;
 let _waitForCashAmt = 1.0;
+let _cashPauseTimer = null;
 let _recentlySold = []; // {title, ticker, side, profit, soldAt, kalshi_url}
 const BALANCE_THROTTLE_MS = 60000; // max once every 60s (reduces Kalshi API calls)
 function loadBalanceThrottled(force=false) {
@@ -1094,16 +1095,32 @@ async function scan() {
           if (cashText && cashText !== "—") {
             const cashNow = parseFloat(cashText.replace("$","")) || 0;
             if (cashNow < autoAmt) {
-              if (autoRunMode === "forever") {
-                // "Until stopped" — never stop, just skip this cycle and wait
-                setStatus(`⏳ Waiting for cash (have $${cashNow.toFixed(2)}, need $${autoAmt.toFixed(2)}) — will retry`, "");
-                return;
-              } else {
-                stopAutoMode(`⛔ Paused — waiting for cash (need $${autoAmt.toFixed(2)}, have $${cashNow.toFixed(2)})`);
-                _waitingForCash = true;
-                _waitForCashAmt = autoAmt;
-                return;
-              }
+              // Pause scan timer for 1 min, then retry every 1 min until cash available
+              if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
+              _waitingForCash = true;
+              _waitForCashAmt = autoAmt;
+              setStatus(`⏸ Insufficient cash — paused, checking every 1 min (have $${cashNow.toFixed(2)}, need $${autoAmt.toFixed(2)})`, "");
+              if (_cashPauseTimer) clearInterval(_cashPauseTimer);
+              let pauseSecs = 60;
+              _cashPauseTimer = setInterval(() => {
+                pauseSecs--;
+                const cash = parseFloat((document.getElementById("navCash")?.textContent||"0").replace("$",""))||0;
+                if (cash >= autoAmt) {
+                  clearInterval(_cashPauseTimer); _cashPauseTimer = null;
+                  _waitingForCash = false;
+                  toast(`💰 Cash available ($${cash.toFixed(2)}) — bot resuming!`, "ok");
+                  if (!scanTimer) scanTimer = setInterval(scan, 10000);
+                  scan();
+                } else if (pauseSecs <= 0) {
+                  // Check balance and reset countdown
+                  loadBalanceThrottled(true);
+                  pauseSecs = 60;
+                  setStatus(`⏸ Still waiting for cash ($${cash.toFixed(2)} < $${autoAmt.toFixed(2)}) — checking again in 60s`, "");
+                } else {
+                  setStatus(`⏸ Insufficient cash — resuming in ${pauseSecs}s (have $${cash.toFixed(2)}, need $${autoAmt.toFixed(2)})`, "");
+                }
+              }, 1000);
+              return;
             }
           }
           const maxPerScan   = parseInt(document.getElementById("autoMaxPerScan").value) || 3;
@@ -1265,6 +1282,8 @@ function stopAutoMode(reason) {
   syncFabButtons();
 
   localStorage.removeItem("kb_bot_was_running");
+  _waitingForCash = false;
+  if (_cashPauseTimer) { clearInterval(_cashPauseTimer); _cashPauseTimer = null; }
   const r = reason || "Stopped";
   document.getElementById("autoModeStatus").textContent =
     `${r} · ${autoModeBought} buy(s) made`;
