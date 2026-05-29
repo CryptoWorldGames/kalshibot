@@ -522,6 +522,31 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
       </div>
     </div>
 
+    <!-- Option 4: Sell when price hits target -->
+    <label class="radio-pill" id="pillProfitPrice" onclick="setStrategy('target_price')" style="align-items:center">
+      <input type="radio" name="strat" value="target_price">
+      <span>🎯 Sell when price hits:</span>
+      <span style="font-size:11px;color:#888;margin-left:8px">buy at 25¢ → sell when price reaches X¢</span>
+    </label>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding-left:12px" onclick="setStrategy('target_price')">
+      <div class="btn-group" id="profitPriceGroup" style="margin:0">
+        <button class="pill" onclick="setTargetPrice(30)">30¢</button>
+        <button class="pill" onclick="setTargetPrice(40)">40¢</button>
+        <button class="pill" onclick="setTargetPrice(50)">50¢</button>
+        <button class="pill" onclick="setTargetPrice(60)">60¢</button>
+        <button class="pill" onclick="setTargetPrice(75)">75¢</button>
+        <button class="pill" onclick="setTargetPrice(90)">90¢</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:4px">
+        <input type="number" id="targetPriceCustom" value="35" min="1" max="99" step="1"
+          style="width:72px;background:#111;border:2px solid var(--green);border-radius:7px;color:var(--green);font-size:15px;font-weight:700;padding:7px 10px;outline:none"
+          placeholder="¢ target"
+          onclick="event.stopPropagation();setStrategy('target_price')"
+          onblur="setStrategy('target_price');saveSettings();pushStrategy()">
+        <span style="color:var(--green);font-size:14px;font-weight:700">¢</span>
+      </div>
+    </div>
+
   </div>
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
       <label class="check-row">
@@ -958,8 +983,16 @@ function setStrategy(mode) {
   document.getElementById("pillProfit").classList.toggle("active", mode === "profit");
   const dolPill = document.getElementById("pillProfitDol");
   if (dolPill) dolPill.classList.toggle("active", mode === "profit_dollars");
+  const pricePill = document.getElementById("pillProfitPrice");
+  if (pricePill) pricePill.classList.toggle("active", mode === "target_price");
   pushStrategy();
   saveSettings();
+}
+
+function setTargetPrice(cents) {
+  document.getElementById("targetPriceCustom").value = cents;
+  activatePills("profitPriceGroup", cents + "¢");
+  setStrategy("target_price");
 }
 
 function setProfit(pct) {
@@ -991,13 +1024,15 @@ async function pushStrategy() {
   const dolEl = document.getElementById("profitDolCustom");
   const dolVal = dolEl ? parseFloat(dolEl.value) || null : null;
   // Map mode to backend: profit_dollars → profit with only dollar target
-  const backendMode = (stratMode === "profit_dollars") ? "profit" : stratMode;
+  const tpVal = parseFloat(document.getElementById("targetPriceCustom")?.value) || null;
+  const backendMode = (stratMode === "profit_dollars" || stratMode === "target_price") ? "profit" : stratMode;
   const pct  = (stratMode === "profit")         ? stratPct : null;
   const dol  = (stratMode === "profit_dollars") ? dolVal   : null;
+  const tpCents = (stratMode === "target_price") ? tpVal : null;
   try {
     await fetch("/api/strategy", {
       method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({mode: backendMode, target_pct: pct, target_dollars: dol}),
+      body: JSON.stringify({mode: backendMode, target_pct: pct, target_dollars: dol, target_price_cents: tpCents}),
     });
   } catch(e){}
 }

@@ -464,10 +464,13 @@ def _monitor():
                 target_dollars = pos.get("target_dollars") or sell_strategy.get("target_dollars")
                 profit_dollars = pos["count"] * (bid - pos["buy_price"]) / 100 if pos.get("buy_price") else None
 
-                hit_pct = target_pct is not None and profit_pct >= target_pct and (pos.get("strategy") == "profit" or sell_strategy.get("mode") == "profit")
-                hit_dol = target_dollars is not None and profit_dollars is not None and profit_dollars >= target_dollars
+                hit_pct   = target_pct is not None and profit_pct >= target_pct and (pos.get("strategy") == "profit" or sell_strategy.get("mode") == "profit")
+                hit_dol   = target_dollars is not None and profit_dollars is not None and profit_dollars >= target_dollars
+                # Target price: sell when bid reaches the specified price in cents
+                target_price_c = pos.get("target_price_cents") or sell_strategy.get("target_price_cents")
+                hit_price = target_price_c is not None and bid >= target_price_c
 
-                if hit_pct or hit_dol:
+                if hit_pct or hit_dol or hit_price:
                     # Build limit sell order with current bid price (Kalshi requires price field)
                     bid_key = "yes_bid_dollars" if pos["side"] == "yes" else "no_bid_dollars"
                     bid_d = m.get(bid_key)
@@ -1534,9 +1537,10 @@ def buy():
             "buy_price":     price_c,
             "current_price": price_c,
             "profit_pct":    0.0,
-            "strategy":        strat["mode"],
-            "target_pct":      strat.get("target_pct"),
-            "target_dollars":  strat.get("target_dollars"),
+            "strategy":           strat["mode"],
+            "target_pct":         strat.get("target_pct"),
+            "target_dollars":     strat.get("target_dollars"),
+            "target_price_cents": strat.get("target_price_cents"),
             "status":        "open",
             "bought_at":     datetime.now(timezone.utc).isoformat(),
         }
@@ -1668,9 +1672,11 @@ def set_strategy():
     if mode not in ("resolution", "profit"):
         return jsonify({"error": "mode must be resolution or profit"}), 400
 
+    tp = float(data.get("target_price_cents")) if data.get("target_price_cents") is not None else None
     sell_strategy["mode"]          = mode
-    if pct is not None: sell_strategy["target_pct"]    = pct
-    if dol is not None: sell_strategy["target_dollars"] = dol
+    if pct is not None: sell_strategy["target_pct"]         = pct
+    if dol is not None: sell_strategy["target_dollars"]      = dol
+    if tp  is not None: sell_strategy["target_price_cents"]  = tp
     try: STRATEGY_FILE.write_text(json.dumps(sell_strategy), encoding="utf-8")
     except Exception: pass
     return jsonify({"ok": True, "strategy": sell_strategy})
