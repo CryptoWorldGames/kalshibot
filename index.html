@@ -1793,7 +1793,7 @@ function renderPositionsTable(positions) {
         <td style="font-size:15px;font-weight:600">${abs}</td>
         <td style="font-size:15px;font-weight:600">${p.buy_price != null ? p.buy_price + "¢" : "—"}</td>
         <td style="font-size:15px;font-weight:600">${spent != null ? "$" + spent.toFixed(2) : "—"}</td>
-        <td style="font-size:15px;font-weight:700;color:${cur != null && cur >= 90 ? "var(--green)" : cur != null && cur <= 30 ? "var(--red)" : "#fff"}">${valNow != null ? "$" + valNow.toFixed(2) : "—"}</td>
+        <td style="font-size:15px;font-weight:700;color:${valNow == null ? '#fff' : spent == null ? '#fff' : valNow > spent + 0.001 ? 'var(--green)' : valNow < spent - 0.001 ? 'var(--red)' : '#fff'}">${valNow != null ? "$" + valNow.toFixed(2) : "—"}</td>
         <td style="font-size:16px;font-weight:800;color:${pnlDol == null ? '#555' : pnlDol > 0.001 ? 'var(--green)' : pnlDol < -0.001 ? 'var(--red)' : '#888'}">${pnlDol != null ? (pnlDol >= 0 ? '+' : '') + '$' + pnlDol.toFixed(2) : '—'}</td>
         <td style="font-size:15px;color:${maxWin != null && maxWin > 0 ? 'var(--green)' : '#aaa'};font-weight:600">${maxWin != null ? (maxWin >= 0 ? '+' : '') + '$' + maxWin.toFixed(2) : '—'}</td>
         <td style="white-space:nowrap">${captured != null ? capturedBadge(captured) : '—'}</td>
