@@ -183,9 +183,9 @@ def _get_sold_by(ticker: str) -> str:
     sold_by = pos.get("sold_by", "")
     if sold_by == "bot_auto":
         return "Bot Auto-Sell"
-    if pos.get("bot_bought") or True:  # was bought by bot
-        if sold_by == "human":
-            return "Human"
+    if sold_by == "human":
+        return "Human"
+    if ticker in tracked:
         return "KalshiBot"
     return "Human"
 

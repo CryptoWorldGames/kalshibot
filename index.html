@@ -788,7 +788,9 @@ async function loadBalance() {
           const qty    = Math.abs(p.quantity ?? 0);
           const profit = cur != null ? qty * (cur - p.buy_price) / 100 : null;
           if (profit != null && profit > 0) chaChing();
-          showSellPopup(p.title || p.ticker, profit);
+          // Determine if this was a bot auto-sell or market resolution
+          const wasResolution = cur != null && (cur <= 1 || cur >= 99);
+          showSellPopup(p.title || p.ticker, profit, wasResolution ? "resolved" : "sold");
           // Keep in recently-sold list for 2 min
           _recentlySold.unshift({ title: p.title||p.ticker, ticker: p.ticker, side, profit, soldAt: Date.now(), kalshi_url: p.kalshi_url||"", qty, buy_price: p.buy_price });
           if (_recentlySold.length > 20) _recentlySold = _recentlySold.slice(0,20);
@@ -1509,7 +1511,7 @@ function renderMarkets() {
     return `
     <tr${owned ? ' style="background:#0a1a10"' : ''}>
       <td style="padding:10px 8px;width:36px"><input type="checkbox" ${owned ? "" : "checked"} id="mchk-${i}" style="accent-color:var(--green);width:15px;height:15px;cursor:pointer" onchange="updateMarketCheck(${i},this.checked)"></td>
-      <td class="wrap">${titleHtml}${ownedBadge}${lowOddsBadge}${catTag}</td>
+      <td class="wrap" style="overflow:visible">${titleHtml}${ownedBadge}${catTag}${lowOddsBadge}</td>
       <td><span class="badge ${m.side}">${m.side.toUpperCase()}</span></td>
       <td class="price-big">${m.price}¢</td>
       <td><span class="cd" id="cd-${i}" data-secs="${m.secs_left}"></span></td>
@@ -2169,7 +2171,7 @@ function toast(msg, cls) {
   const el = document.getElementById("toast");
   el.textContent = msg; el.className = `show ${cls}`;
   clearTimeout(_toast);
-  _toast = setTimeout(() => { el.className = ""; }, 15000);
+  _toast = setTimeout(() => { el.className = ""; }, 10000); // 10s for error/order messages
 }
 
 const delay = ms => new Promise(r => setTimeout(r, ms));
@@ -2236,15 +2238,16 @@ function renderRecentlySold() {
   wrap.innerHTML = cards;
 }
 
-function showSellPopup(title, profitDol) {
+function showSellPopup(title, profitDol, reason="sold") {
   const stack = document.getElementById("sellPopupStack");
   if (!stack) return;
   const isProfit = profitDol != null && profitDol > 0;
   const isLoss   = profitDol != null && profitDol < 0;
+  const isResolved = reason === "resolved";
   const color    = isProfit ? "var(--green)" : isLoss ? "var(--red)" : "#888";
   const bg       = isProfit ? "#071a0f" : isLoss ? "#1a0707" : "#111";
   const border   = isProfit ? "#1f6045" : isLoss ? "#6a1a1a" : "#333";
-  const icon     = isProfit ? "💰" : isLoss ? "📉" : "✓";
+  const icon     = isResolved ? (isLoss ? "💀" : "🏆") : (isProfit ? "💰" : isLoss ? "📉" : "✓");
   const pnlText  = profitDol != null
     ? `<span style="font-size:18px;font-weight:800;color:${color}">${profitDol >= 0 ? "+" : ""}$${profitDol.toFixed(2)}</span>`
     : "";
@@ -2261,7 +2264,7 @@ function showSellPopup(title, profitDol) {
     </div>
     <div style="font-size:13px;color:#ddd;margin-bottom:6px;line-height:1.4">${esc(title.length > 50 ? title.slice(0,50)+"…" : title)}</div>
     ${pnlText}
-    <div style="margin-top:4px;font-size:11px;color:#555">Auto-sold by bot · disappears in <span class="popup-timer">30</span>s</div>
+    <div style="margin-top:4px;font-size:11px;color:#555">${isResolved ? "Market resolved" : "Auto-sold by bot"} · disappears in <span class="popup-timer">30</span>s</div>
   `;
   popup.setAttribute("data-popup", "1");
   stack.appendChild(popup);
