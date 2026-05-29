@@ -480,8 +480,13 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
         <button class="pill" onclick="setProfit(20)">20%</button>
         <button class="pill" onclick="setProfit(25)">25%</button>
       </div>
-      <div class="inline" onclick="event.stopPropagation()" title="Custom %">
-        <input type="number" id="profitCustom" value="10" min="1" step="1" style="width:70px" placeholder="custom" onblur="saveSettings();pushStrategy()">
+      <div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:4px">
+        <input type="number" id="profitCustom" value="10" min="1" step="1"
+          style="width:72px;background:#000;border:1px solid var(--green);border-radius:7px;color:#fff;font-size:15px;font-weight:700;padding:7px 10px"
+          placeholder="custom"
+          onblur="stratPct=parseFloat(this.value)||10;activatePills('profitGroup','');setStrategy('profit');saveSettings();pushStrategy()"
+          onclick="setStrategy('profit')">
+        <span style="color:#888;font-size:12px">%</span>
       </div>
     </label>
 
@@ -496,8 +501,13 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
         <button class="pill" onclick="setProfitDol(0.50)">$0.50</button>
         <button class="pill" onclick="setProfitDol(1.00)">$1.00</button>
       </div>
-      <div class="inline" onclick="event.stopPropagation()" title="Custom $">
-        <input type="number" id="profitDolCustom" value="0.05" min="0.01" step="0.01" style="width:80px" placeholder="custom" onblur="saveSettings();pushStrategy()">
+      <div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:4px">
+        <span style="color:#888;font-size:12px">$</span>
+        <input type="number" id="profitDolCustom" value="0.05" min="0.01" step="0.01"
+          style="width:80px;background:#000;border:1px solid var(--green);border-radius:7px;color:#fff;font-size:15px;font-weight:700;padding:7px 10px"
+          placeholder="custom"
+          onblur="setStrategy('profit_dollars');saveSettings();pushStrategy()"
+          onclick="setStrategy('profit_dollars')">
       </div>
     </label>
 
@@ -2591,8 +2601,11 @@ if (localStorage.getItem("kb_bot_was_running")) {
     startAutoMode();
   }, 2000);
 }
-// Save on any input change
-document.querySelectorAll("input[type=number], input[type=text]").forEach(el => el.addEventListener("change", saveSettings));
+// Auto-save on blur (click out) from ANY input or select on the page
+document.querySelectorAll("input, select").forEach(el => {
+  el.addEventListener("change", saveSettings);
+  el.addEventListener("blur", saveSettings);
+});
 const saved = localStorage.getItem("activeTab");
 if (saved && saved !== "scanner") switchTab(saved);
 setTimeout(() => { loadStats(); loadCoach(); }, 200);
