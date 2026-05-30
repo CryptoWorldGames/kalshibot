@@ -126,3 +126,22 @@ document.querySelectorAll(".tab-pane").forEach(p => {
 4. **Market sell orders MUST include `yes_price_dollars` or `no_price_dollars`**
 5. **The `_get_market()` cache function must call `kalshi_get()`, NOT itself**
 6. **"Until stopped" auto mode should NEVER fully stop due to cash — pause instead**
+
+
+---
+
+## BUG-009: LOW ODDS badge text cut off in scan results (FIXED 3x)
+
+**Symptom:** Badge shows "⚠ LOW ODD" truncated instead of full "⚠ LOW ODDS 32¢"
+
+**Root Cause:** Badge was inside `<td class="wrap">` which has `-webkit-line-clamp:3` — counts badge text as lines and clips it.
+
+**Fix:** Title text goes inside a webkit-box div for clamping. Badge goes AFTER that div, outside the clamp box:
+```html
+<td>
+  <div style="-webkit-line-clamp:2; ...">title text here</div>
+  ${lowOddsBadge}   <!-- OUTSIDE the clamp div -->
+</td>
+```
+
+**Rule:** Never put badges/chips inside a `-webkit-line-clamp` container. Always place them after it.
