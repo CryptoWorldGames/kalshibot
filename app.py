@@ -156,6 +156,20 @@ print(f"[strategy] loaded: mode={sell_strategy.get('mode')} target_pct={sell_str
 # In-memory cache of event_ticker → clean title
 _event_cache: dict = {}
 
+# Settlements cache — shared between stats, coach, portfolio (avoids 3x duplicate queries)
+_settlements_cache: dict = {}  # hours → {"data": [...], "ts": float}
+_SETTLEMENTS_CACHE_TTL = 120.0  # 2 minutes
+
+def _cached_settlements(hours: int = 24) -> list:
+    """Return settlements from cache if fresh, otherwise fetch and cache."""
+    now = time.time()
+    cached = _settlements_cache.get(hours)
+    if cached and (now - cached["ts"]) < _SETTLEMENTS_CACHE_TTL:
+        return cached["data"]
+    data = _recent_settlements(hours=hours)
+    _settlements_cache[hours] = {"data": data, "ts": now}
+    return data
+
 # Market data cache — avoid hitting /markets/{ticker} more than once per 60s
 _market_cache: dict = {}   # ticker → {"data": {...}, "ts": float}
 _MARKET_CACHE_TTL = 60.0   # seconds
@@ -801,7 +815,7 @@ def portfolio():
     total_value = total_account if total_account is not None else round((balance or 0) + portfolio_value, 2)
 
     settle_hours = int(request.args.get("settlement_hours", 24))
-    recent_settlements = _recent_settlements(hours=settle_hours)
+    recent_settlements = _cached_settlements(hours=settle_hours)
 
     return jsonify({
         "balance":            balance,           # spendable cash
