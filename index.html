@@ -3012,13 +3012,8 @@ setProfit(parseFloat(document.getElementById("profitCustom")?.value) || 10);
 syncFabButtons();
 // Always push current sell strategy to Flask on page load (survives Flask restarts)
 setTimeout(() => { pushStrategy(); pushSellSettings(); }, 1000);
-// Auto-restart bot if it was running before the refresh
-if (localStorage.getItem("kb_bot_was_running")) {
-  setTimeout(() => {
-    toast("🤖 Bot restarting after refresh…", "ok");
-    startAutoMode();
-  }, 2000);
-}
+// Removed auto-restart — user must manually click "Start Bot" to ensure scan loop actually runs
+localStorage.removeItem("kb_bot_was_running");
 // Auto-save on blur (click out) from ANY input or select on the page
 document.querySelectorAll("input, select").forEach(el => {
   el.addEventListener("change", saveSettings);
