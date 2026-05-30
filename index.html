@@ -1889,6 +1889,7 @@ function renderPositionsTable(positions) {
         <td style="white-space:nowrap">${captured != null ? capturedBadge(captured) : '—'}</td>
         <td style="font-size:13px;white-space:nowrap">${p.close_time ? fmtTimeLeft(p.close_time) : '—'}</td>
         <td>${sellBtnHtml}</td>
+        <td style="padding:10px 8px;width:36px"><input type="checkbox" ${chk} style="accent-color:var(--green);width:15px;height:15px;cursor:pointer" onchange="updatePosCheck('${safeT}',this.checked)"></td>
       </tr>`;
   }).join("");
   wrap.innerHTML = `
@@ -1905,6 +1906,7 @@ function renderPositionsTable(positions) {
         <th onclick="setSortAndFilter('captured_desc')" style="cursor:pointer" title="Click to sort — high % = captured most of upside">Captured ↕</th>
         <th onclick="setSortAndFilter('time_asc')" style="cursor:pointer" title="Click to sort by time remaining">Time Left ↕</th>
         <th></th>
+        <th style="width:36px"><input type="checkbox" style="accent-color:var(--green)" onchange="toggleAllPos(this.checked)" title="Select/deselect all"></th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
@@ -1913,6 +1915,8 @@ function renderPositionsTable(positions) {
 
 function updatePosCheck(ticker, checked) {
   checked ? selectedPosTickers.add(ticker) : selectedPosTickers.delete(ticker);
+  // Sync both left AND right checkboxes for this row
+  document.querySelectorAll(`input[onchange*="${ticker.replace(/'/g,"\\'")}"]`).forEach(cb => cb.checked = checked);
   updateSellSelBtn();
 }
 
@@ -1925,6 +1929,8 @@ function toggleAllPos(checked) {
     if (cat && p.category !== cat)         return false;
     return true;
   }).forEach(p => checked ? selectedPosTickers.add(p.ticker) : selectedPosTickers.delete(p.ticker));
+  // Sync all checkboxes in the table
+  document.querySelectorAll("#posWrap input[type=checkbox]").forEach(cb => cb.checked = checked);
   filterPos();
 }
 
