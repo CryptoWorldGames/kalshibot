@@ -900,11 +900,15 @@ function renderSettlements(rows) {
 
   // Sort settlements
   const sorted = [...rows].sort((a, b) => {
-    if (_settleSortBy === "pnl_desc")   return (b.pnl||0) - (a.pnl||0);
-    if (_settleSortBy === "pnl_asc")    return (a.pnl||0) - (b.pnl||0);
-    if (_settleSortBy === "won_desc")   return (b.won?1:0) - (a.won?1:0);
-    if (_settleSortBy === "won_asc")    return (a.won?1:0) - (b.won?1:0);
-    if (_settleSortBy === "recent_asc") return (a.settled_time||"").localeCompare(b.settled_time||"");
+    if (_settleSortBy === "pnl_desc")      return (b.pnl||0) - (a.pnl||0);
+    if (_settleSortBy === "pnl_asc")       return (a.pnl||0) - (b.pnl||0);
+    if (_settleSortBy === "won_desc")      return (b.won?1:0) - (a.won?1:0);  // Won first
+    if (_settleSortBy === "won_asc")       return (a.won?1:0) - (b.won?1:0);  // Lost first
+    if (_settleSortBy === "recent_asc")    return (a.settled_time||"").localeCompare(b.settled_time||""); // Oldest first
+    if (_settleSortBy === "howsold_desc")  return (b.sold_by||"").localeCompare(a.sold_by||"");
+    if (_settleSortBy === "howsold_asc")   return (a.sold_by||"").localeCompare(b.sold_by||"");
+    if (_settleSortBy === "title_desc")    return (b.title||"").localeCompare(a.title||"");
+    if (_settleSortBy === "title_asc")     return (a.title||"").localeCompare(b.title||"");
     return (b.settled_time||"").localeCompare(a.settled_time||""); // default: newest first
   });
   rows = sorted;
@@ -935,16 +939,22 @@ function renderSettlements(rows) {
         <td style="font-size:11px;color:#666;white-space:nowrap">${toCDT(r.settled_time)}</td>
       </tr>`;
   }).join("");
+  const sSort = _settleSortBy;
+  function sHdr(label, asc, desc) {
+    const active = sSort===asc||sSort===desc;
+    const next = sSort===desc ? asc : desc;
+    const arrow = sSort===desc ? ' ↑' : sSort===asc ? ' ↓' : ' ↕';
+    return `<th onclick="_settleSortBy='${next}';renderSettlements(window._lastSettlements||[])" style="cursor:pointer;${active?'color:var(--green)':''};white-space:nowrap">${label}${arrow}</th>`;
+  }
   wrap.innerHTML = `
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-      <span style="font-size:12px;color:#888">Sort:</span>
-      <button onclick="_settleSortBy=_settleSortBy==='recent_asc'?'recent':'recent_asc';renderSettlements(window._lastSettlements||[])" class="sm ghost" style="font-size:11px;padding:3px 10px">Date ↕</button>
-      <button onclick="_settleSortBy=_settleSortBy==='pnl_desc'?'pnl_asc':'pnl_desc';renderSettlements(window._lastSettlements||[])" class="sm ghost" style="font-size:11px;padding:3px 10px">P&amp;L ↕</button>
-      <button onclick="_settleSortBy=_settleSortBy==='won_desc'?'won_asc':'won_desc';renderSettlements(window._lastSettlements||[])" class="sm ghost" style="font-size:11px;padding:3px 10px">Result ↕</button>
-    </div>
     <div class="tbl-wrap"><table>
       <thead><tr>
-        <th>Market</th><th>Result</th><th>How Sold</th><th>Side</th><th>Qty</th><th>Cost</th><th>Revenue</th><th>P&L</th><th>Settled (CDT)</th>
+        ${sHdr('Market','title_asc','title_desc')}
+        ${sHdr('Result','won_asc','won_desc')}
+        ${sHdr('How Sold','howsold_asc','howsold_desc')}
+        <th>Side</th><th>Qty</th><th>Cost</th><th>Revenue</th>
+        ${sHdr('P&L','pnl_asc','pnl_desc')}
+        ${sHdr('Settled (CDT)','recent_asc','recent')}
       </tr></thead>
       <tbody>${body}</tbody>
     </table></div>`;
