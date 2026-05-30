@@ -522,29 +522,54 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
       </div>
     </div>
 
-    <!-- Option 4: Sell when price hits target -->
+    <!-- Option 4: Buy at X cents, sell when price hits Y cents -->
     <label class="radio-pill" id="pillProfitPrice" onclick="setStrategy('target_price')" style="align-items:center">
       <input type="radio" name="strat" value="target_price">
-      <span>🎯 Sell when price hits:</span>
-      <span style="font-size:11px;color:#888;margin-left:8px">buy at 25¢ → sell when price reaches X¢</span>
+      <span>🎯 Buy at X¢ → Sell when hits Y¢</span>
     </label>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding-left:12px" onclick="setStrategy('target_price')">
-      <div class="btn-group" id="profitPriceGroup" style="margin:0">
-        <button class="pill" onclick="setTargetPrice(30)">30¢</button>
-        <button class="pill" onclick="setTargetPrice(40)">40¢</button>
-        <button class="pill" onclick="setTargetPrice(50)">50¢</button>
-        <button class="pill" onclick="setTargetPrice(60)">60¢</button>
-        <button class="pill" onclick="setTargetPrice(75)">75¢</button>
-        <button class="pill" onclick="setTargetPrice(90)">90¢</button>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;padding-left:12px;margin-top:6px">
+
+      <!-- BUY IN price -->
+      <div>
+        <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Buy at (max price to buy)</div>
+        <div class="btn-group" id="buyInGroup" style="margin-bottom:6px">
+          <button class="pill" onclick="setBuyIn(15)">15¢</button>
+          <button class="pill" onclick="setBuyIn(25)">25¢</button>
+          <button class="pill" onclick="setBuyIn(35)">35¢</button>
+          <button class="pill" onclick="setBuyIn(50)">50¢</button>
+          <button class="pill" onclick="setBuyIn(75)">75¢</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px" onclick="event.stopPropagation()">
+          <input type="number" id="buyInPriceCustom" value="25" min="1" max="99" step="1"
+            style="width:72px;background:#111;border:2px solid var(--yellow);border-radius:7px;color:var(--yellow);font-size:15px;font-weight:700;padding:7px 10px;outline:none"
+            placeholder="¢ buy"
+            onclick="setStrategy('target_price')"
+            onblur="setStrategy('target_price');saveSettings();pushStrategy()">
+          <span style="color:var(--yellow);font-size:14px;font-weight:700">¢</span>
+        </div>
       </div>
-      <div style="display:flex;align-items:center;gap:4px">
-        <input type="number" id="targetPriceCustom" value="35" min="1" max="99" step="1"
-          style="width:72px;background:#111;border:2px solid var(--green);border-radius:7px;color:var(--green);font-size:15px;font-weight:700;padding:7px 10px;outline:none"
-          placeholder="¢ target"
-          onclick="event.stopPropagation();setStrategy('target_price')"
-          onblur="setStrategy('target_price');saveSettings();pushStrategy()">
-        <span style="color:var(--green);font-size:14px;font-weight:700">¢</span>
+
+      <!-- SELL OUT price -->
+      <div>
+        <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Sell when price hits</div>
+        <div class="btn-group" id="profitPriceGroup" style="margin-bottom:6px">
+          <button class="pill" onclick="setTargetPrice(30)">30¢</button>
+          <button class="pill" onclick="setTargetPrice(40)">40¢</button>
+          <button class="pill" onclick="setTargetPrice(50)">50¢</button>
+          <button class="pill" onclick="setTargetPrice(60)">60¢</button>
+          <button class="pill" onclick="setTargetPrice(75)">75¢</button>
+          <button class="pill" onclick="setTargetPrice(90)">90¢</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px" onclick="event.stopPropagation()">
+          <input type="number" id="targetPriceCustom" value="35" min="1" max="99" step="1"
+            style="width:72px;background:#111;border:2px solid var(--green);border-radius:7px;color:var(--green);font-size:15px;font-weight:700;padding:7px 10px;outline:none"
+            placeholder="¢ sell"
+            onclick="setStrategy('target_price')"
+            onblur="setStrategy('target_price');saveSettings();pushStrategy()">
+          <span style="color:var(--green);font-size:14px;font-weight:700">¢</span>
+        </div>
       </div>
+
     </div>
 
   </div>
@@ -995,6 +1020,12 @@ function setTargetPrice(cents) {
   setStrategy("target_price");
 }
 
+function setBuyIn(cents) {
+  document.getElementById("buyInPriceCustom").value = cents;
+  activatePills("buyInGroup", cents + "¢");
+  setStrategy("target_price");
+}
+
 function setProfit(pct) {
   stratPct = pct;
   document.getElementById("profitCustom").value = pct;
@@ -1024,15 +1055,17 @@ async function pushStrategy() {
   const dolEl = document.getElementById("profitDolCustom");
   const dolVal = dolEl ? parseFloat(dolEl.value) || null : null;
   // Map mode to backend: profit_dollars → profit with only dollar target
-  const tpVal = parseFloat(document.getElementById("targetPriceCustom")?.value) || null;
+  const tpVal    = parseFloat(document.getElementById("targetPriceCustom")?.value) || null;
+  const buyInVal = parseFloat(document.getElementById("buyInPriceCustom")?.value) || null;
   const backendMode = (stratMode === "profit_dollars" || stratMode === "target_price") ? "profit" : stratMode;
-  const pct  = (stratMode === "profit")         ? stratPct : null;
-  const dol  = (stratMode === "profit_dollars") ? dolVal   : null;
-  const tpCents = (stratMode === "target_price") ? tpVal : null;
+  const pct      = (stratMode === "profit")         ? stratPct : null;
+  const dol      = (stratMode === "profit_dollars") ? dolVal   : null;
+  const tpCents  = (stratMode === "target_price")   ? tpVal    : null;
+  const buyInCents = (stratMode === "target_price") ? buyInVal : null;
   try {
     await fetch("/api/strategy", {
       method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({mode: backendMode, target_pct: pct, target_dollars: dol, target_price_cents: tpCents}),
+      body: JSON.stringify({mode: backendMode, target_pct: pct, target_dollars: dol, target_price_cents: tpCents, buy_in_price_cents: buyInCents}),
     });
   } catch(e){}
 }

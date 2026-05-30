@@ -1334,6 +1334,11 @@ def scan():
     cutoff = now + timedelta(minutes=minutes)
     results = []
 
+    # If "buy at X¢, sell at Y¢" strategy active, override max_thr with buy-in price
+    bip = sell_strategy.get("buy_in_price_cents")
+    if bip is not None and sell_strategy.get("mode") == "profit":
+        max_thr = min(max_thr, float(bip))
+
     def _scan_batch(markets_iter):
         for m in markets_iter:
             hit = _apply_market_filters(m, now, cutoff, min_thr, max_thr,
@@ -1679,11 +1684,13 @@ def set_strategy():
     if mode not in ("resolution", "profit"):
         return jsonify({"error": "mode must be resolution or profit"}), 400
 
-    tp = float(data.get("target_price_cents")) if data.get("target_price_cents") is not None else None
-    sell_strategy["mode"]          = mode
+    tp  = float(data.get("target_price_cents"))   if data.get("target_price_cents")   is not None else None
+    bip = float(data.get("buy_in_price_cents"))   if data.get("buy_in_price_cents")   is not None else None
+    sell_strategy["mode"]                = mode
     if pct is not None: sell_strategy["target_pct"]         = pct
     if dol is not None: sell_strategy["target_dollars"]      = dol
     if tp  is not None: sell_strategy["target_price_cents"]  = tp
+    if bip is not None: sell_strategy["buy_in_price_cents"]  = bip
     try: STRATEGY_FILE.write_text(json.dumps(sell_strategy), encoding="utf-8")
     except Exception: pass
     return jsonify({"ok": True, "strategy": sell_strategy})
