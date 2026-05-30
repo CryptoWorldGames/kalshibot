@@ -159,6 +159,8 @@ _event_cache: dict = {}
 # Market data cache — avoid hitting /markets/{ticker} more than once per 60s
 _market_cache: dict = {}   # ticker → {"data": {...}, "ts": float}
 _MARKET_CACHE_TTL = 60.0   # seconds
+_failed_market_cache: set = set()  # tickers that 404/failed — don't retry for 5 min
+_failed_market_ts: dict = {}  # ticker → timestamp of failure
 
 def _get_market(ticker: str) -> dict:
     """Fetch market data with 60s cache to reduce Kalshi API calls."""
@@ -166,13 +168,19 @@ def _get_market(ticker: str) -> dict:
     cached = _market_cache.get(ticker)
     if cached and (now - cached["ts"]) < _MARKET_CACHE_TTL:
         return cached["data"]
+    # Skip known-failed tickers for 5 minutes
+    fail_ts = _failed_market_ts.get(ticker)
+    if fail_ts and (now - fail_ts) < 300:
+        return {}
     try:
         data = kalshi_get(f"/markets/{ticker}").get("market", {})
     except Exception:
         data = {}
-    # Only cache successful responses (non-empty)
     if data:
         _market_cache[ticker] = {"data": data, "ts": now}
+    else:
+        # Cache the failure so we don't spam the API
+        _failed_market_ts[ticker] = now
     return data
 
 def _get_sold_by(ticker: str) -> str:
@@ -777,7 +785,7 @@ def portfolio():
             "target_pct":     info.get("target_pct"),
             "bought_at":      info.get("bought_at"),
         })
-        print(f"[portfolio] tracked fallback used for {ticker}")
+        pass  # suppress repeated fallback log spam
 
     # Use Kalshi's own portfolio_value (open positions value) from the balance endpoint
     # as fallback when position-by-position calculation returns 0

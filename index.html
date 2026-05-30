@@ -2257,7 +2257,7 @@ function updatePreview(idx, price_c) {
 
 // ── Tabs ──────────────────────────────────────────────────────────────────
 
-const SOLD_TTL = 120000; // show for 2 minutes
+const SOLD_TTL = 10000; // show for 10 seconds
 
 function renderRecentlySold() {
   const wrap = document.getElementById("recentlySoldWrap");
@@ -2324,8 +2324,11 @@ function showSellPopup(title, profitDol, reason="sold") {
   popup.setAttribute("data-popup", "1");
   stack.appendChild(popup);
 
-  // Countdown and auto-remove after 30s
-  let secs = 30;
+  // Remove oldest if more than 3 stacked
+  while (stack.children.length >= 3) stack.removeChild(stack.firstChild);
+
+  // Countdown and auto-remove after 10s
+  let secs = 10;
   const timerEl = popup.querySelector(".popup-timer");
   const iv = setInterval(() => {
     secs--;
@@ -2508,7 +2511,10 @@ async function loadStats() {
   if (!el) return;
   el.textContent = "Loading…";
   try {
-    const r = await fetch("/api/stats");
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 15000); // 15s timeout
+    const r = await fetch("/api/stats", {signal: ctrl.signal});
+    clearTimeout(t);
     const d = await r.json();
     if (!d.rows || !d.rows.length) {
       el.innerHTML = '<span style="color:var(--muted)">No completed trades yet.</span>';
@@ -2541,7 +2547,7 @@ async function loadStats() {
       logEl.textContent = `${d.scan_log_count} scan${d.scan_log_count !== 1 ? "s" : ""} recorded`;
     }
   } catch(e) {
-    el.textContent = "Error loading stats.";
+    el.textContent = e.name === "AbortError" ? "Stats timed out — Kalshi API slow, try again in a moment." : "Error loading stats.";
   }
 }
 
