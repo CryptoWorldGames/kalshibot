@@ -281,6 +281,7 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
           <button class="pill" onclick="setRangeUp(50,96)">50–96%</button>
           <button class="pill active" onclick="setRangeUp(80,96)">80–96%</button>
           <button class="pill" onclick="setRangeUp(90,96)">90–96%</button>
+          <button class="pill" id="customUpPill" onclick="document.getElementById('minProb').focus();setStrategy && activatePills('probGroupUp','Custom')">Custom</button>
         </div>
         <div class="inline" style="gap:6px;flex-wrap:wrap">
           <span style="font-size:13px;color:#aaa">From</span>
@@ -308,6 +309,7 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
           <button class="pill" onclick="setRangeDown(50,96)">50–96%</button>
           <button class="pill active" onclick="setRangeDown(80,96)">80–96%</button>
           <button class="pill" onclick="setRangeDown(90,96)">90–96%</button>
+          <button class="pill" onclick="document.getElementById('minProbDown').focus();activatePills('probGroupDown','Custom')">Custom</button>
         </div>
         <div class="inline" style="gap:6px;flex-wrap:wrap">
           <span style="font-size:13px;color:#aaa">From</span>
@@ -1094,14 +1096,16 @@ function matchPresetLabel(min, max) {
 function onProbInput() {
   selMin = parseFloat(document.getElementById("minProb").value) || 80;
   selMax = parseFloat(document.getElementById("maxProb").value) || 96;
-  activatePills("probGroupUp", matchPresetLabel(selMin, selMax));
+  const label = matchPresetLabel(selMin, selMax);
+  activatePills("probGroupUp", label || "Custom");
   saveSettings();
 }
 
 function onProbDownInput() {
   const min = parseFloat(document.getElementById("minProbDown").value) || 80;
   const max = parseFloat(document.getElementById("maxProbDown").value) || 96;
-  activatePills("probGroupDown", matchPresetLabel(min, max));
+  const label = matchPresetLabel(min, max);
+  activatePills("probGroupDown", label || "Custom");
   saveSettings();
 }
 
