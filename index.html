@@ -228,6 +228,11 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
   <button class="tab-btn" id="tabCoach" onclick="switchTab('coach')">Coach</button>
 </div>
 
+<!-- ── Sale Ticker ─────────────────────────────────────────────── -->
+<div id="saleTicker" style="display:none;padding:6px 0;border-bottom:1px solid var(--border);margin-bottom:12px;min-height:28px">
+  <div id="saleTickerItems" style="display:flex;flex-wrap:wrap;gap:6px 0;width:100%"></div>
+</div>
+
 <div id="tab-scanner" class="tab-pane active">
 
 <!-- Inline Coach (always visible on main page) -->
@@ -850,6 +855,29 @@ async function loadPnl() {
 let _settleHours = 24;
 let _lastBalanceCall = 0;
 let _waitingForCash = false;
+let _saleHistory = []; // persistent last-20 sales for ticker
+
+function addToSaleTicker(title, profitDol, side) {
+  const short = title.length > 22 ? title.slice(0,22)+'…' : title;
+  _saleHistory.unshift({short, profit: profitDol, side});
+  if (_saleHistory.length > 20) _saleHistory = _saleHistory.slice(0,20);
+  renderSaleTicker();
+}
+
+function renderSaleTicker() {
+  const wrap = document.getElementById("saleTickerItems");
+  const ticker = document.getElementById("saleTicker");
+  if (!wrap || !_saleHistory.length) { if (ticker) ticker.style.display="none"; return; }
+  ticker.style.display = "block";
+  const perItem = Math.floor(100 / Math.min(_saleHistory.length, 10));
+  wrap.innerHTML = _saleHistory.map(s => {
+    const color = s.profit > 0.001 ? 'var(--green)' : s.profit < -0.001 ? 'var(--red)' : '#888';
+    const pnl   = s.profit != null ? ` ${s.profit >= 0 ? '+' : ''}$${s.profit.toFixed(2)}` : '';
+    return `<div style="flex:0 0 ${perItem}%;min-width:160px;padding:2px 8px;font-size:12px;color:${color};border-right:1px solid #1a1a1a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${s.short}${pnl}">
+      <span style="font-weight:700">${pnl}</span> <span style="color:#888;font-size:11px">${s.short}</span>
+    </div>`;
+  }).join("");
+}
 let _waitForCashAmt = 1.0;
 let _cashPauseTimer = null;
 let _recentlySold = []; // {title, ticker, side, profit, soldAt, kalshi_url}
@@ -904,6 +932,7 @@ async function loadBalance() {
           // Determine if this was a bot auto-sell or market resolution
           const wasResolution = cur != null && (cur <= 1 || cur >= 99);
           showSellPopup(p.title || p.ticker, profit, wasResolution ? "resolved" : "sold");
+          addToSaleTicker(p.title || p.ticker, profit, side);
           // Keep in recently-sold list for 2 min
           _recentlySold.unshift({ title: p.title||p.ticker, ticker: p.ticker, side, profit, soldAt: Date.now(), kalshi_url: p.kalshi_url||"", qty, buy_price: p.buy_price });
           if (_recentlySold.length > 20) _recentlySold = _recentlySold.slice(0,20);
@@ -1641,7 +1670,8 @@ async function buyOne(idx, override=false) {
       autoModeBoughtSet.add(m.ticker);
       if (m.event_ticker) autoModeBoughtSet.add("event:" + m.event_ticker);
     }
-    loadBalanceThrottled();
+    // Force refresh after 3s so new position appears immediately
+    setTimeout(() => loadBalanceThrottled(true), 3000);
     startPosMon();
   } catch(e) {
     msgEl.textContent = e.message;
@@ -1699,8 +1729,11 @@ async function sellPos(ticker, side, count, safeId) {
     if (!r.ok) throw new Error(d.error || "Sell failed");
     const soldPos = allPositions.find(p => p.ticker === ticker);
     const marketTitle = soldPos?.title || ticker;
+    const soldProfit = (soldPos?.buy_price != null && soldPos?.current_yes != null)
+      ? Math.abs(soldPos.quantity||0) * ((side==="yes"?soldPos.current_yes:soldPos.current_no) - soldPos.buy_price) / 100 : null;
     toast(`✓ Sold ${count} ${side.toUpperCase()} · ${marketTitle}`, "ok");
     if (preProfit) chaChing();
+    addToSaleTicker(marketTitle, soldProfit, side);
     selectedPosTickers.delete(ticker);
     // Immediately remove from allPositions so it doesn't reappear
     allPositions = allPositions.filter(p => p.ticker !== ticker);
