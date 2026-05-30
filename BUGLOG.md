@@ -145,3 +145,18 @@ document.querySelectorAll(".tab-pane").forEach(p => {
 ```
 
 **Rule:** Never put badges/chips inside a `-webkit-line-clamp` container. Always place them after it.
+
+---
+
+## BUG-010: Scan endpoint crashes on huge minutes parameter (FIXED)
+
+**Symptom:** `/api/scan?minutes=99999999999` → 500 OverflowError: date value out of range
+
+**Root Cause:** Frontend can pass arbitrarily large `minutes` value. Python's `timedelta(minutes=X)` has a maximum representable value (~1 year). Passing 99999999999 minutes overflows.
+
+**Fix:** 
+- Validate input: cap `minutes` to 525600 (1 year) before using it
+- Add try/except around `timedelta()` creation as safety net
+
+**Rule:** Always validate numeric parameters for magnitude limits, especially those feeding into datetime calculations.
+

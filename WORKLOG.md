@@ -16,18 +16,13 @@
 
 ## Active
 
-**2026-05-30 — Bot not buying despite running auto mode**
-- Symptom: Scan runs (10s intervals), finds 0 results, no buys
-- Logs show: `[scan] flat pagination fallback` repeatedly
-- Settings: min_thr=50, max_thr=98, minutes=1440 (24h), good_liq=true, crypto enabled
-- Root cause: 1440min window too broad. Crypto 15M markets only exist in 15-min slots (e.g. :00, :15, :30, :45 marks). At arbitrary time like 1:52pm, no 15M markets are "live" closing in next 24h — they're future windows or already expired.
-- Fix: Change "Ends within" from 1440min to 15min or 1h to scope to active market windows
-- Also: Session dedup (`autoModeBoughtSet`) may be blocking repeats from earlier buys — Stop/restart bot clears it
-- Next: Test with 15min window during a crypto 15M slot, confirm buys resume
+_(nothing in progress)_
 
 ---
 
 ## Recently Resolved
+
+- 2026-05-30 — Fixed scan endpoint timedelta overflow. Frontend can pass huge `minutes` values (e.g. 99999999999) which overflow Python's timedelta. Added input validation (cap at 525600 min = 1 year) + try/except safety net. Also documented in BUGLOG-010.
 
 - 2026-05-28 — Set up cross-machine sync infrastructure: parent CLAUDE.md pointer,
   SessionStart/Stop hooks, PostToolUse action logging (activity.jsonl), and this WORKLOG.
