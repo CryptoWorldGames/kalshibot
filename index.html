@@ -624,6 +624,7 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
     </div>
 
   </div>
+    <div id="stratConflictWarn" style="display:none;background:#3a1a00;border:1px solid var(--yellow);color:var(--yellow);border-radius:6px;padding:8px 12px;font-size:12px;margin:8px 0"></div>
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
       <label class="check-row">
         <input type="checkbox" id="skipAutoSellNearResolution" checked onchange="pushSellSettings()"> Don't auto-sell if resolves in
@@ -1109,14 +1110,38 @@ function activatePills(groupId, label) {
 
 function setStrategy(mode) {
   stratMode = mode;
-  document.getElementById("pillResolution").classList.toggle("active", mode === "resolution");
-  document.getElementById("pillProfit").classList.toggle("active", mode === "profit");
-  const dolPill = document.getElementById("pillProfitDol");
-  if (dolPill) dolPill.classList.toggle("active", mode === "profit_dollars");
-  const pricePill = document.getElementById("pillProfitPrice");
-  if (pricePill) pricePill.classList.toggle("active", mode === "target_price");
+  // Strictly one active at a time — deactivate all others first
+  ["pillResolution","pillProfit","pillProfitDol","pillProfitPrice"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove("active");
+  });
+  const active = {
+    resolution: "pillResolution",
+    profit: "pillProfit",
+    profit_dollars: "pillProfitDol",
+    target_price: "pillProfitPrice"
+  }[mode];
+  if (active) document.getElementById(active)?.classList.add("active");
+
+  // Conflict warning: if target_price selected, check buy range vs buy-in price
+  checkStrategyConflicts();
   pushStrategy();
   saveSettings();
+}
+
+function checkStrategyConflicts() {
+  const warn = document.getElementById("stratConflictWarn");
+  if (!warn) return;
+  let msg = "";
+  if (stratMode === "target_price") {
+    const buyIn = parseFloat(document.getElementById("buyInPriceCustom")?.value) || 0;
+    const upMax = parseFloat(document.getElementById("maxProb")?.value) || 96;
+    if (buyIn > 0 && upMax > buyIn) {
+      msg = `⚠ Conflict: Filter buys up to ${upMax}¢ but "Buy at" max is ${buyIn}¢ — raise Buy Up "to" to match, or lower it.`;
+    }
+  }
+  warn.textContent = msg;
+  warn.style.display = msg ? "block" : "none";
 }
 
 function setTargetPrice(cents) {
