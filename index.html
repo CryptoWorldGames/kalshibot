@@ -2776,30 +2776,28 @@ function copyDebugScan() {
 
 async function copyDiagnostics() {
   try {
+    const min = parseInt(document.getElementById("scanMin")?.value || 50);
+    const max = parseInt(document.getElementById("scanMax")?.value || 96);
+    const mins = parseInt(document.getElementById("scanTime")?.value || 1440);
+
     const [port, scan] = await Promise.all([
       fetch('/api/portfolio').then(r=>r.json()),
-      fetch(`/api/scan?min_thr=${selMin}&max_thr=${selMax}&minutes=${selTime}&show_crypto=true&show_combo=true&show_sports=true&show_politics=true&show_economics=true&good_liq=false`).then(r=>r.json())
+      fetch(`/api/scan?min_thr=${min}&max_thr=${max}&minutes=${mins}&show_crypto=true&show_combo=true&show_sports=true&show_politics=true&show_economics=true&good_liq=false`).then(r=>r.json())
     ]);
-    const settings = JSON.parse(localStorage.getItem("kb_settings_v2") || "{}");
     const lines = [
-      `=== KalshiBot Diagnostics ${new Date().toLocaleString()} ===`,
-      `Cash: $${port.balance} | Portfolio: $${port.portfolio_value} | Total: $${port.portfolio_value}`,
-      `Open positions: ${(port.positions||[]).length}`,
-      `Bot running: ${autoModeOn} | Mode: ${autoRunMode} | Bought: ${autoModeBought}`,
-      `Scan settings: min=${selMin}% max=${selMax}% time=${selTime}min`,
-      `Auto mode settings: maxPerScan=${document.getElementById('autoMaxPerScan')?.value} maxConcurrent=${document.getElementById('autoMaxConcurrent')?.value}`,
-      `Sell strategy: ${stratMode} | target%=${stratPct}`,
-      ``,
-      `=== Raw scan (no filters, ${scan.length || 0} found) ===`,
-      Array.isArray(scan) ? scan.slice(0,10).map(m=>`  ${m.ticker} ${m.side} ${m.price}¢ closes ${Math.floor(m.secs_left/60)}m`).join('\n') : JSON.stringify(scan).slice(0,500),
-      ``,
-      `=== Session dedup set (${autoModeBoughtSet.size} tickers blocked) ===`,
-      [...autoModeBoughtSet].slice(0,20).join(', '),
-    ].join('\n');
+      `=== KalshiBot Diagnostics ===`,
+      `Cash: $${port.balance} | Portfolio: $${port.portfolio_value} | Total: $${(parseFloat(port.balance||0) + parseFloat(port.portfolio_value||0)).toFixed(2)}`,
+      `Positions: ${(port.positions||[]).length}`,
+      `Scan: min=${min}% max=${max}% window=${mins}min`,
+      `Bot: ${autoModeOn ? 'RUNNING' : 'stopped'} | Bought: ${autoModeBought}`,
+      `Dedup: ${autoModeBoughtSet.size} blocked`,
+      `Results: ${Array.isArray(scan) ? scan.length : 0} found`,
+      Array.isArray(scan) && scan.length ? '\nTop 3:' + scan.slice(0,3).map(m=>`\n  ${m.ticker} ${m.side} ${m.price}¢`).join('') : '',
+    ].filter(Boolean).join('\n');
     await navigator.clipboard.writeText(lines);
-    toast("✓ Diagnostics copied — paste to Claude!", "ok");
+    toast("✓ Diagnostics copied!", "ok");
   } catch(e) {
-    toast("Copy failed: " + e.message, "err");
+    toast("Error: " + e.message, "err");
   }
 }
 
