@@ -1328,11 +1328,15 @@ def _apply_market_filters(m, now, cutoff, min_thr, max_thr,
         if not is_level and "15M" not in tkr.upper() and "30M" not in tkr.upper() and "1H" not in tkr.upper() and "weekly" not in crypto_times:
             return None
 
-    # Hide multi-outcome: skip markets with price-level suffixes (B73500, T73999.99)
+    # Hide multi-outcome: skip markets that are part of a price-level series
+    # Patterns: KXBTC-date-B73500 (point price), KXBTCD-date-T73999.99 (range)
     if hide_multi:
         import re as _re
-        if _re.search(r'-[BT]\d', tkr):
+        if _re.search(r'-[BT]\d[\d.]+$', tkr):  # ends with -B73500 or -T73999.99
             return None
+        if tkr.upper().startswith("KXBTCD") or tkr.upper().startswith("KXETHD") or \
+           tkr.upper().startswith("KXSOLD") or tkr.upper().startswith("KXXRPD"):
+            return None  # daily/range crypto series
 
     return side, price, secs_left
 

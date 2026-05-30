@@ -1320,9 +1320,15 @@ async function scan() {
     const maxAge       = document.getElementById("maxAgeMins")?.value || "";
     const noBuyWithin  = document.getElementById("noBuyWithinMins")?.value || "";
     const timeParams   = (minAge ? `&min_age_mins=${minAge}` : "") + (maxAge ? `&max_age_mins=${maxAge}` : "") + (noBuyWithin ? `&no_buy_within_mins=${noBuyWithin}` : "");
-    const cryptoTimes  = ['15m','30m','1h','daily','weekly'].filter(t => chk(`crypto${t.replace('m','m').replace('h','h')}`)).join(',');
+    const cryptoTimes  = [
+      chk("crypto15m")    ? "15m"    : null,
+      chk("crypto30m")    ? "30m"    : null,
+      chk("crypto1h")     ? "1h"     : null,
+      chk("cryptoDaily")  ? "daily"  : null,
+      chk("cryptoWeekly") ? "weekly" : null,
+    ].filter(Boolean).join(",");
     const hideMulti    = chk("hideMultiOutcome");
-    const cryptoParams = (chk("showCrypto") ? `&crypto_times=${encodeURIComponent(cryptoTimes)}` : "") + (hideMulti ? "&hide_multi=true" : "");
+    const cryptoParams = (chk("showCrypto") ? `&crypto_times=${encodeURIComponent(cryptoTimes || "none")}` : "") + (hideMulti ? "&hide_multi=true" : "");
     const buyUp   = chk("enableBuyUp");
     const buyDown = chk("enableBuyDown");
     // Always read live from inputs so changes take effect immediately without stop/start
