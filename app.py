@@ -1495,12 +1495,6 @@ def scan():
         pass
 
     return jsonify(results)
-except req.exceptions.Timeout:
-    print("[scan] Kalshi API timed out")
-    return jsonify({"error": "Kalshi API timed out — try again in a moment"}), 503
-except Exception as e:
-    print(f"[scan] error: {e}")
-    return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/buy", methods=["POST"])
