@@ -1554,7 +1554,8 @@ function checkAutoStopConditions() {
 
 async function buyOne(idx, override=false) {
   const m     = markets[idx];
-  let   amt   = parseFloat(document.getElementById(`amt-${idx}`).value);
+  if (!m) { toast("Market expired — scan again to refresh", "err"); return; }
+  let   amt   = parseFloat(document.getElementById(`amt-${idx}`)?.value);
   const btn   = document.getElementById(`btn-${idx}`);
   const msgEl = document.getElementById(`msg-${idx}`);
   if (!amt || amt <= 0) { toast("Enter a dollar amount","err"); return; }
