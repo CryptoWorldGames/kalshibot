@@ -2940,25 +2940,23 @@ setTimeout(() => {
 
 // ── Keep scanning even when browser tab is not visible ────────────────────
 let _lastScanTime = 0;
+// Update _lastScanTime at the START of every scan to prevent duplicate triggers
+const _origScan = scan;
+scan = async function(...args) {
+  _lastScanTime = Date.now();
+  return _origScan(...args);
+};
+
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden && autoModeOn) {
-    // Tab became visible — if scan is overdue, run immediately
-    if (Date.now() - _lastScanTime > 12000) scan();
-    // Restart the interval fresh (browser may have throttled it)
+    // Only trigger immediate scan if genuinely overdue (>15s since last)
+    const overdue = Date.now() - _lastScanTime > 15000;
+    // Restart interval to avoid throttled timers
     if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
     scanTimer = setInterval(scan, 10000);
+    if (overdue && !scanInProgress) scan();
   }
 });
-// Track last scan time
-const _origScan = scan;
-// Patch scan to track timing
-(function() {
-  const _realScan = scan;
-  window._patchedScan = async function() {
-    _lastScanTime = Date.now();
-    return _realScan();
-  };
-})();
 </script>
 
 </body>

@@ -97,7 +97,7 @@ def _headers(method: str, path: str, body: str = "") -> dict:
 def kalshi_get(endpoint: str, params: dict = None) -> dict:
     path = API_PREFIX + endpoint
     r = req.get(BASE_URL + path, headers=_headers("GET", path),
-                 params=params or {}, timeout=15)
+                 params=params or {}, timeout=20)  # 20s timeout
     if not r.ok:
         print(f"[API {r.status_code}] GET {endpoint} -> {r.text[:500]}")
     r.raise_for_status()
@@ -1481,6 +1481,12 @@ def scan():
         pass
 
     return jsonify(results)
+except req.exceptions.Timeout:
+    print("[scan] Kalshi API timed out")
+    return jsonify({"error": "Kalshi API timed out — try again in a moment"}), 503
+except Exception as e:
+    print(f"[scan] error: {e}")
+    return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/buy", methods=["POST"])
