@@ -1382,6 +1382,11 @@ def scan():
         crypto_times = set(crypto_times_raw.split(",")) if crypto_times_raw else {"15m","30m","1h","daily","weekly"}
         hide_multi = request.args.get("hide_multi", "false").lower() == "true"
 
+        # Cap minutes to prevent timedelta overflow (max ~1 year = 525600 min)
+        max_minutes = 525600
+        if minutes > max_minutes:
+            minutes = max_minutes
+
         # Convert "show" logic to "exclude" logic for the filter function
         no_crypto    = not show_crypto
         no_combo     = not show_combo
@@ -1392,7 +1397,10 @@ def scan():
         return jsonify({"error": "Invalid parameters"}), 400
 
     now    = datetime.now(timezone.utc)
-    cutoff = now + timedelta(minutes=minutes)
+    try:
+        cutoff = now + timedelta(minutes=minutes)
+    except OverflowError:
+        cutoff = now + timedelta(days=365)  # fallback cap
     results = []
 
     # If "buy at X¢, sell at Y¢" strategy active, override max_thr with buy-in price
