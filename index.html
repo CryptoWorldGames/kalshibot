@@ -411,12 +411,24 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
             Run for minutes
           </label>
           <label class="radio-pill" id="rpBuys" onclick="setRunMode('buys')"><input type="radio" name="runMode" value="buys">
-            <input type="number" id="autoBuysMax" value="10" min="1" style="width:52px;margin:0 4px" onclick="event.stopPropagation()"> buys
+            Stop after X buys
           </label>
           <label class="radio-pill" id="rpForever" onclick="setRunMode('forever')"><input type="radio" name="runMode" value="forever">
             Until stopped
           </label>
         </div>
+        <!-- Buys picker — shown when "Stop after X buys" is selected -->
+        <div id="buysPickerWrap" style="margin-top:10px;display:none;align-items:center;gap:6px;flex-wrap:wrap">
+          <span style="font-size:13px;color:#aaa">Stop after how many buys:</span>
+          <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setAutoBuys(1)">1</button>
+          <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setAutoBuys(3)">3</button>
+          <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setAutoBuys(5)">5</button>
+          <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setAutoBuys(10)">10</button>
+          <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setAutoBuys(20)">20</button>
+          <input type="number" id="autoBuysMax" value="10" min="1" style="width:70px" oninput="saveSettings()">
+          <span style="font-size:13px;color:#aaa">buys then stop</span>
+        </div>
+
         <!-- Minutes picker — shown when "Run for minutes" is selected -->
         <div id="minsPickerWrap" style="margin-top:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
           <span style="font-size:13px;color:#aaa">How many minutes:</span>
@@ -1125,6 +1137,8 @@ let _lastScanResultsTs = 0; // timestamp of last scan that found results
 async function scan() {
   if (scanInProgress) return;
   scanInProgress = true;
+  // Safety: force-unlock after 30s so scan button never stays stuck
+  const _scanSafety = setTimeout(() => { scanInProgress = false; }, 30000);
   const btn = document.getElementById("scanBtn");
   btn.disabled = true;
   btn.innerHTML = '<span class="spin"></span>Scanning…';
@@ -1269,6 +1283,7 @@ async function scan() {
   } catch(e) {
     setStatus(e.message, "err");
   } finally {
+    clearTimeout(_scanSafety);
     scanInProgress = false;
     btn.disabled = false;
     btn.textContent = "Scan Now";
@@ -1306,8 +1321,15 @@ function setRunMode(mode) {
   autoRunMode = mode;
   ["rpTime","rpBuys","rpForever"].forEach(id => document.getElementById(id).classList.remove("active"));
   document.getElementById({time:"rpTime",buys:"rpBuys",forever:"rpForever"}[mode]).classList.add("active");
-  const wrap = document.getElementById("minsPickerWrap");
-  if (wrap) wrap.style.display = mode === "time" ? "flex" : "none";
+  const minsWrap = document.getElementById("minsPickerWrap");
+  const buysWrap = document.getElementById("buysPickerWrap");
+  if (minsWrap) minsWrap.style.display = mode === "time" ? "flex" : "none";
+  if (buysWrap) buysWrap.style.display = mode === "buys" ? "flex" : "none";
+  saveSettings();
+}
+
+function setAutoBuys(n) {
+  document.getElementById("autoBuysMax").value = n;
   saveSettings();
 }
 
