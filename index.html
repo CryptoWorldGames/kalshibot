@@ -210,10 +210,7 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
       <span class="fund-amount port-val" id="navPortfolio">—</span>
       <span class="fund-label">Portfolio+Cash</span>
     </div>
-    <div class="fund-block" onclick="cyclePnlPeriod()" title="Click to cycle time period" style="cursor:pointer;user-select:none">
-      <span class="fund-amount" id="navPnl" style="color:var(--muted)">—</span>
-      <span class="fund-label">P&amp;L · <span id="navPnlPeriod">24h</span> <span style="opacity:.5;font-size:9px">▶</span></span>
-    </div>
+    <div id="navPnlAll" style="display:flex;align-items:stretch;gap:0"></div>
   </div>
 </nav>
 
@@ -822,25 +819,23 @@ let selectedMarkets    = new Set();
 // ── PnL tracking ─────────────────────────────────────────────────────────
 
 const PNL_PERIODS = ["1h","4h","6h","12h","24h","7d","30d"];
-let pnlPeriodIdx  = 4;   // default 24h
-let pnlPastValues = {};  // {period: dollars_at_start_of_window}
+let pnlPastValues = {};
 
-function cyclePnlPeriod() {
-  pnlPeriodIdx = (pnlPeriodIdx + 1) % PNL_PERIODS.length;
-  document.getElementById("navPnlPeriod").textContent = PNL_PERIODS[pnlPeriodIdx];
-  refreshPnlDisplay();
-}
+function cyclePnlPeriod() {} // kept for compatibility
 
 function refreshPnlDisplay() {
-  const cur  = parseFloat((document.getElementById("navPortfolio").textContent || "0").replace("$",""));
+  const cur = parseFloat((document.getElementById("navPortfolio")?.textContent || "0").replace("$",""));
   if (!cur) return;
-  const period = PNL_PERIODS[pnlPeriodIdx];
-  const past   = pnlPastValues[period];
-  const el     = document.getElementById("navPnl");
-  if (past == null) { el.textContent = "—"; el.style.color = "var(--muted)"; return; }
-  const pnl = cur - past;
-  el.textContent  = `${pnl >= 0 ? "+" : "-"}$${Math.abs(pnl).toFixed(2)}`;
-  el.style.color  = pnl >= 0 ? "var(--green)" : "var(--red)";
+  const wrap = document.getElementById("navPnlAll");
+  if (!wrap) return;
+  wrap.innerHTML = PNL_PERIODS.map(period => {
+    const past = pnlPastValues[period];
+    if (past == null) return `<div class="fund-block"><span class="fund-amount" style="color:#444;font-size:14px">—</span><span class="fund-label">P&L ${period}</span></div>`;
+    const pnl   = cur - past;
+    const color = pnl > 0.005 ? "var(--green)" : pnl < -0.005 ? "var(--red)" : "#888";
+    const sign  = pnl >= 0 ? "+" : "-";
+    return `<div class="fund-block"><span class="fund-amount" style="color:${color};font-size:14px">${sign}$${Math.abs(pnl).toFixed(2)}</span><span class="fund-label">P&L ${period}</span></div>`;
+  }).join("");
 }
 
 async function loadPnl() {
