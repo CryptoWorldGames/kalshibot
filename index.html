@@ -1224,17 +1224,23 @@ async function scan() {
   const showEconomics = chk("showEconomics");
   const goodLiq       = chk("goodLiq");
   try {
+    // Always read time live so changes apply immediately
+    const timeCustomEl = document.getElementById("timeCustom");
+    if (timeCustomEl && timeCustomEl.style.display !== "none") selTime = parseInt(timeCustomEl.value) || selTime;
     const minAge       = document.getElementById("minAgeMins")?.value || "";
     const maxAge       = document.getElementById("maxAgeMins")?.value || "";
     const noBuyWithin  = document.getElementById("noBuyWithinMins")?.value || "";
     const timeParams   = (minAge ? `&min_age_mins=${minAge}` : "") + (maxAge ? `&max_age_mins=${maxAge}` : "") + (noBuyWithin ? `&no_buy_within_mins=${noBuyWithin}` : "");
     const buyUp   = chk("enableBuyUp");
     const buyDown = chk("enableBuyDown");
-    const minDown = parseFloat(document.getElementById("minProbDown")?.value) || selMin;
-    const maxDown = parseFloat(document.getElementById("maxProbDown")?.value) || selMax;
-    // Use widest range that covers both enabled directions
-    const scanMin = buyUp && buyDown ? Math.min(selMin, minDown) : buyDown ? minDown : selMin;
-    const scanMax = buyUp && buyDown ? Math.max(selMax, maxDown) : buyDown ? maxDown : selMax;
+    // Always read live from inputs so changes take effect immediately without stop/start
+    const upMin   = parseFloat(document.getElementById("minProb")?.value)     || selMin;
+    const upMax   = parseFloat(document.getElementById("maxProb")?.value)     || selMax;
+    const minDown = parseFloat(document.getElementById("minProbDown")?.value) || upMin;
+    const maxDown = parseFloat(document.getElementById("maxProbDown")?.value) || upMax;
+    selMin = upMin; selMax = upMax; // keep globals in sync
+    const scanMin = buyUp && buyDown ? Math.min(upMin, minDown) : buyDown ? minDown : upMin;
+    const scanMax = buyUp && buyDown ? Math.max(upMax, maxDown) : buyDown ? maxDown : upMax;
     const r = await fetch(`/api/scan?min_thr=${scanMin}&max_thr=${scanMax}&minutes=${selTime}&show_crypto=${showCrypto}&show_combo=${showCombo}&show_sports=${showSports}&show_politics=${showPolitics}&show_economics=${showEconomics}&good_liq=${goodLiq}${timeParams}`);
     let data = await r.json();
     if (!r.ok) throw new Error(data.error || "Scan failed");
