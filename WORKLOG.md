@@ -33,3 +33,10 @@
   SessionStart/Stop hooks, PostToolUse action logging (activity.jsonl), and this WORKLOG.
   Documented full onboarding + every-switch routine in CONTEXT.md ("Multi-Machine Sync
   & Onboarding" section). Any new PC: read CONTEXT.md and follow the ONE-TIME SETUP there.
+
+**Sell strategy buttons need checkmark visual indicator**
+- User can't see which strategy is selected (buttons highlight green but no checkmark icon)
+- Need to add ✓ symbol next to active sell strategy button/amount
+- Currently: button is green but no visual confirmation
+- Fix: Add checkmark text (✓) or icon to active strategy button so user knows it's saved
+
