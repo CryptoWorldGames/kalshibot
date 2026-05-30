@@ -258,24 +258,63 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
   </div>
 
   <div id="filterBody" class="row" style="gap:18px 32px">
-    <div class="col">
-      <span class="label-sm">Win Probability Range</span>
-      <!-- presets -->
-      <div class="btn-group" id="probGroup" style="margin-bottom:8px">
-        <button class="pill" onclick="setRange(80,95)">80–95%</button>
-        <button class="pill active" onclick="setRange(85,98)">85–98%</button>
-        <button class="pill" onclick="setRange(90,98)">90–98%</button>
-        <button class="pill" onclick="setRange(95,98)">95–98%</button>
-        <button class="pill" id="customProbPill" onclick="document.getElementById('minProb').focus()">Custom</button>
+    <!-- BUY UP / BUY DOWN range sections -->
+    <div class="col" style="gap:0">
+
+      <!-- BUY UP -->
+      <div style="border:2px solid #fff;border-radius:8px;padding:12px 14px;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <label class="check-row" style="font-size:14px;font-weight:700;color:var(--green)">
+            <input type="checkbox" id="enableBuyUp" checked onchange="saveSettings()"> 📈 BUY UP (YES)
+          </label>
+          <span style="font-size:11px;color:#666">buy YES contracts — price will go up</span>
+        </div>
+        <div class="btn-group" id="probGroupUp" style="margin-bottom:8px;flex-wrap:wrap">
+          <button class="pill" onclick="setRangeUp(1,98)">1–98%</button>
+          <button class="pill" onclick="setRangeUp(25,75)">25–75%</button>
+          <button class="pill" onclick="setRangeUp(40,60)">40–60%</button>
+          <button class="pill" onclick="setRangeUp(50,96)">50–96%</button>
+          <button class="pill active" onclick="setRangeUp(80,96)">80–96%</button>
+          <button class="pill" onclick="setRangeUp(90,96)">90–96%</button>
+        </div>
+        <div class="inline" style="gap:6px;flex-wrap:wrap">
+          <span style="font-size:13px;color:#aaa">From</span>
+          <input type="number" id="minProb" value="80" min="1" max="99" style="width:60px" oninput="onProbInput()">
+          <span style="font-size:13px;color:#aaa">to</span>
+          <input type="number" id="maxProb" value="96" min="1" max="99" style="width:60px" oninput="onProbInput()">
+          <span style="font-size:13px;color:#aaa">% &nbsp;±</span>
+          <input type="number" id="spreadUp" value="" min="0" max="49" placeholder="0" style="width:55px" title="±spread: type 5 to make 45% into 40–50%" oninput="applySpread('up')">
+          <span style="font-size:11px;color:#555">spread</span>
+        </div>
       </div>
-      <!-- custom range -->
-      <div class="inline">
-        <span style="font-size:14px;color:#fff">From</span>
-        <input type="number" id="minProb" value="85" min="1" max="99" style="width:64px">
-        <span style="font-size:14px;color:#fff">% to</span>
-        <input type="number" id="maxProb" value="96" min="2" max="99" style="width:64px">
-        <span style="font-size:13px;color:#fff">% &nbsp;<span style="color:#bbb;font-size:12px">(99–100¢ auto-excluded)</span></span>
+
+      <!-- BUY DOWN -->
+      <div style="border:2px solid #fff;border-radius:8px;padding:12px 14px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <label class="check-row" style="font-size:14px;font-weight:700;color:var(--red)">
+            <input type="checkbox" id="enableBuyDown" onchange="saveSettings()"> 📉 BUY DOWN (NO)
+          </label>
+          <span style="font-size:11px;color:#666">buy NO contracts — price will go down</span>
+        </div>
+        <div class="btn-group" id="probGroupDown" style="margin-bottom:8px;flex-wrap:wrap">
+          <button class="pill" onclick="setRangeDown(1,98)">1–98%</button>
+          <button class="pill" onclick="setRangeDown(25,75)">25–75%</button>
+          <button class="pill" onclick="setRangeDown(40,60)">40–60%</button>
+          <button class="pill" onclick="setRangeDown(50,96)">50–96%</button>
+          <button class="pill active" onclick="setRangeDown(80,96)">80–96%</button>
+          <button class="pill" onclick="setRangeDown(90,96)">90–96%</button>
+        </div>
+        <div class="inline" style="gap:6px;flex-wrap:wrap">
+          <span style="font-size:13px;color:#aaa">From</span>
+          <input type="number" id="minProbDown" value="80" min="1" max="99" style="width:60px">
+          <span style="font-size:13px;color:#aaa">to</span>
+          <input type="number" id="maxProbDown" value="96" min="1" max="99" style="width:60px">
+          <span style="font-size:13px;color:#aaa">% &nbsp;±</span>
+          <input type="number" id="spreadDown" value="" min="0" max="49" placeholder="0" style="width:55px" title="±spread" oninput="applySpread('down')">
+          <span style="font-size:11px;color:#555">spread</span>
+        </div>
       </div>
+
     </div>
     <div class="col">
       <span class="label-sm">Ends Within</span>
@@ -984,11 +1023,41 @@ setInterval(loadPnl, 300000); // refresh PnL data every 5 min
 
 // ── Filter pills ──────────────────────────────────────────────────────────
 
-function setRange(min, max) {
+function setRange(min, max) { setRangeUp(min, max); }
+
+function setRangeUp(min, max) {
   selMin = min; selMax = max;
   document.getElementById("minProb").value = min;
   document.getElementById("maxProb").value = max;
-  activatePills("probGroup", `${min}–${max}%`);
+  activatePills("probGroupUp", `${min}–${max}%`);
+  saveSettings();
+}
+
+function setRangeDown(min, max) {
+  document.getElementById("minProbDown").value = min;
+  document.getElementById("maxProbDown").value = max;
+  activatePills("probGroupDown", `${min}–${max}%`);
+  saveSettings();
+}
+
+function applySpread(dir) {
+  if (dir === "up") {
+    const mid = parseFloat(document.getElementById("minProb").value) || 50;
+    const spr = parseFloat(document.getElementById("spreadUp").value) || 0;
+    if (spr > 0) { document.getElementById("minProb").value = Math.max(1,mid-spr); document.getElementById("maxProb").value = Math.min(98,mid+spr); }
+    onProbInput();
+  } else {
+    const mid = parseFloat(document.getElementById("minProbDown").value) || 50;
+    const spr = parseFloat(document.getElementById("spreadDown").value) || 0;
+    if (spr > 0) { document.getElementById("minProbDown").value = Math.max(1,mid-spr); document.getElementById("maxProbDown").value = Math.min(98,mid+spr); }
+    saveSettings();
+  }
+}
+
+function onProbInput() {
+  selMin = parseFloat(document.getElementById("minProb").value) || 80;
+  selMax = parseFloat(document.getElementById("maxProb").value) || 96;
+  activatePills("probGroupUp", "");
   saveSettings();
 }
 
@@ -1159,13 +1228,22 @@ async function scan() {
     const maxAge       = document.getElementById("maxAgeMins")?.value || "";
     const noBuyWithin  = document.getElementById("noBuyWithinMins")?.value || "";
     const timeParams   = (minAge ? `&min_age_mins=${minAge}` : "") + (maxAge ? `&max_age_mins=${maxAge}` : "") + (noBuyWithin ? `&no_buy_within_mins=${noBuyWithin}` : "");
-    const r = await fetch(`/api/scan?min_thr=${selMin}&max_thr=${selMax}&minutes=${selTime}&show_crypto=${showCrypto}&show_combo=${showCombo}&show_sports=${showSports}&show_politics=${showPolitics}&show_economics=${showEconomics}&good_liq=${goodLiq}${timeParams}`);
+    const buyUp   = chk("enableBuyUp");
+    const buyDown = chk("enableBuyDown");
+    const minDown = parseFloat(document.getElementById("minProbDown")?.value) || selMin;
+    const maxDown = parseFloat(document.getElementById("maxProbDown")?.value) || selMax;
+    // Use widest range that covers both enabled directions
+    const scanMin = buyUp && buyDown ? Math.min(selMin, minDown) : buyDown ? minDown : selMin;
+    const scanMax = buyUp && buyDown ? Math.max(selMax, maxDown) : buyDown ? maxDown : selMax;
+    const r = await fetch(`/api/scan?min_thr=${scanMin}&max_thr=${scanMax}&minutes=${selTime}&show_crypto=${showCrypto}&show_combo=${showCombo}&show_sports=${showSports}&show_politics=${showPolitics}&show_economics=${showEconomics}&good_liq=${goodLiq}${timeParams}`);
     let data = await r.json();
     if (!r.ok) throw new Error(data.error || "Scan failed");
-    // Frontend YES-only filter
-    if (document.getElementById("yesOnly")?.checked) {
-      data = data.filter(m => m.side === "yes");
-    }
+    // Filter by enabled directions and their ranges
+    data = data.filter(m => {
+      if (m.side === "yes") return buyUp && m.price >= selMin && m.price <= selMax;
+      if (m.side === "no")  return buyDown && m.price >= minDown && m.price <= maxDown;
+      return false;
+    });
     markets = data;
     if (!markets.length) {
       setStatus(`No live markets ${selMin}–${selMax}% closing in ≤${selTime}min${autoModeOn?" · auto-buys waiting…":""}`, "");
@@ -2671,7 +2749,7 @@ function loadStratSlot(i) {
 // ── Settings save/load ───────────────────────────────────────────────────
 
 const SETTINGS_KEY = "kb_settings_v2";
-const SETTINGS_CHECKBOXES = ["showCrypto","showSports","showPolitics","showEconomics",
+const SETTINGS_CHECKBOXES = ["showCrypto","showSports","showPolitics","showEconomics","enableBuyUp","enableBuyDown",
   "showEntertainment","showWeather","showNFL","showNBA","showMLB","showNHL",
   "showSoccer","showGolf","showTennis","showMMA","showCombo","goodLiq","yesOnly",
   "stopProfitDolChk","stopProfitPctChk","stopLossDolChk","stopLossPctChk",
@@ -2679,7 +2757,7 @@ const SETTINGS_CHECKBOXES = ["showCrypto","showSports","showPolitics","showEcono
 const SETTINGS_INPUTS = ["buyAmount","maxBuysPerMarket","autoMaxPerScan","autoMaxConcurrent","posSort",
   "autoMins","autoBuysMax","profitCustom","profitDolCustom","minProb","maxProb","timeCustom",
   "stopProfitDol","stopProfitPct","stopLossDol","stopLossPct","skipAutoSellMinutes",
-  "minAgeMins","maxAgeMins","noBuyWithinMins"];
+  "minAgeMins","maxAgeMins","noBuyWithinMins","minProbDown","maxProbDown","spreadUp","spreadDown"];
 
 function saveSettings() {
   const s = { stratMode, stratPct, selMin, selMax, selTime, autoRunMode };
