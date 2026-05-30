@@ -370,7 +370,7 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
     <div class="col" style="flex:1;min-width:320px">
       <span class="label-sm" style="margin-bottom:8px;display:block">Show Categories <span style="font-size:11px;color:#666;font-weight:400;text-transform:none">(all on = show everything, uncheck to hide)</span></span>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px 16px;margin-bottom:12px">
-        <label class="check-row"><input type="checkbox" id="showCrypto" checked onchange="saveSettings()"> Crypto</label>
+        <label class="check-row"><input type="checkbox" id="showCrypto" checked onchange="saveSettings();toggleCryptoTimes()"> Crypto</label>
         <label class="check-row"><input type="checkbox" id="showSports" checked onchange="saveSettings()"> Sports</label>
         <label class="check-row"><input type="checkbox" id="showPolitics" checked onchange="saveSettings()"> Politics</label>
         <label class="check-row"><input type="checkbox" id="showEconomics" checked onchange="saveSettings()"> Economics</label>
@@ -386,7 +386,24 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
         <label class="check-row"><input type="checkbox" id="showMMA" checked onchange="saveSettings()"> MMA/UFC</label>
         <label class="check-row"><input type="checkbox" id="showCombo" checked onchange="saveSettings()"> Combo/Parlay</label>
       </div>
+      <!-- Crypto time periods — shown only when Crypto is checked -->
+      <div id="cryptoTimeWrap" style="border:1px solid #2a2a2a;border-radius:6px;padding:8px 12px;margin-bottom:10px">
+        <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Crypto contract types (timed only)</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px 14px">
+          <label class="check-row" style="font-size:14px"><input type="checkbox" id="crypto15m" checked onchange="saveSettings()"> 15 min</label>
+          <label class="check-row" style="font-size:14px"><input type="checkbox" id="crypto30m" checked onchange="saveSettings()"> 30 min</label>
+          <label class="check-row" style="font-size:14px"><input type="checkbox" id="crypto1h"  checked onchange="saveSettings()"> 1 hour</label>
+          <label class="check-row" style="font-size:14px"><input type="checkbox" id="cryptoDaily" onchange="saveSettings()"> Daily/Range</label>
+          <label class="check-row" style="font-size:14px"><input type="checkbox" id="cryptoWeekly" onchange="saveSettings()"> Weekly+</label>
+        </div>
+      </div>
+
       <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <label class="check-row" title="Hides markets/events with many price-level variants (e.g. BTC range B73500, B73250...). Keeps clean binary YES/NO markets only.">
+          <input type="checkbox" id="hideMultiOutcome" checked onchange="saveSettings()"> Hide multi-outcome contracts <span style="color:var(--yellow);font-size:11px;margin-left:4px">✓ rec</span>
+        </label>
+      </div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px">
         <label class="check-row" title="Requires ≥10 open interest. Skips thin markets.">
           <input type="checkbox" id="goodLiq" checked onchange="saveSettings()"> Active only (skip thin) <span style="color:var(--green);font-size:11px;margin-left:4px">✓</span>
         </label>
@@ -1050,6 +1067,11 @@ setInterval(loadPnl, 300000); // refresh PnL data every 5 min
 
 // ── Filter pills ──────────────────────────────────────────────────────────
 
+function toggleCryptoTimes() {
+  const wrap = document.getElementById("cryptoTimeWrap");
+  if (wrap) wrap.style.opacity = document.getElementById("showCrypto")?.checked ? "1" : "0.4";
+}
+
 function setRange(min, max) { setRangeUp(min, max); }
 
 function setRangeUp(min, max) {
@@ -1298,6 +1320,9 @@ async function scan() {
     const maxAge       = document.getElementById("maxAgeMins")?.value || "";
     const noBuyWithin  = document.getElementById("noBuyWithinMins")?.value || "";
     const timeParams   = (minAge ? `&min_age_mins=${minAge}` : "") + (maxAge ? `&max_age_mins=${maxAge}` : "") + (noBuyWithin ? `&no_buy_within_mins=${noBuyWithin}` : "");
+    const cryptoTimes  = ['15m','30m','1h','daily','weekly'].filter(t => chk(`crypto${t.replace('m','m').replace('h','h')}`)).join(',');
+    const hideMulti    = chk("hideMultiOutcome");
+    const cryptoParams = (chk("showCrypto") ? `&crypto_times=${encodeURIComponent(cryptoTimes)}` : "") + (hideMulti ? "&hide_multi=true" : "");
     const buyUp   = chk("enableBuyUp");
     const buyDown = chk("enableBuyDown");
     // Always read live from inputs so changes take effect immediately without stop/start
@@ -1311,7 +1336,7 @@ async function scan() {
     selMin = upMin; selMax = upMax; // keep globals in sync
     const scanMin = buyUp && buyDown ? Math.min(upMin, minDown) : buyDown ? minDown : upMin;
     const scanMax = buyUp && buyDown ? Math.max(upMax, maxDown) : buyDown ? maxDown : upMax;
-    const r = await fetch(`/api/scan?min_thr=${scanMin}&max_thr=${scanMax}&minutes=${selTime}&show_crypto=${showCrypto}&show_combo=${showCombo}&show_sports=${showSports}&show_politics=${showPolitics}&show_economics=${showEconomics}&good_liq=${goodLiq}${timeParams}`);
+    const r = await fetch(`/api/scan?min_thr=${scanMin}&max_thr=${scanMax}&minutes=${selTime}&show_crypto=${showCrypto}&show_combo=${showCombo}&show_sports=${showSports}&show_politics=${showPolitics}&show_economics=${showEconomics}&good_liq=${goodLiq}${timeParams}${cryptoParams}`);
     let data = await r.json();
     if (!r.ok) throw new Error(data.error || "Scan failed");
     // Filter by enabled directions and their ranges
@@ -2838,7 +2863,7 @@ function loadStratSlot(i) {
 // ── Settings save/load ───────────────────────────────────────────────────
 
 const SETTINGS_KEY = "kb_settings_v2";
-const SETTINGS_CHECKBOXES = ["showCrypto","showSports","showPolitics","showEconomics","enableBuyUp","enableBuyDown",
+const SETTINGS_CHECKBOXES = ["showCrypto","showSports","showPolitics","showEconomics","enableBuyUp","enableBuyDown","crypto15m","crypto30m","crypto1h","cryptoDaily","cryptoWeekly","hideMultiOutcome",
   "showEntertainment","showWeather","showNFL","showNBA","showMLB","showNHL",
   "showSoccer","showGolf","showTennis","showMMA","showCombo","goodLiq","yesOnly",
   "stopProfitDolChk","stopProfitPctChk","stopLossDolChk","stopLossPctChk",

@@ -1182,7 +1182,8 @@ def debug_scan():
 
 def _apply_market_filters(m, now, cutoff, min_thr, max_thr,
                           no_crypto, no_combo, no_sports, no_politics, no_economics, good_liq, min_open_int,
-                          min_age_mins=None, max_age_mins=None, no_buy_within_mins=None):
+                          min_age_mins=None, max_age_mins=None, no_buy_within_mins=None,
+                          crypto_times=None, hide_multi=False):
     """
     Run all scan filters on a single market dict.
     Returns (side, price, secs_left) on pass, or None on reject.
@@ -1309,6 +1310,30 @@ def _apply_market_filters(m, now, cutoff, min_thr, max_thr,
     if no_buy_within_mins is not None and secs_left < no_buy_within_mins * 60:
         return None
 
+    tkr = m.get("ticker", "")
+
+    # Crypto time period filter
+    if not no_crypto and is_m_crypto and crypto_times is not None:
+        if "15m" not in crypto_times and "15M" in tkr.upper():
+            return None
+        if "30m" not in crypto_times and "30M" in tkr.upper():
+            return None
+        if "1h" not in crypto_times and "1H" in tkr.upper():
+            return None
+        # Daily/range = has price-level suffix (B73500, T73999.99)
+        import re as _re
+        is_level = bool(_re.search(r'-[BT]\d', tkr))
+        if is_level and "daily" not in crypto_times:
+            return None
+        if not is_level and "15M" not in tkr.upper() and "30M" not in tkr.upper() and "1H" not in tkr.upper() and "weekly" not in crypto_times:
+            return None
+
+    # Hide multi-outcome: skip markets with price-level suffixes (B73500, T73999.99)
+    if hide_multi:
+        import re as _re
+        if _re.search(r'-[BT]\d', tkr):
+            return None
+
     return side, price, secs_left
 
 
@@ -1349,6 +1374,9 @@ def scan():
         max_age_mins   = float(max_age_raw) if max_age_raw else None
         no_buy_within_raw = request.args.get("no_buy_within_mins", "")
         no_buy_within_mins = float(no_buy_within_raw) if no_buy_within_raw else None
+        crypto_times_raw = request.args.get("crypto_times", "15m,30m,1h,daily,weekly")
+        crypto_times = set(crypto_times_raw.split(",")) if crypto_times_raw else {"15m","30m","1h","daily","weekly"}
+        hide_multi = request.args.get("hide_multi", "false").lower() == "true"
 
         # Convert "show" logic to "exclude" logic for the filter function
         no_crypto    = not show_crypto
@@ -1373,7 +1401,8 @@ def scan():
             hit = _apply_market_filters(m, now, cutoff, min_thr, max_thr,
                                         no_crypto, no_combo, no_sports, no_politics, no_economics, good_liq, min_open_int,
                                         min_age_mins=min_age_mins, max_age_mins=max_age_mins,
-                                        no_buy_within_mins=no_buy_within_mins)
+                                        no_buy_within_mins=no_buy_within_mins,
+                                        crypto_times=crypto_times, hide_multi=hide_multi)
             if hit:
                 results.append(_market_to_result(m, *hit))
             if len(results) >= 20:
