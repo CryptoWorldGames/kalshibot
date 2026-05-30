@@ -709,11 +709,14 @@ def portfolio():
             bot_info = tracked.get(ticker)
 
             # Derive average buy price from total_traded_dollars for non-bot positions
+            # Cap at 99¢ — if derived price > 99 it means total_traded includes
+            # multiple round-trips and isn't a reliable cost basis (show — instead)
             derived_buy_price = None
             if not bot_info:
                 ttd = float(p.get("total_traded_dollars") or 0)
                 if ttd > 0 and abs(qty) > 0.001:
-                    derived_buy_price = round(ttd / abs(qty) * 100)
+                    raw = round(ttd / abs(qty) * 100)
+                    derived_buy_price = raw if raw <= 99 else None
 
             buy_price = (bot_info["buy_price"] if bot_info else None) or derived_buy_price
 
