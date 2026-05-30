@@ -628,21 +628,17 @@ def portfolio():
     total_account = None  # total account value (what Kalshi shows as Portfolio)
     try:
         bal_data = kalshi_get("/portfolio/balance")
-        # balance_dollars = total account value already in dollars
-        # portfolio_value = open positions value in cents
-        # balance_dollars = available cash (what you can spend)
-        # portfolio_value (cents) = open positions value
-        # balance_dollars is ALWAYS in dollars (e.g. "13.60")
-        # portfolio_value is ALWAYS in cents (e.g. 183 = $1.83)
-        total_dollars = float(bal_data.get("balance_dollars") or 0)
-        if not total_dollars:
+        # balance_dollars = available CASH only (not total account)
+        # portfolio_value = open positions value in CENTS
+        cash_dollars = float(bal_data.get("balance_dollars") or 0)
+        if not cash_dollars:
             raw = float(bal_data.get("balance") or 0)
-            total_dollars = raw / 100  # balance field is always cents
+            cash_dollars = raw / 100
         pos_cents   = float(bal_data.get("portfolio_value") or 0)
-        pos_dollars = round(pos_cents / 100, 2)  # always divide by 100, no heuristic
-        balance       = round(total_dollars - pos_dollars, 2)   # cash = total - positions
-        total_account = round(total_dollars, 2)                  # matches Kalshi's total
-        print(f"[portfolio] total=${total_dollars:.2f} positions=${pos_dollars:.2f} → cash=${balance:.2f}")
+        pos_dollars = round(pos_cents / 100, 2)  # always /100
+        balance       = round(cash_dollars, 2)                    # cash = balance_dollars directly
+        total_account = round(cash_dollars + pos_dollars, 2)      # total = cash + positions
+        print(f"[portfolio] cash=${cash_dollars:.2f} positions=${pos_dollars:.2f} → total=${total_account:.2f}")
     except Exception as e:
         print(f"[portfolio] balance error: {e}")
 
