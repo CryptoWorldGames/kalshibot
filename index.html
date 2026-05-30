@@ -1414,9 +1414,10 @@ async function scan() {
             selectedMarkets = new Set([...selectedMarkets].filter(i => {
               const m = markets[i];
               if (!m) return false;
-              if (openTickers.has(m.ticker)) return false;
-              if (autoModeBoughtSet.has(m.ticker)) return false;
-              // Enforce max buys per event
+              // Count how many times this exact ticker is already open
+              const openCount = allPositions.filter(p => p.ticker === m.ticker).length;
+              if (openCount >= maxPerGame) return false; // reached per-ticker limit
+              // Enforce max buys per event (across all tickers in same event)
               const evtKey = m.event_ticker || m.ticker.replace(/-[^-]+$/, "");
               const alreadyBought = eventBuyCount[evtKey] || 0;
               if (alreadyBought >= maxPerGame) return false;
@@ -1635,7 +1636,7 @@ async function buyOne(idx, override=false) {
   try {
     const r = await fetch("/api/buy", {
       method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ticker:m.ticker, side:m.side, amount:amt, price:m.price, title:m.title, category:m.category, override}),
+      body: JSON.stringify({ticker:m.ticker, side:m.side, amount:amt, price:m.price, title:m.title, category:m.category, override, max_per_market: parseInt(document.getElementById("maxBuysPerMarket")?.value)||1}),
     });
     const d = await r.json();
     if (!r.ok) {

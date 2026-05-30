@@ -1534,11 +1534,18 @@ def buy():
         print(f"[buy] clamped ${dollars:.2f} -> ${HARD_CAP:.2f} cap on {ticker}")
         dollars = HARD_CAP
 
-    # Prevent double-buying the same active position
+    # Check per-ticker buy count against max_per_market setting
+    max_per = int(data.get("max_per_market", 1) or 1)
     with _lock:
         existing = tracked.get(ticker)
-    if existing and existing.get("status") == "open" and not override:
-        return jsonify({"error": f"Already holding {ticker} — sell it first", "can_override": True}), 409
+        # Count how many times this ticker has been bought and is still open
+        open_count = sum(1 for t, p in tracked.items()
+                         if t == ticker and p.get("status") == "open")
+    if open_count >= max_per and not override:
+        if max_per <= 1:
+            return jsonify({"error": f"Already holding {ticker} — increase 'Max buys per contract type' or sell first", "can_override": True}), 409
+        else:
+            return jsonify({"error": f"Already have {open_count}/{max_per} of {ticker}", "can_override": True}), 409
 
     contracts = math.floor(dollars / (price_c / 100))
     if contracts < 1:
