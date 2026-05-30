@@ -632,15 +632,17 @@ def portfolio():
         # portfolio_value = open positions value in cents
         # balance_dollars = available cash (what you can spend)
         # portfolio_value (cents) = open positions value
-        cash_raw = float(bal_data.get("balance_dollars") or 0)
-        if not cash_raw:
+        # balance_dollars is ALWAYS in dollars (e.g. "13.60")
+        # portfolio_value is ALWAYS in cents (e.g. 183 = $1.83)
+        total_dollars = float(bal_data.get("balance_dollars") or 0)
+        if not total_dollars:
             raw = float(bal_data.get("balance") or 0)
-            cash_raw = raw / 100 if raw > 200 else raw
-        pos_raw     = float(bal_data.get("portfolio_value") or 0)
-        pos_dollars = pos_raw / 100 if pos_raw > 200 else pos_raw
-        balance       = round(cash_raw, 2)                      # spendable cash
-        total_account = round(cash_raw + pos_dollars, 2)        # total = cash + positions
-        print(f"[portfolio] cash=${cash_raw:.2f} positions=${pos_dollars:.2f} → total=${total_account:.2f}")
+            total_dollars = raw / 100  # balance field is always cents
+        pos_cents   = float(bal_data.get("portfolio_value") or 0)
+        pos_dollars = round(pos_cents / 100, 2)  # always divide by 100, no heuristic
+        balance       = round(total_dollars - pos_dollars, 2)   # cash = total - positions
+        total_account = round(total_dollars, 2)                  # matches Kalshi's total
+        print(f"[portfolio] total=${total_dollars:.2f} positions=${pos_dollars:.2f} → cash=${balance:.2f}")
     except Exception as e:
         print(f"[portfolio] balance error: {e}")
 
