@@ -16,7 +16,12 @@
 
 ## Active
 
-_(nothing in progress)_
+**Feature request: Add "All" or "Max" button to Ends Within**
+- User wants broad market capture but 24h is the highest preset button
+- Currently: 5min, 10min, 15min, 20min, 30min, 1h, 2h, 3h, 4h, 6h, 12h, 24h, Custom
+- Add button: "All (365d)" that sets to 525600 minutes
+- Prevents users from typing huge custom values that could overflow
+- UI: Add after 24h button or after Custom button
 
 ---
 
