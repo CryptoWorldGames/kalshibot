@@ -306,9 +306,9 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
         </div>
         <div class="inline" style="gap:6px;flex-wrap:wrap">
           <span style="font-size:13px;color:#aaa">From</span>
-          <input type="number" id="minProbDown" value="80" min="1" max="99" style="width:60px">
+          <input type="number" id="minProbDown" value="80" min="1" max="99" style="width:60px" oninput="onProbDownInput()">
           <span style="font-size:13px;color:#aaa">to</span>
-          <input type="number" id="maxProbDown" value="96" min="1" max="99" style="width:60px">
+          <input type="number" id="maxProbDown" value="96" min="1" max="99" style="width:60px" oninput="onProbDownInput()">
           <span style="font-size:13px;color:#aaa">% &nbsp;±</span>
           <input type="number" id="spreadDown" value="" min="0" max="49" placeholder="0" style="width:55px" title="±spread" oninput="applySpread('down')">
           <span style="font-size:11px;color:#555">spread</span>
@@ -1054,10 +1054,24 @@ function applySpread(dir) {
   }
 }
 
+const PROB_PRESETS = [[1,98],[25,75],[40,60],[50,96],[80,96],[90,96]];
+
+function matchPresetLabel(min, max) {
+  const match = PROB_PRESETS.find(([a,b]) => a===min && b===max);
+  return match ? `${match[0]}–${match[1]}%` : "";
+}
+
 function onProbInput() {
   selMin = parseFloat(document.getElementById("minProb").value) || 80;
   selMax = parseFloat(document.getElementById("maxProb").value) || 96;
-  activatePills("probGroupUp", "");
+  activatePills("probGroupUp", matchPresetLabel(selMin, selMax));
+  saveSettings();
+}
+
+function onProbDownInput() {
+  const min = parseFloat(document.getElementById("minProbDown").value) || 80;
+  const max = parseFloat(document.getElementById("maxProbDown").value) || 96;
+  activatePills("probGroupDown", matchPresetLabel(min, max));
   saveSettings();
 }
 
