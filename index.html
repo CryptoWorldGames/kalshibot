@@ -2654,7 +2654,14 @@ function switchTab(name) {
   localStorage.setItem("activeTab", name);
   if (name === "stats")     loadStats();
   if (name === "coach")     loadCoach();
-  if (name === "positions") loadBalanceThrottled();
+  if (name === "positions") {
+    loadBalanceThrottled(true); // force refresh when switching to Positions tab
+    // Faster 15s refresh while viewing positions (clears when leaving)
+    if (window._posTabRefresh) clearInterval(window._posTabRefresh);
+    window._posTabRefresh = setInterval(() => loadBalanceThrottled(true), 15000);
+  } else {
+    if (window._posTabRefresh) { clearInterval(window._posTabRefresh); window._posTabRefresh = null; }
+  }
   // Hide Start Bot on non-scanner tabs, show Stop Bot everywhere
   const fab = document.getElementById("fab");
   const scanBtn = document.getElementById("scanBtn");

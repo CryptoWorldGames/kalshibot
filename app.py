@@ -660,8 +660,20 @@ def portfolio():
     positions = []
     portfolio_value = 0.0
     try:
-        pos_data = kalshi_get("/portfolio/positions", {"count": 200})
-        raw_positions = pos_data.get("market_positions", pos_data.get("positions", []))
+        # Fetch ALL open positions with cursor pagination
+        raw_positions = []
+        cursor = None
+        pages = 0
+        while pages < 5:  # max 5 pages × 200 = 1000 positions
+            params = {"count": 200}
+            if cursor: params["cursor"] = cursor
+            pos_data = kalshi_get("/portfolio/positions", params)
+            batch = pos_data.get("market_positions", pos_data.get("positions", []))
+            raw_positions.extend(batch)
+            cursor = pos_data.get("cursor")
+            pages += 1
+            if not cursor or len(batch) < 200:
+                break
 
         for p in raw_positions:
             ticker = p.get("market_id") or p.get("ticker", "")
