@@ -1234,10 +1234,13 @@ async function scan() {
     const buyUp   = chk("enableBuyUp");
     const buyDown = chk("enableBuyDown");
     // Always read live from inputs so changes take effect immediately without stop/start
-    const upMin   = parseFloat(document.getElementById("minProb")?.value)     || selMin;
-    const upMax   = parseFloat(document.getElementById("maxProb")?.value)     || selMax;
-    const minDown = parseFloat(document.getElementById("minProbDown")?.value) || upMin;
-    const maxDown = parseFloat(document.getElementById("maxProbDown")?.value) || upMax;
+    let upMin   = parseFloat(document.getElementById("minProb")?.value)     || selMin;
+    let upMax   = parseFloat(document.getElementById("maxProb")?.value)     || selMax;
+    let minDown = parseFloat(document.getElementById("minProbDown")?.value) || upMin;
+    let maxDown = parseFloat(document.getElementById("maxProbDown")?.value) || upMax;
+    // Auto-fix if min > max (user may have typed out of order)
+    if (upMin > upMax)   { [upMin, upMax]     = [upMax, upMin];   document.getElementById("minProb").value = upMin; document.getElementById("maxProb").value = upMax; }
+    if (minDown > maxDown) { [minDown, maxDown] = [maxDown, minDown]; }
     selMin = upMin; selMax = upMax; // keep globals in sync
     const scanMin = buyUp && buyDown ? Math.min(upMin, minDown) : buyDown ? minDown : upMin;
     const scanMax = buyUp && buyDown ? Math.max(upMax, maxDown) : buyDown ? maxDown : upMax;
