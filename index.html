@@ -741,6 +741,7 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
       <div style="display:flex;gap:6px">
         <button class="sm ghost" style="font-size:12px;padding:4px 14px" onclick="runDebugScan()">Run Preview</button>
         <button class="sm ghost" style="font-size:12px;padding:4px 14px;display:none" onclick="copyDebugScan()" id="copyDebugBtn">Copy</button>
+        <button class="sm ghost" style="font-size:12px;padding:4px 14px;background:#1a1a2e;color:#4f9eff;border-color:#4f9eff" onclick="copyDiagnostics()" title="Copy full diagnostic report for Claude">📋 Copy for Claude</button>
       </div>
     </div>
     <div style="font-size:12px;color:#666;margin-bottom:10px">Shows what the scanner sees right now — all markets expiring soon, with filter reasons</div>
@@ -2770,12 +2771,36 @@ async function runDebugScan() {
 
 function copyDebugScan() {
   const el = document.getElementById("debugScanOut");
-  const text = el.textContent;
-  navigator.clipboard.writeText(text).then(() => {
-    toast("Debug scan copied to clipboard!", "ok");
-  }).catch(() => {
-    toast("Failed to copy", "err");
-  });
+  navigator.clipboard.writeText(el.textContent).then(() => toast("Copied!", "ok")).catch(() => toast("Failed to copy", "err"));
+}
+
+async function copyDiagnostics() {
+  try {
+    const [port, scan] = await Promise.all([
+      fetch('/api/portfolio').then(r=>r.json()),
+      fetch(`/api/scan?min_thr=${selMin}&max_thr=${selMax}&minutes=${selTime}&show_crypto=true&show_combo=true&show_sports=true&show_politics=true&show_economics=true&good_liq=false`).then(r=>r.json())
+    ]);
+    const settings = JSON.parse(localStorage.getItem("kb_settings_v2") || "{}");
+    const lines = [
+      `=== KalshiBot Diagnostics ${new Date().toLocaleString()} ===`,
+      `Cash: $${port.balance} | Portfolio: $${port.portfolio_value} | Total: $${port.portfolio_value}`,
+      `Open positions: ${(port.positions||[]).length}`,
+      `Bot running: ${autoModeOn} | Mode: ${autoRunMode} | Bought: ${autoModeBought}`,
+      `Scan settings: min=${selMin}% max=${selMax}% time=${selTime}min`,
+      `Auto mode settings: maxPerScan=${document.getElementById('autoMaxPerScan')?.value} maxConcurrent=${document.getElementById('autoMaxConcurrent')?.value}`,
+      `Sell strategy: ${stratMode} | target%=${stratPct}`,
+      ``,
+      `=== Raw scan (no filters, ${scan.length || 0} found) ===`,
+      Array.isArray(scan) ? scan.slice(0,10).map(m=>`  ${m.ticker} ${m.side} ${m.price}¢ closes ${Math.floor(m.secs_left/60)}m`).join('\n') : JSON.stringify(scan).slice(0,500),
+      ``,
+      `=== Session dedup set (${autoModeBoughtSet.size} tickers blocked) ===`,
+      [...autoModeBoughtSet].slice(0,20).join(', '),
+    ].join('\n');
+    await navigator.clipboard.writeText(lines);
+    toast("✓ Diagnostics copied — paste to Claude!", "ok");
+  } catch(e) {
+    toast("Copy failed: " + e.message, "err");
+  }
 }
 
 async function loadStats() {
