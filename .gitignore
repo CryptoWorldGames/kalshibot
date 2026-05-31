@@ -1,0 +1,34 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local settings (machine-specific)
+.claude/settings.local.json
+
+# Runtime/Data files (bot-specific)
+bot_positions.json
+bot_strategy.json
+activity.jsonl
+scan_log.jsonl
+portfolio_snapshots.json
+
+# Relay/temporary files
+updates.json
+
+# OS
+.DS_Store
+Thumbs.db
