@@ -2120,6 +2120,9 @@ async function sellPos(ticker, side, count, safeId) {
   const prePos = allPositions.find(p => p.ticker === ticker && p.side === side);
   if (!prePos) {
     toast("Position already sold", "");
+    // Remove from allPositions and refresh table
+    allPositions = allPositions.filter(p => !(p.ticker === ticker && p.side === side));
+    filterPos();
     return;
   }
 
