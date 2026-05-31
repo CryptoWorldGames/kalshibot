@@ -3892,15 +3892,28 @@ function loadSettings() {
     selMax = 98;
   }
 
-  // Update input fields to match saved values
+  // Update input fields to match saved values (Buy Up)
   const minEl = document.getElementById("minProb"), maxEl = document.getElementById("maxProb");
   if (minEl && maxEl) {
     minEl.value = selMin;
     maxEl.value = selMax;
     const presets = ["80–95%","85–98%","90–98%","95–98%"];
     const label = `${selMin}–${selMax}%`;
-    activatePills("probGroup", presets.includes(label) ? label : "Custom");
+    activatePills("probGroupUp", presets.includes(label) ? label : "Custom");
   }
+
+  // Check Buy Down custom pill if values don't match presets
+  const minDownEl = document.getElementById("minProbDown"), maxDownEl = document.getElementById("maxProbDown");
+  if (minDownEl && maxDownEl) {
+    const downMin = parseFloat(minDownEl.value);
+    const downMax = parseFloat(maxDownEl.value);
+    const downLabel = `${downMin}–${downMax}%`;
+    const presets = ["80–96%"];  // Buy Down only has 80-96 as default preset
+    if (!presets.includes(downLabel) && downMin && downMax) {
+      activatePills("probGroupDown", "Custom");
+    }
+  }
+
   if (s.selTime) { selTime = parseInt(s.selTime); activatePills("timeGroup", selTime < 60 ? selTime + " min" : (selTime/60)+"h"); }
   if (s.autoRunMode) setRunMode(s.autoRunMode);
 }
