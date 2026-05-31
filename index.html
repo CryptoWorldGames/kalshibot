@@ -2116,10 +2116,9 @@ async function sellPos(ticker, side, count, safeId) {
       ? Math.abs(soldPos.quantity||0) * ((side==="yes"?soldPos.current_yes:soldPos.current_no) - soldPos.buy_price) / 100 : null;
 
     toast(`✓ Sold ${count} ${side.toUpperCase()} · ${marketTitle}`, "ok");
-    if (soldProfit != null && soldProfit > 0) {
+    // Announce sell with audio feedback (happy for profit, sad for loss)
+    if (soldProfit != null) {
       announceSell(count, soldProfit);
-    } else if (preProfit) {
-      chaChing();
     }
     addToSaleTicker(marketTitle, soldProfit, side);
     selectedPosTickers.delete(ticker);
@@ -2829,13 +2828,50 @@ function announceBuy(count) {
   }, 200);
 }
 
+function playSadTrumpet() {
+  // Synthesize a sad descending trumpet sound with Web Audio API
+  try {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = _audioCtx;
+    const now = ctx.currentTime;
+    // Sad descending notes: E5 → D5 → C5 (down 2 semitones each)
+    [
+      {freq: 659, t: 0,    dur: 0.3, vol: 0.25},  // E5
+      {freq: 587, t: 0.25, dur: 0.35, vol: 0.20}, // D5
+      {freq: 523, t: 0.55, dur: 0.45, vol: 0.18}, // C5
+    ].forEach(n => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = n.freq;
+      gain.gain.setValueAtTime(0, now + n.t);
+      gain.gain.linearRampToValueAtTime(n.vol, now + n.t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + n.t + n.dur);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now + n.t);
+      osc.stop(now + n.t + n.dur + 0.05);
+    });
+  } catch(e) {}
+}
+
 function announceSell(count, profit) {
-  chaChing();
-  setTimeout(() => {
-    const contractText = count > 1 ? `you sold ${count} contracts` : "you sold a contract";
-    const profitText = `and made ${profit >= 0 ? '+' : ''}$${Math.abs(profit).toFixed(2)} profit`;
-    speakText(contractText + ", " + profitText);
-  }, 600);
+  if (profit > 0) {
+    // Profit - happy cha-ching
+    chaChing();
+    setTimeout(() => {
+      const contractText = count > 1 ? `you sold ${count} contracts` : "you sold a contract";
+      const profitText = `and made +$${profit.toFixed(2)} profit`;
+      speakText(contractText + ", " + profitText);
+    }, 600);
+  } else if (profit < 0) {
+    // Loss - sad trumpet
+    playSadTrumpet();
+    setTimeout(() => {
+      const contractText = count > 1 ? `you sold ${count} contracts` : "you sold a contract";
+      const lossText = `you lost $${Math.abs(profit).toFixed(2)}`;
+      speakText(contractText + ", " + lossText);
+    }, 600);
+  }
 }
 
 // ── Clippy-style floating coach hint ─────────────────────────────────────
