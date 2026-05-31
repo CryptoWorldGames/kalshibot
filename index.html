@@ -3329,8 +3329,8 @@ function controlBot(action) {
   if (!statusEl) return;
 
   const managerUrl = window.location.hostname === "localhost"
-    ? `http://localhost:5001/api/manager/${action}`
-    : `http://${window.location.hostname}:5001/api/manager/${action}`;
+    ? `http://localhost:5100/api/manager/${action}`
+    : `http://${window.location.hostname}:5100/api/manager/${action}`;
 
   statusEl.textContent = "Status: sending...";
 
@@ -3351,8 +3351,8 @@ function checkBotStatus() {
   if (!statusEl) return;
 
   const managerUrl = window.location.hostname === "localhost"
-    ? "http://localhost:5001/api/manager/status"
-    : `http://${window.location.hostname}:5001/api/manager/status`;
+    ? "http://localhost:5100/api/manager/status"
+    : `http://${window.location.hostname}:5100/api/manager/status`;
 
   fetch(managerUrl)
     .then(r => r.json())
@@ -3386,8 +3386,8 @@ function updateBotControlBar() {
   if (!btn || !status) return;
 
   const managerUrl = window.location.hostname === "localhost"
-    ? "http://localhost:5001/api/manager/status"
-    : `http://${window.location.hostname}:5001/api/manager/status`;
+    ? "http://localhost:5100/api/manager/status"
+    : `http://${window.location.hostname}:5100/api/manager/status`;
 
   fetch(managerUrl)
     .then(r => r.json())
@@ -3438,8 +3438,8 @@ function handleBotButtonClick() {
   if (!status) return;
 
   const managerUrl = window.location.hostname === "localhost"
-    ? `http://localhost:5001/api/manager/${action}`
-    : `http://${window.location.hostname}:5001/api/manager/${action}`;
+    ? `http://localhost:5100/api/manager/${action}`
+    : `http://${window.location.hostname}:5100/api/manager/${action}`;
 
   status.textContent = `Sending ${action}...`;
   fetch(managerUrl, { method: "POST" })

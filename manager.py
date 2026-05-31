@@ -18,7 +18,7 @@ import threading
 HERE = Path(__file__).resolve().parent
 FLASK_PROCESS = None
 FLASK_PORT = 5000
-MANAGER_PORT = 5001  # Manager runs on separate port
+MANAGER_PORT = 5100  # Manager runs on Flask port + 100
 RUNNING = True
 
 class ManagerHandler(BaseHTTPRequestHandler):
@@ -31,10 +31,12 @@ class ManagerHandler(BaseHTTPRequestHandler):
             is_alive = check_flask_alive()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(json.dumps({"running": is_alive, "port": FLASK_PORT}).encode())
         else:
             self.send_response(404)
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
 
     def do_POST(self):
@@ -44,6 +46,7 @@ class ManagerHandler(BaseHTTPRequestHandler):
             stop_flask()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(json.dumps({"status": "stopped"}).encode())
 
@@ -52,6 +55,7 @@ class ManagerHandler(BaseHTTPRequestHandler):
             time.sleep(2)  # Wait for Flask to start
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(json.dumps({"status": "started"}).encode())
 
@@ -62,11 +66,13 @@ class ManagerHandler(BaseHTTPRequestHandler):
             time.sleep(2)
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(json.dumps({"status": "restarted"}).encode())
 
         else:
             self.send_response(404)
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
 
     def log_message(self, format, *args):
@@ -91,8 +97,6 @@ def start_flask():
     FLASK_PROCESS = subprocess.Popen(
         [sys.executable, "app.py"],
         cwd=HERE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
         creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0
     )
     print(f"[manager] Flask started (PID: {FLASK_PROCESS.pid})")
