@@ -954,9 +954,9 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 </div>
 
 <!-- ── Bot Control Bar (Bottom Floating) ────────────────────────────── -->
-<div class="fab-container">
-  <button class="fab" id="botControlBtn" style="background:var(--yellow);color:#000;flex:1;cursor:pointer">🔄 Restart Bot</button>
-  <span id="botBarStatus" style="padding:12px 16px;font-size:13px;color:var(--muted);align-self:center;pointer-events:none">Bot Status: checking...</span>
+<div class="fab-container" style="justify-content:space-between;align-items:center">
+  <button class="fab" id="botControlBtn" style="background:var(--yellow);color:#000;cursor:pointer;flex:0 1 auto;min-width:200px;margin:0">🔄 Restart Bot</button>
+  <span id="botBarStatus" style="font-size:12px;color:var(--muted);white-space:nowrap;margin-left:16px;pointer-events:none">checking...</span>
 </div>
 
 <script>
