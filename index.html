@@ -2372,6 +2372,9 @@ function filterPos() {
     const qty = p.quantity ?? 0;
     if (Math.abs(qty) < 0.001) return false;
 
+    // Hide positions with no buy price (incomplete data - likely manual trades)
+    if (p.buy_price == null && Math.abs(qty) > 0.001) return false;
+
     if (src === "bot"    && !p.bot_bought) return false;
     if (src === "kalshi" &&  p.bot_bought) return false;
     if (cat && p.category !== cat)         return false;
