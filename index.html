@@ -3437,11 +3437,11 @@ function saveBtnClick(btn) {
   const mobileText = btn.querySelector(".save-text-mobile");
   const oldPc = pcText?.textContent;
   const oldMobile = mobileText?.textContent;
-  btn.style.color = "var(--green)";
+  btn.style.color = "#00d97e";  // Green - actual color value, not CSS var
   if (pcText) pcText.textContent = "✓ Saved!";
   if (mobileText) mobileText.textContent = "✓";
   setTimeout(() => {
-    btn.style.color = "";
+    btn.style.color = "";  // Reset to CSS default
     if (pcText) pcText.textContent = oldPc;
     if (mobileText) mobileText.textContent = oldMobile;
   }, 2000);
