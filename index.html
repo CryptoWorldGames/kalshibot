@@ -2368,15 +2368,19 @@ function filterPos() {
   const hide95Loss = document.getElementById("hide95LossPositions")?.checked || false;
 
   let filtered = allPositions.filter(p => {
+    // Hide sold positions (quantity = 0)
+    const qty = p.quantity ?? 0;
+    if (Math.abs(qty) < 0.001) return false;
+
     if (src === "bot"    && !p.bot_bought) return false;
     if (src === "kalshi" &&  p.bot_bought) return false;
     if (cat && p.category !== cat)         return false;
-    if (hideSmall && Math.abs(p.quantity ?? 0) < 1.0) return false;
+    if (hideSmall && Math.abs(qty) < 1.0) return false;
     // Hide expired positions (Kalshi API hasn't moved them to settlements yet)
     if (p.close_time && new Date(p.close_time) < new Date()) return false;
     // Hide positions with 95%+ loss
     if (hide95Loss && p.buy_price != null) {
-      const side = (p.quantity ?? 0) > 0 ? "yes" : "no";
+      const side = qty > 0 ? "yes" : "no";
       const cur = side === "yes" ? p.current_yes : p.current_no;
       if (cur != null) {
         const lossPercent = ((p.buy_price - cur) / p.buy_price) * 100;
