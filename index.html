@@ -2070,16 +2070,37 @@ async function buyAll(overrideAmount, maxItems) {
 
 // ── Sell (positions) ─────────────────────────────────────────────────────
 
+// Track in-flight sells to prevent duplicates
+const _inFlightSells = new Set();
+
 async function sellPos(ticker, side, count, safeId) {
+  const sellKey = `${ticker}:${side}`;
+
+  // Prevent duplicate sells
+  if (_inFlightSells.has(sellKey)) {
+    toast("Already selling this position…", "");
+    return;
+  }
+
+  // Check if position still exists
+  const prePos = allPositions.find(p => p.ticker === ticker && p.side === side);
+  if (!prePos) {
+    toast("Position already sold", "");
+    return;
+  }
+
   const btn = document.getElementById(safeId);
-  if (btn) { btn.disabled = true; btn.textContent = "…"; }
+  if (btn) { btn.disabled = true; btn.textContent = "Selling…"; }
+
+  _inFlightSells.add(sellKey);
+
   // Capture pre-sell P&L: if positive, ring the bell when the sale lands
-  const prePos = allPositions.find(p => p.ticker === ticker);
   let preProfit = false;
   if (prePos && prePos.buy_price != null) {
     const cur = side === "yes" ? prePos.current_yes : prePos.current_no;
     if (cur != null) preProfit = cur > prePos.buy_price;
   }
+
   try {
     const r = await fetch("/api/sell", {
       method:"POST", headers:{"Content-Type":"application/json"},
@@ -2087,14 +2108,17 @@ async function sellPos(ticker, side, count, safeId) {
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "Sell failed");
+
     const soldPos = allPositions.find(p => p.ticker === ticker && p.side === side);
     const marketTitle = soldPos?.title || ticker;
     const soldProfit = (soldPos?.buy_price != null && soldPos?.current_yes != null)
       ? Math.abs(soldPos.quantity||0) * ((side==="yes"?soldPos.current_yes:soldPos.current_no) - soldPos.buy_price) / 100 : null;
+
     toast(`✓ Sold ${count} ${side.toUpperCase()} · ${marketTitle}`, "ok");
     if (preProfit) chaChing();
     addToSaleTicker(marketTitle, soldProfit, side);
     selectedPosTickers.delete(ticker);
+
     // Immediately remove from allPositions so it doesn't reappear (remove specific ticker+side, not all with same ticker)
     allPositions = allPositions.filter(p => !(p.ticker === ticker && p.side === side));
     filterPos();
@@ -2104,6 +2128,8 @@ async function sellPos(ticker, side, count, safeId) {
     if (btn) { btn.disabled = false; btn.textContent = "Sell This"; }
     // Restore the position if sell failed — put it back in the list
     loadBalanceThrottled(true);
+  } finally {
+    _inFlightSells.delete(sellKey);
   }
 }
 
@@ -2969,6 +2995,19 @@ function renderRecentlySold() {
   if (!wrap) return;
   const now = Date.now();
   _recentlySold = _recentlySold.filter(s => now - s.soldAt < SOLD_TTL);
+
+  // Deduplicate by ticker+side, keeping newest
+  const seen = new Set();
+  const deduped = [];
+  for (const s of _recentlySold) {
+    const key = `${s.ticker}:${s.side}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      deduped.push(s);
+    }
+  }
+  _recentlySold = deduped;
+
   if (!_recentlySold.length) { wrap.innerHTML = ""; return; }
 
   const items = _recentlySold.map((s, i) => {
@@ -2977,8 +3016,8 @@ function renderRecentlySold() {
     const color    = isProfit ? "var(--green)" : isLoss ? "var(--red)" : "#888";
     const border   = isProfit ? "#1f6045" : isLoss ? "#6a1a1a" : "#333";
     const pnl      = s.profit != null ? `${s.profit >= 0 ? "+" : ""}$${s.profit.toFixed(2)}` : "—";
-    return `<div style="background:var(--hover);border:1px solid ${border};border-radius:6px;padding:4px 10px;display:flex;gap:8px;align-items:center;white-space:nowrap;font-size:11px;flex-shrink:0;min-width:max-content">
-      <div style="font-weight:800;color:${color};font-size:12px">${pnl}</div>
+    return `<div style="background:var(--hover);border:1px solid ${border};border-radius:6px;padding:6px 12px;display:flex;gap:8px;align-items:center;white-space:nowrap;font-size:12px;flex-shrink:0;min-width:max-content">
+      <div style="font-weight:800;color:${color};font-size:13px">${pnl}</div>
       <div style="color:#aaa;max-width:120px;overflow:hidden;text-overflow:ellipsis">${esc(s.title)}</div>
       <button onclick="_recentlySold.splice(${i},1);renderRecentlySold()" style="background:none;border:none;color:#555;font-size:13px;cursor:pointer;padding:0;margin-left:4px">×</button>
     </div>`;
