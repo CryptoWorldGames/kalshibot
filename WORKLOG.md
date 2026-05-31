@@ -40,3 +40,32 @@
 - Currently: button is green but no visual confirmation
 - Fix: Add checkmark text (✓) or icon to active strategy button so user knows it's saved
 
+
+---
+
+## RESTORE POINT: 6:22 PM CDT May 30, 2026
+
+**Timestamp:** 2026-05-30 18:22:00 CDT
+
+**Current State (Good):**
+- Sell endpoint fixed: supports fractional quantities (>= 0.001)
+- Links fixed: using kalshi_url from API instead of hardcoded
+- Backend sleep optimized: 0.15s → 0.01s per position
+- Page load still slow (30-60s reported despite optimizations)
+
+**Files Changed:**
+- app.py: /api/sell endpoint (count as float, validation >= 0.001)
+- app.py: _kalshi_url() function (event_ticker format)
+- app.py: /api/portfolio (sleep 0.15s → 0.01s)
+- index.html: market links use kalshi_url field
+- index.html: responsive layout (100% width)
+
+**Next:** Implementing progressive loading strategy
+- Phase 1 (0-2s): positions + balance (no market data)
+- Phase 2 (2-7s): market enrichment
+- Phase 3 (7+s): settlements/stats (background)
+
+If breaking: revert to this point.
+
+---
+

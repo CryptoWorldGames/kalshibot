@@ -995,11 +995,9 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 </div>
 
 <!-- ── Bot Control Bar (Bottom Floating) ────────────────────────────── -->
-<div class="fab-container" style="justify-content:flex-start;align-items:stretch;gap:8px">
-  <button class="fab" id="botControlBtn" style="background:#ff4d4d;color:#fff;cursor:pointer;flex:1;min-width:200px;margin:0;padding:14px 24px;border:1px solid #fff;text-align:center;font-weight:700;font-size:16px;position:relative;z-index:10">⏹ Stop Bot</button>
-  <div style="display:flex;flex-direction:column;justify-content:center;gap:4px;padding:0 8px;position:relative;z-index:5">
-    <span id="botBarStatus" style="font-size:11px;color:#00d97e;background:#000;border:1px solid #00d97e;border-radius:3px;padding:3px 8px;white-space:nowrap;pointer-events:none;font-weight:600;text-align:center">✓ Bot Running</span>
-  </div>
+<div class="fab-container" style="justify-content:flex-start;align-items:center;gap:8px">
+  <button class="fab" id="botControlBtn" style="background:#ff4d4d;color:#fff;cursor:pointer;flex:1;min-width:200px;margin:0;padding:14px 24px;border:1px solid #fff;text-align:center;font-weight:700;font-size:16px;position:relative;z-index:10;transition:all 0.3s">⏹ Stop Bot</button>
+  <span id="botBarStatus" style="font-size:11px;color:#00d97e;background:#000;border:1px solid #00d97e;border-radius:3px;padding:3px 8px;white-space:nowrap;pointer-events:none;font-weight:600;text-align:center;z-index:5">✓ Bot Running</span>
   <button onclick="window.scrollTo({top:0,behavior:'smooth'})" style="background:transparent;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:8px 12px;transition:color .2s;align-self:center" title="Scroll to top">↑</button>
   <button onclick="saveBtnClick(this)" id="saveBtn" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer;padding:8px 14px;font-size:12px;font-weight:600;transition:all .2s;align-self:center" title="Save settings"><span class="save-text-pc">Save Settings</span><span class="save-text-mobile">Save</span></button>
 </div>
@@ -3381,6 +3379,7 @@ checkBotStatus(); // Check on page load
 
 // ──── Bottom Bar Bot Control ────────────────────────────────────
 let botIsRunning = false;
+let _statusCheckInterval = null;
 
 function updateBotControlBar() {
   const btn = document.getElementById("botControlBtn");
@@ -3398,14 +3397,14 @@ function updateBotControlBar() {
       if (d.running) {
         btn.style.background = "#ff4d4d";
         btn.style.color = "#fff";
-        btn.querySelector("span:first-child").textContent = "⏹ Stop Bot";
+        btn.textContent = "⏹ Stop Bot";
         status.textContent = "✓ Bot Running";
         status.style.color = "#00d97e";
         status.style.borderColor = "#00d97e";
       } else {
         btn.style.background = "#f5c542";
         btn.style.color = "#000";
-        btn.querySelector("span:first-child").textContent = "🔄 Restart Bot";
+        btn.textContent = "🔄 Restart Bot";
         status.textContent = "✗ Bot Stopped";
         status.style.color = "#ff4d4d";
         status.style.borderColor = "#ff4d4d";
@@ -3435,24 +3434,54 @@ function saveBtnClick(btn) {
 }
 
 function handleBotButtonClick() {
-  const action = botIsRunning ? "stop" : "restart";
+  const btn = document.getElementById("botControlBtn");
   const status = document.getElementById("botBarStatus");
-  if (!status) return;
+  const action = botIsRunning ? "stop" : "restart";
+
+  if (!status || !btn) return;
 
   const managerUrl = window.location.hostname === "localhost"
     ? `http://localhost:5100/api/manager/${action}`
     : `http://${window.location.hostname}:5100/api/manager/${action}`;
 
-  status.textContent = `Sending ${action}...`;
+  // Show "Please wait" message
+  if (action === "stop") {
+    status.textContent = "⏳ Please wait while stopping bot";
+    status.style.color = "#ffa500";
+    status.style.borderColor = "#ffa500";
+  } else {
+    status.textContent = "⏳ Please wait while restarting bot";
+    status.style.color = "#ffa500";
+    status.style.borderColor = "#ffa500";
+  }
+  btn.disabled = true;
+  btn.style.opacity = "0.6";
+
   fetch(managerUrl, { method: "POST" })
     .then(r => r.json())
     .then(d => {
-      setTimeout(updateBotControlBar, 1000);
+      // Poll every 500ms for up to 10 seconds during transition
+      let checks = 0;
+      const pollInterval = setInterval(() => {
+        checks++;
+        updateBotControlBar();
+        if (checks >= 20 || !btn.disabled) {
+          clearInterval(pollInterval);
+          btn.disabled = false;
+          btn.style.opacity = "1";
+        }
+      }, 500);
     })
     .catch(e => {
-      status.textContent = "Error";
+      status.textContent = "⚠ Error - check console";
+      status.style.color = "#ff4d4d";
+      status.style.borderColor = "#ff4d4d";
       console.error("Control error:", e);
-      setTimeout(updateBotControlBar, 2000);
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.style.opacity = "1";
+        updateBotControlBar();
+      }, 2000);
     });
 }
 
