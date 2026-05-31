@@ -379,10 +379,6 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <div class="settings-section">
       <div class="settings-section-title">🔊 Notification Sounds</div>
       <div id="soundsList"></div>
-      <label class="upload-label">
-        📁 Upload Custom Sound
-        <input type="file" accept="audio/*" onchange="handleSoundUpload(this)">
-      </label>
     </div>
   </div>
 </div>
@@ -2856,7 +2852,17 @@ function speakText(text) {
 }
 
 function announceBuy(count) {
-  playBeep(900, 0.15, 0.35);
+  const customBeep = localStorage.getItem("customSound_buy");
+  if (customBeep) {
+    try {
+      const audio = new Audio(customBeep);
+      audio.play().catch(e => console.log("Play failed:", e));
+    } catch(e) {
+      playBeep(900, 0.15, 0.35);
+    }
+  } else {
+    playBeep(900, 0.15, 0.35);
+  }
   setTimeout(() => {
     const text = count > 1
       ? `you just bought ${count} contracts`
@@ -2894,7 +2900,17 @@ function playSadTrumpet() {
 function announceSell(count, profit) {
   if (profit > 0) {
     // Profit - happy cha-ching
-    chaChing();
+    const customProfit = localStorage.getItem("customSound_profit");
+    if (customProfit) {
+      try {
+        const audio = new Audio(customProfit);
+        audio.play().catch(e => console.log("Play failed:", e));
+      } catch(e) {
+        chaChing();
+      }
+    } else {
+      chaChing();
+    }
     setTimeout(() => {
       const contractText = count > 1 ? `you sold ${count} contracts` : "you sold a contract";
       const profitText = `and made +$${profit.toFixed(2)} profit`;
@@ -2902,7 +2918,17 @@ function announceSell(count, profit) {
     }, 600);
   } else if (profit < 0) {
     // Loss - sad trumpet
-    playSadTrumpet();
+    const customLoss = localStorage.getItem("customSound_loss");
+    if (customLoss) {
+      try {
+        const audio = new Audio(customLoss);
+        audio.play().catch(e => console.log("Play failed:", e));
+      } catch(e) {
+        playSadTrumpet();
+      }
+    } else {
+      playSadTrumpet();
+    }
     setTimeout(() => {
       const contractText = count > 1 ? `you sold ${count} contracts` : "you sold a contract";
       const lossText = `you lost $${Math.abs(profit).toFixed(2)}`;
@@ -3443,51 +3469,70 @@ if (document.readyState === "loading") {
 }
 
 // ── Notification Sounds Settings ──────────────────────────────────
-const soundLibrary = {
-  "Beep (Buy)": () => playBeep(900, 0.15, 0.35),
-  "Cha-ching (Profit)": () => chaChing(),
-  "Sad Trumpet (Loss)": () => playSadTrumpet(),
+const soundTypes = {
+  "buy": { name: "Beep (Buy)", fn: () => playBeep(900, 0.15, 0.35) },
+  "profit": { name: "Cha-ching (Profit)", fn: () => chaChing() },
+  "loss": { name: "Sad Trumpet (Loss)", fn: () => playSadTrumpet() },
 };
 
 function renderSoundsList() {
   const list = document.getElementById("soundsList");
   if (!list) return;
 
-  const items = Object.entries(soundLibrary).map(([name, fn]) => `
-    <div class="sound-item">
-      <span class="sound-name">${name}</span>
-      <button class="sound-btn" onclick="(${fn.toString()})()">▶ Play</button>
-    </div>
-  `).join("");
+  const items = Object.entries(soundTypes).map(([key, {name, fn}]) => {
+    const customSaved = localStorage.getItem(`customSound_${key}`);
+    const displayName = customSaved ? `${name} (Custom)` : name;
+    return `
+      <div class="sound-item">
+        <span class="sound-name">${displayName}</span>
+        <button class="sound-btn" onclick="playSoundByKey('${key}')">▶ Play</button>
+        <label class="upload-label">
+          📁
+          <input type="file" accept="audio/*" onchange="handleSoundUpload(this, '${key}')">
+        </label>
+      </div>
+    `;
+  }).join("");
 
   list.innerHTML = items;
 }
 
-function handleSoundUpload(input) {
+function playSoundByKey(key) {
+  const customData = localStorage.getItem(`customSound_${key}`);
+  if (customData) {
+    // Play custom sound
+    try {
+      const audio = new Audio(customData);
+      audio.play().catch(e => console.log("Play failed:", e));
+    } catch(e) {
+      console.error("Error playing custom sound:", e);
+    }
+  } else {
+    // Play default sound
+    if (soundTypes[key]) {
+      soundTypes[key].fn();
+    }
+  }
+}
+
+function handleSoundUpload(input, soundKey) {
   if (!input.files || !input.files[0]) return;
   const file = input.files[0];
   const reader = new FileReader();
 
   reader.onload = (e) => {
     const audioData = e.target.result;
-    localStorage.setItem("customSound_" + file.name, audioData);
-    toast(`✓ Saved: ${file.name}`, "ok");
-    // Add to library
-    soundLibrary[file.name.split('.')[0]] = () => playCustomSound(audioData);
+    localStorage.setItem(`customSound_${soundKey}`, audioData);
+    toast(`✓ Replaced ${soundTypes[soundKey].name} with ${file.name}`, "ok");
     renderSoundsList();
     input.value = ""; // Reset input
   };
 
-  reader.readAsDataURL(file);
-}
+  reader.onerror = () => {
+    toast("Error reading file", "err");
+  };
 
-function playCustomSound(audioData) {
-  try {
-    const audio = new Audio(audioData);
-    audio.play();
-  } catch(e) {
-    console.error("Error playing custom sound:", e);
-  }
+  reader.readAsDataURL(file);
 }
 
 function switchTab(name) {
