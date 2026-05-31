@@ -2010,6 +2010,7 @@ async function buyOne(idx, override=false) {
     msgEl.textContent = `✓ ${d.contracts} contracts · $${d.spent}`;
     msgEl.className = "row-msg ok";
     toast(`✓ Bought ${d.contracts} ${m.side.toUpperCase()} · ${m.title || m.ticker}`, "ok");
+    announceBuy(d.contracts);
     // Flash the row green so it's obvious the bot bought it
     const row = document.getElementById(`btn-${idx}`)?.closest("tr");
     if (row) {
@@ -2115,7 +2116,11 @@ async function sellPos(ticker, side, count, safeId) {
       ? Math.abs(soldPos.quantity||0) * ((side==="yes"?soldPos.current_yes:soldPos.current_no) - soldPos.buy_price) / 100 : null;
 
     toast(`✓ Sold ${count} ${side.toUpperCase()} · ${marketTitle}`, "ok");
-    if (preProfit) chaChing();
+    if (soldProfit != null && soldProfit > 0) {
+      announceSell(count, soldProfit);
+    } else if (preProfit) {
+      chaChing();
+    }
     addToSaleTicker(marketTitle, soldProfit, side);
     selectedPosTickers.delete(ticker);
 
@@ -2747,9 +2752,27 @@ function renderRecentBuys() {
   wrap.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px">${cards}</div>`;
 }
 
-// ── Cha-ching audio (WebAudio synth, no external file) ──────────────────
+// ── Audio Feedback: Buys, Sells, and Voices ──────────────────────────────
 
 let _audioCtx = null;
+
+function playBeep(freq = 800, duration = 0.2, volume = 0.3) {
+  try {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = _audioCtx;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(volume, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + duration);
+  } catch(e) {}
+}
+
 function chaChing() {
   try {
     if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -2773,6 +2796,46 @@ function chaChing() {
       osc.stop(now + n.t + n.dur + 0.02);
     });
   } catch(e) {}
+}
+
+// Web Speech API for voice announcements
+function speakText(text) {
+  try {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel(); // Cancel any ongoing speech
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.0;
+      utterance.pitch = 1.2;
+      utterance.volume = 1.0;
+      // Try to use a female voice
+      const voices = window.speechSynthesis.getVoices();
+      const femaleVoice = voices.find(v => v.name.includes('Female')) ||
+                          voices.find(v => v.name.includes('woman')) ||
+                          voices.find(v => v.name.includes('Google US English Female')) ||
+                          voices[1] || voices[0];
+      if (femaleVoice) utterance.voice = femaleVoice;
+      window.speechSynthesis.speak(utterance);
+    }
+  } catch(e) {}
+}
+
+function announceBuy(count) {
+  playBeep(900, 0.15, 0.35);
+  setTimeout(() => {
+    const text = count > 1
+      ? `you just bought ${count} contracts`
+      : "you just bought a contract";
+    speakText(text);
+  }, 200);
+}
+
+function announceSell(count, profit) {
+  chaChing();
+  setTimeout(() => {
+    const contractText = count > 1 ? `you sold ${count} contracts` : "you sold a contract";
+    const profitText = `and made ${profit >= 0 ? '+' : ''}$${Math.abs(profit).toFixed(2)} profit`;
+    speakText(contractText + ", " + profitText);
+  }, 600);
 }
 
 // ── Clippy-style floating coach hint ─────────────────────────────────────
