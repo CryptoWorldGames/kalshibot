@@ -396,10 +396,10 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 </div>
 
 <!-- ── Bot Status Bar (BELOW TABS) ─────────────────────────────────────────────── -->
-<div style="display:flex;align-items:center;justify-content:center;gap:20px;padding:4px 16px;border-top:2px solid #00d97e;border-bottom:1px solid var(--border);min-height:28px;background:rgba(0,217,126,0.05);position:relative;z-index:100">
+<div id="botStatusBar" style="display:flex;align-items:center;justify-content:center;gap:20px;padding:6px 16px;border-bottom:1px solid var(--border);min-height:28px;background:#00d97e;position:relative;z-index:100">
   <div style="flex:1;min-width:80px"></div>
-  <div id="botStatusCenter" style="font-size:13px;font-weight:700;color:#00d97e;white-space:nowrap">✓ BOT RUNNING</div>
-  <div id="botStatusRight" style="flex:1;min-width:80px;text-align:right;font-size:11px;color:var(--muted)"></div>
+  <div id="botStatusCenter" style="font-size:13px;font-weight:700;color:#000;white-space:nowrap">✓ BOT RUNNING</div>
+  <div id="botStatusRight" style="flex:1;min-width:80px;text-align:right;font-size:11px;color:#000"></div>
 </div>
 
 <!-- ── Sale Ticker ─────────────────────────────────────────────── -->
@@ -3430,6 +3430,7 @@ function updateBotControlBar() {
     .then(r => r.json())
     .then(d => {
       botIsRunning = d.running;
+      const statusBar = document.getElementById("botStatusBar");
       if (d.running) {
         btn.style.background = "#ff4d4d";
         btn.style.color = "#fff";
@@ -3438,6 +3439,10 @@ function updateBotControlBar() {
         status.style.color = "#00d97e";
         status.style.borderColor = "#00d97e";
         if (centerStatus) centerStatus.textContent = "✓ BOT RUNNING";
+        if (statusBar) {
+          statusBar.style.background = "#00d97e";
+          statusBar.style.display = "flex";
+        }
       } else {
         btn.style.background = "#f5c542";
         btn.style.color = "#000";
@@ -3445,7 +3450,14 @@ function updateBotControlBar() {
         status.textContent = "✗ Bot Stopped";
         status.style.color = "#ff4d4d";
         status.style.borderColor = "#ff4d4d";
-        if (centerStatus) centerStatus.textContent = "✗ BOT STOPPED";
+        if (centerStatus) {
+          centerStatus.textContent = "✗ BOT STOPPED";
+          centerStatus.style.color = "#000";
+        }
+        if (statusBar) {
+          statusBar.style.background = "#ff4d4d";
+          statusBar.style.display = "flex";
+        }
       }
     })
     .catch(e => {
