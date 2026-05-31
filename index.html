@@ -184,10 +184,11 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   padding:14px 20px;font-size:13px;line-height:1.5;
   width:min(520px, calc(100vw - 32px));
   opacity:0;transition:opacity .2s,transform .2s;
-  pointer-events:auto;cursor:text;user-select:all;
+  pointer-events:none;cursor:text;user-select:all;
   z-index:500;box-shadow:0 8px 32px #0008;
   word-break:break-all;white-space:pre-wrap;
 }
+#toast.show{pointer-events:auto}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 #toast.ok{border-color:var(--green);color:var(--green)}
 #toast.err{border-color:var(--red);color:var(--red);border-width:2px}
@@ -996,7 +997,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 
 <!-- ── Bot Control Bar (Bottom Floating) ────────────────────────────── -->
 <div style="position:fixed;bottom:0;left:0;right:0;z-index:50;background:var(--card);border-top:1px solid var(--border);padding:10px 16px;display:flex;gap:8px;align-items:center">
-  <button id="botControlBtn" style="flex:1;background:#ff4d4d;color:#fff;border:1px solid #fff;padding:14px 24px;font-size:16px;font-weight:700;cursor:pointer;text-align:center;white-space:nowrap;user-select:none;transition:all 0.3s;border-radius:0;min-height:50px" title="Stop or restart the bot">⏹ Stop Bot</button>
+  <button id="botControlBtn" style="flex:1;background:#ff4d4d;color:#fff;border:1px solid #fff;padding:14px 24px;font-size:16px;font-weight:700;cursor:pointer;text-align:center;white-space:nowrap;user-select:none;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;transition:all 0.3s;border-radius:0;min-height:50px;position:relative;z-index:10000;pointer-events:auto !important;line-height:1.2" title="Stop or restart the bot">⏹ Stop Bot</button>
   <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;gap:2px;padding:0">
     <span id="botBarStatus" style="font-size:11px;color:#00d97e;background:#000;border:1px solid #00d97e;border-radius:3px;padding:2px 6px;white-space:nowrap;font-weight:600;text-align:center;pointer-events:none">✓ Running</span>
   </div>
@@ -1454,19 +1455,22 @@ function matchPresetLabel(min, max) {
 }
 
 function onProbInput() {
+  // Only update values if "Custom" button is selected - don't auto-switch highlights
+  const customUpActive = document.getElementById("customUpPill")?.classList.contains("active");
+  if (!customUpActive) return; // Ignore typing if Custom not selected
+
   selMin = parseFloat(document.getElementById("minProb").value) || 80;
   selMax = parseFloat(document.getElementById("maxProb").value) || 96;
-  // Update button highlight to match current input values
-  const label = matchPresetLabel(selMin, selMax);
-  activatePills("probGroupUp", label || "Custom");
   saveSettings();
 }
 
 function onProbDownInput() {
+  // Only update values if "Custom" button is selected - don't auto-switch highlights
+  const customDownActive = document.querySelector("#probGroupDown .pill.active")?.textContent.includes("Custom");
+  if (!customDownActive) return; // Ignore typing if Custom not selected
+
   const min = parseFloat(document.getElementById("minProbDown").value) || 80;
   const max = parseFloat(document.getElementById("maxProbDown").value) || 96;
-  const label = matchPresetLabel(min, max);
-  activatePills("probGroupDown", label || "Custom");
   saveSettings();
 }
 
@@ -1573,13 +1577,21 @@ function setProfitDol(dol) {
 }
 
 document.getElementById("profitCustom").oninput = function() {
+  // Only apply custom if "profit" strategy with Custom pill is selected
+  if (stratMode !== "profit") return;
+  const customActive = document.getElementById("profitGroup")?.querySelector(".pill.active")?.textContent.includes("Custom");
+  if (!customActive) return; // Ignore if Custom not selected
+
   stratPct = parseFloat(this.value) || 10;
-  activatePills("profitGroup", "");
   pushStrategy();
 };
 
 document.getElementById("profitDolCustom").oninput = function() {
-  activatePills("profitDolGroup", "");
+  // Only apply custom if "profit_dollars" strategy with Custom pill is selected
+  if (stratMode !== "profit_dollars") return;
+  const customActive = document.getElementById("profitDolGroup")?.querySelector(".pill.active")?.textContent.includes("Custom");
+  if (!customActive) return; // Ignore if Custom not selected
+
   pushStrategy();
   saveSettings();
 };
