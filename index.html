@@ -955,8 +955,8 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 
 <!-- ── Bot Control Bar (Bottom Floating) ────────────────────────────── -->
 <div class="fab-container">
-  <button class="fab" id="botControlBtn" onclick="controlBotFromBar()" style="background:var(--yellow);color:#000;flex:1">🔄 Restart Bot</button>
-  <span id="botBarStatus" style="padding:12px 16px;font-size:13px;color:var(--muted);align-self:center">Bot Status: checking...</span>
+  <button class="fab" id="botControlBtn" style="background:var(--yellow);color:#000;flex:1;cursor:pointer">🔄 Restart Bot</button>
+  <span id="botBarStatus" style="padding:12px 16px;font-size:13px;color:var(--muted);align-self:center;pointer-events:none">Bot Status: checking...</span>
 </div>
 
 <script>
@@ -3154,6 +3154,8 @@ setInterval(checkBotStatus, 10000);
 checkBotStatus(); // Check on page load
 
 // ──── Bottom Bar Bot Control ────────────────────────────────────
+let botIsRunning = false;
+
 function updateBotControlBar() {
   const btn = document.getElementById("botControlBtn");
   const status = document.getElementById("botBarStatus");
@@ -3166,29 +3168,30 @@ function updateBotControlBar() {
   fetch(managerUrl)
     .then(r => r.json())
     .then(d => {
+      botIsRunning = d.running;
       if (d.running) {
         btn.textContent = "⏹ Stop Bot";
-        btn.style.background = "var(--red)";
+        btn.style.background = "#ff4d4d";
         btn.style.color = "#fff";
-        btn.onclick = () => controlBotFromBar("stop");
         status.textContent = "✓ Bot Running";
-        status.style.color = "var(--green)";
+        status.style.color = "#00d97e";
       } else {
         btn.textContent = "🔄 Restart Bot";
-        btn.style.background = "var(--yellow)";
+        btn.style.background = "#f5c542";
         btn.style.color = "#000";
-        btn.onclick = () => controlBotFromBar("restart");
         status.textContent = "✗ Bot Stopped";
-        status.style.color = "var(--red)";
+        status.style.color = "#ff4d4d";
       }
     })
     .catch(e => {
       status.textContent = "Status unknown";
       status.style.color = "var(--muted)";
+      console.error("Status check error:", e);
     });
 }
 
-function controlBotFromBar(action) {
+function handleBotButtonClick() {
+  const action = botIsRunning ? "stop" : "restart";
   const status = document.getElementById("botBarStatus");
   if (!status) return;
 
@@ -3196,21 +3199,31 @@ function controlBotFromBar(action) {
     ? `http://localhost:5001/api/manager/${action}`
     : `http://${window.location.hostname}:5001/api/manager/${action}`;
 
-  status.textContent = "Sending...";
+  status.textContent = `Sending ${action}...`;
   fetch(managerUrl, { method: "POST" })
     .then(r => r.json())
     .then(d => {
-      setTimeout(updateBotControlBar, 500);
+      setTimeout(updateBotControlBar, 1000);
     })
     .catch(e => {
       status.textContent = "Error";
       console.error("Control error:", e);
+      setTimeout(updateBotControlBar, 2000);
     });
 }
 
 // Update bar on page load and every 10 seconds
 updateBotControlBar();
 setInterval(updateBotControlBar, 10000);
+
+// Attach click handler to button (when DOM is ready)
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => {
+    document.getElementById("botControlBtn")?.addEventListener("click", handleBotButtonClick);
+  });
+} else {
+  document.getElementById("botControlBtn")?.addEventListener("click", handleBotButtonClick);
+}
 
 function switchTab(name) {
   window.scrollTo(0, 0); // Jump to top when switching tabs
