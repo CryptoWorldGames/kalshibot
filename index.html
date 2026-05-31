@@ -995,11 +995,9 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 </div>
 
 <!-- ── Bot Control Bar (Bottom Floating) ────────────────────────────── -->
-<div class="fab-container" style="justify-content:flex-start;align-items:center;gap:8px">
-  <button class="fab" id="botControlBtn" style="background:#ff4d4d;color:#fff;cursor:pointer;flex:1;min-width:auto;margin:0;display:flex;align-items:center;justify-content:center;padding:12px 20px;border:1px solid #fff;position:relative">
-    <span style="color:#fff;font-weight:700;font-size:16px">⏹ Stop Bot</span>
-    <span id="botBarStatus" style="position:absolute;right:20px;font-size:13px;color:#00d97e;background:#000;border:1px solid #00d97e;border-radius:4px;padding:4px 10px;pointer-events:none;font-weight:600">✓ Bot Running</span>
-  </button>
+<div class="fab-container" style="justify-content:space-between;align-items:center;gap:8px">
+  <button class="fab" id="botControlBtn" style="background:#ff4d4d;color:#fff;cursor:pointer;flex:1;min-width:auto;margin:0;padding:12px 20px;border:1px solid #fff;text-align:center;font-weight:700;font-size:16px">⏹ Stop Bot</button>
+  <span id="botBarStatus" style="font-size:12px;color:#00d97e;background:#000;border:1px solid #00d97e;border-radius:4px;padding:4px 10px;white-space:nowrap;pointer-events:none;font-weight:600">✓ Bot Running</span>
   <button onclick="window.scrollTo({top:0,behavior:'smooth'})" style="background:transparent;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:8px 12px;transition:color .2s" title="Scroll to top">↑</button>
   <button onclick="saveBtnClick(this)" id="saveBtn" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer;padding:8px 14px;font-size:12px;font-weight:600;transition:all .2s" title="Save settings"><span class="save-text-pc">Save Settings</span><span class="save-text-mobile">Save</span></button>
 </div>
