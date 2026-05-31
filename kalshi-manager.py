@@ -20,6 +20,7 @@ FLASK_PROCESS = None
 FLASK_PORT = 5000
 MANAGER_PORT = 5100  # Manager runs on Flask port + 100
 RUNNING = True
+INTENTIONALLY_STOPPED = False  # Track if user manually stopped Flask
 
 class ManagerHandler(BaseHTTPRequestHandler):
     """HTTP handler for remote control commands"""
@@ -88,11 +89,12 @@ def check_flask_alive():
 
 def start_flask():
     """Start Flask process"""
-    global FLASK_PROCESS
+    global FLASK_PROCESS, INTENTIONALLY_STOPPED
     if FLASK_PROCESS is not None and check_flask_alive():
         print("[manager] Flask already running")
         return
 
+    INTENTIONALLY_STOPPED = False  # Clear the stop flag when user starts it
     print("[manager] Starting Flask...")
     FLASK_PROCESS = subprocess.Popen(
         [sys.executable, "app.py"],
@@ -103,11 +105,12 @@ def start_flask():
 
 def stop_flask():
     """Stop Flask process gracefully"""
-    global FLASK_PROCESS
+    global FLASK_PROCESS, INTENTIONALLY_STOPPED
     if FLASK_PROCESS is None or not check_flask_alive():
         print("[manager] Flask not running")
         return
 
+    INTENTIONALLY_STOPPED = True  # Mark that user stopped it
     print("[manager] Stopping Flask...")
     try:
         FLASK_PROCESS.terminate()
@@ -118,10 +121,10 @@ def stop_flask():
     print("[manager] Flask stopped")
 
 def auto_restart_monitor():
-    """Monitor Flask and auto-restart if it crashes"""
+    """Monitor Flask and auto-restart if it crashes (only if not intentionally stopped)"""
     while RUNNING:
         time.sleep(5)  # Check every 5 seconds
-        if FLASK_PROCESS is not None and not check_flask_alive():
+        if FLASK_PROCESS is not None and not check_flask_alive() and not INTENTIONALLY_STOPPED:
             print("[manager] Flask crashed! Auto-restarting...")
             start_flask()
 
