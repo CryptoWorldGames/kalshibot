@@ -81,6 +81,11 @@ button.sm{padding:6px 16px;font-size:13px}
 .fab-auto{background:var(--blue);color:#fff}
 .fab-auto:hover{opacity:.9;transform:scale(1.02)}
 
+/* ── Responsive Save Button Text ── */
+.save-text-pc{display:inline}
+.save-text-mobile{display:none}
+@media(max-width:767px){.save-text-pc{display:none}.save-text-mobile{display:inline}}
+
 /* ── Layout ── */
 .row{display:flex;flex-wrap:wrap;gap:14px 24px;align-items:flex-end}
 .col{display:flex;flex-direction:column;gap:7px}
@@ -836,6 +841,9 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
       <label class="check-row" style="font-size:14px" title="Hides positions smaller than 1 contract (e.g., 0.5 contracts, 0.08 contracts)">
         <input type="checkbox" id="hideSmallPositions" checked onchange="filterPos();saveSettings()"> Hide fractional positions (&lt;1)
       </label>
+      <label class="check-row" style="font-size:14px" title="Hides positions with 95% or more loss (letting them ride to resolution)">
+        <input type="checkbox" id="hide95LossPositions" onchange="filterPos();saveSettings()"> Hide 95%+ loss (riding)
+      </label>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <select id="posFilterSource" class="filter-sel" onchange="filterPos()">
@@ -955,12 +963,12 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 
 <!-- ── Bot Control Bar (Bottom Floating) ────────────────────────────── -->
 <div class="fab-container" style="justify-content:flex-start;align-items:center;gap:8px">
-  <button class="fab" id="botControlBtn" style="background:var(--yellow);color:#000;cursor:pointer;flex:1;min-width:auto;margin:0;display:flex;align-items:center;justify-content:space-between;padding:12px 20px">
-    <span>🔄 Stop Bot</span>
-    <span id="botBarStatus" style="font-size:12px;color:#000;margin-left:20px;pointer-events:none;opacity:0.8">checking...</span>
+  <button class="fab" id="botControlBtn" style="background:#ff4d4d;color:#fff;cursor:pointer;flex:1;min-width:auto;margin:0;display:flex;align-items:center;justify-content:center;padding:12px 20px;border:1px solid #fff;position:relative">
+    <span style="color:#fff;font-weight:700;font-size:16px">⏹ Stop Bot</span>
+    <span id="botBarStatus" style="position:absolute;right:20px;font-size:13px;color:#00d97e;background:#000;border:1px solid #00d97e;border-radius:4px;padding:4px 10px;pointer-events:none;font-weight:600">✓ Bot Running</span>
   </button>
   <button onclick="window.scrollTo({top:0,behavior:'smooth'})" style="background:transparent;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:8px 12px;transition:color .2s" title="Scroll to top">↑</button>
-  <button onclick="saveSettings();this.textContent='✓ Saved!';this.style.color='var(--green)';setTimeout(()=>{this.textContent='Save';this.style.color='';},2000)" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer;padding:8px 14px;font-size:12px;font-weight:600;transition:all .2s" title="Save settings">Save</button>
+  <button onclick="saveBtnClick(this)" id="saveBtn" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer;padding:8px 14px;font-size:12px;font-weight:600;transition:all .2s" title="Save settings"><span class="save-text-pc">Save Settings</span><span class="save-text-mobile">Save</span></button>
 </div>
 
 <script>
@@ -2279,6 +2287,7 @@ function filterPos() {
   const cat  = document.getElementById("posFilterCat")?.value   || "";
   const sort = document.getElementById("posSort")?.value || "recent";
   const hideSmall = document.getElementById("hideSmallPositions")?.checked || false;
+  const hide95Loss = document.getElementById("hide95LossPositions")?.checked || false;
 
   let filtered = allPositions.filter(p => {
     if (src === "bot"    && !p.bot_bought) return false;
@@ -2287,6 +2296,15 @@ function filterPos() {
     if (hideSmall && Math.abs(p.quantity ?? 0) < 1.0) return false;
     // Hide expired positions (Kalshi API hasn't moved them to settlements yet)
     if (p.close_time && new Date(p.close_time) < new Date()) return false;
+    // Hide positions with 95%+ loss
+    if (hide95Loss && p.buy_price != null) {
+      const side = (p.quantity ?? 0) > 0 ? "yes" : "no";
+      const cur = side === "yes" ? p.current_yes : p.current_no;
+      if (cur != null) {
+        const lossPercent = ((p.buy_price - cur) / p.buy_price) * 100;
+        if (lossPercent >= 95) return false;
+      }
+    }
     return true;
   });
 
@@ -2639,7 +2657,7 @@ function showScanResultsNotif(count) {
 
 // ── Recent Buys (2min sticky card) ─────────────────────────────────────────
 
-const RECENT_BUY_TTL_MS = 120_000;  // 2 minutes
+const RECENT_BUY_TTL_MS = 60_000;  // 1 minute
 let recentBuys = [];
 let recentBuysTimer = null;
 
@@ -3179,12 +3197,14 @@ function updateBotControlBar() {
         btn.querySelector("span:first-child").textContent = "⏹ Stop Bot";
         status.textContent = "✓ Bot Running";
         status.style.color = "#00d97e";
+        status.style.borderColor = "#00d97e";
       } else {
         btn.style.background = "#f5c542";
         btn.style.color = "#000";
         btn.querySelector("span:first-child").textContent = "🔄 Restart Bot";
         status.textContent = "✗ Bot Stopped";
         status.style.color = "#ff4d4d";
+        status.style.borderColor = "#ff4d4d";
       }
     })
     .catch(e => {
@@ -3192,6 +3212,22 @@ function updateBotControlBar() {
       status.style.color = "var(--muted)";
       console.error("Status check error:", e);
     });
+}
+
+function saveBtnClick(btn) {
+  saveSettings();
+  const pcText = btn.querySelector(".save-text-pc");
+  const mobileText = btn.querySelector(".save-text-mobile");
+  const oldPc = pcText?.textContent;
+  const oldMobile = mobileText?.textContent;
+  btn.style.color = "var(--green)";
+  if (pcText) pcText.textContent = "✓ Saved!";
+  if (mobileText) mobileText.textContent = "✓";
+  setTimeout(() => {
+    btn.style.color = "";
+    if (pcText) pcText.textContent = oldPc;
+    if (mobileText) mobileText.textContent = oldMobile;
+  }, 2000);
 }
 
 function handleBotButtonClick() {
@@ -3467,7 +3503,7 @@ const SETTINGS_CHECKBOXES = ["showCrypto","showSports","showPolitics","showEcono
   "showEntertainment","showWeather","showNFL","showNBA","showMLB","showNHL",
   "showSoccer","showGolf","showTennis","showMMA","showCombo","goodLiq","yesOnly",
   "stopProfitDolChk","stopProfitPctChk","stopLossDolChk","stopLossPctChk",
-  "skipAutoSellNearResolution","hideSmallPositions"];
+  "skipAutoSellNearResolution","hideSmallPositions","hide95LossPositions"];
 const SETTINGS_INPUTS = ["buyAmount","maxBuysPerMarket","autoMaxPerScan","autoMaxConcurrent","posSort",
   "autoMins","autoBuysMax","profitCustom","profitDolCustom","minProb","maxProb","timeCustom",
   "stopProfitDol","stopProfitPct","stopLossDol","stopLossPct","skipAutoSellMinutes",
