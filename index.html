@@ -2375,6 +2375,10 @@ function filterPos() {
     // Hide positions with no buy price (incomplete data - likely manual trades)
     if (p.buy_price == null && Math.abs(qty) > 0.001) return false;
 
+    // Hide positions that were recently sold (even if API still shows them as open)
+    const wasSold = _recentlySold.some(s => s.ticker === p.ticker);
+    if (wasSold) return false;
+
     if (src === "bot"    && !p.bot_bought) return false;
     if (src === "kalshi" &&  p.bot_bought) return false;
     if (cat && p.category !== cat)         return false;
