@@ -3179,7 +3179,7 @@ function updatePreview(idx, price_c) {
 
 // ── Tabs ──────────────────────────────────────────────────────────────────
 
-const SOLD_TTL = 10000; // show for 10 seconds
+const SOLD_TTL = 120000; // hide sold positions for 2 min while API updates
 
 function renderRecentlySold() {
   const wrap = document.getElementById("recentlySoldWrap");
