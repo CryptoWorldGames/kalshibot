@@ -23,6 +23,23 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:20px;padding-top:64px}
 
+/* ── Settings Modal ── */
+#settingsModal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center}
+#settingsModal.open{display:flex}
+.settings-dialog{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;width:90%;max-width:450px;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.settings-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;font-size:16px;font-weight:700;color:#fff}
+.settings-close{background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:0;line-height:1}
+.settings-section{margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.settings-section:last-child{border-bottom:none}
+.settings-section-title{font-size:12px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px}
+.sound-item{display:flex;align-items:center;gap:6px;padding:6px;background:var(--hover);border-radius:5px;margin-bottom:6px}
+.sound-name{flex:1;font-size:12px;color:#ddd;max-width:180px;overflow:hidden;text-overflow:ellipsis}
+.sound-btn{background:transparent;border:1px solid var(--border);color:var(--muted);padding:3px 8px;border-radius:4px;font-size:10px;cursor:pointer;transition:all .2s;white-space:nowrap}
+.sound-btn:hover{border-color:var(--green);color:var(--green)}
+.upload-label{display:inline-block;background:transparent;border:1px dashed var(--border);color:var(--muted);padding:4px 8px;border-radius:4px;font-size:10px;cursor:pointer;transition:all .2s;white-space:nowrap}
+.upload-label:hover{border-color:var(--green);color:var(--green)}
+.upload-label input{display:none}
+
 /* ── Top nav ── */
 nav{position:fixed;top:0;left:0;right:0;height:64px;background:#0f0f0f;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 28px;gap:0;z-index:100}
 .nav-logo{font-size:18px;font-weight:800;letter-spacing:-.3px;color:#fff;margin-right:32px}
@@ -348,7 +365,27 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     </div>
     <div id="navPnlAll" style="display:flex;align-items:stretch;gap:0"></div>
   </div>
+  <button onclick="document.getElementById('settingsModal').classList.toggle('open')" style="background:transparent;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:8px 12px;margin-left:auto;transition:color .2s" title="Settings">⚙️</button>
 </nav>
+
+<!-- ── Settings Modal ────────────────────────────────────────────── -->
+<div id="settingsModal">
+  <div class="settings-dialog">
+    <div class="settings-header">
+      <span>⚙️ Settings</span>
+      <button class="settings-close" onclick="document.getElementById('settingsModal').classList.remove('open')">×</button>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">🔊 Notification Sounds</div>
+      <div id="soundsList"></div>
+      <label class="upload-label">
+        📁 Upload Custom Sound
+        <input type="file" accept="audio/*" onchange="handleSoundUpload(this)">
+      </label>
+    </div>
+  </div>
+</div>
 
 
 <!-- ── MAIN ─────────────────────────────────────────────────────── -->
@@ -3398,9 +3435,59 @@ setInterval(updateBotControlBar, 10000);
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("botControlBtn")?.addEventListener("click", handleBotButtonClick);
+    renderSoundsList();
   });
 } else {
   document.getElementById("botControlBtn")?.addEventListener("click", handleBotButtonClick);
+  renderSoundsList();
+}
+
+// ── Notification Sounds Settings ──────────────────────────────────
+const soundLibrary = {
+  "Beep (Buy)": () => playBeep(900, 0.15, 0.35),
+  "Cha-ching (Profit)": () => chaChing(),
+  "Sad Trumpet (Loss)": () => playSadTrumpet(),
+};
+
+function renderSoundsList() {
+  const list = document.getElementById("soundsList");
+  if (!list) return;
+
+  const items = Object.entries(soundLibrary).map(([name, fn]) => `
+    <div class="sound-item">
+      <span class="sound-name">${name}</span>
+      <button class="sound-btn" onclick="(${fn.toString()})()">▶ Play</button>
+    </div>
+  `).join("");
+
+  list.innerHTML = items;
+}
+
+function handleSoundUpload(input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  const reader = new FileReader();
+
+  reader.onload = (e) => {
+    const audioData = e.target.result;
+    localStorage.setItem("customSound_" + file.name, audioData);
+    toast(`✓ Saved: ${file.name}`, "ok");
+    // Add to library
+    soundLibrary[file.name.split('.')[0]] = () => playCustomSound(audioData);
+    renderSoundsList();
+    input.value = ""; // Reset input
+  };
+
+  reader.readAsDataURL(file);
+}
+
+function playCustomSound(audioData) {
+  try {
+    const audio = new Audio(audioData);
+    audio.play();
+  } catch(e) {
+    console.error("Error playing custom sound:", e);
+  }
 }
 
 function switchTab(name) {
