@@ -2371,9 +2371,9 @@ function filterPos() {
   const hide95Loss = document.getElementById("hide95LossPositions")?.checked || false;
 
   let filtered = allPositions.filter(p => {
-    // Hide sold positions (quantity = 0)
+    // Hide sold positions (quantity essentially = 0)
     const qty = p.quantity ?? 0;
-    if (Math.abs(qty) < 0.001) return false;
+    if (Math.abs(qty) < 0.01) return false;  // Hide positions with < 0.01 qty (essentially sold)
 
     // Hide positions with no buy price (incomplete data - likely manual trades)
     if (p.buy_price == null && Math.abs(qty) > 0.001) return false;
