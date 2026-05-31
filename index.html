@@ -3883,11 +3883,20 @@ function loadSettings() {
     activatePills("profitDolGroup", "$" + parseFloat(dolEl.value).toFixed(2));
     pushStrategy();
   }
-  // Derive selMin/selMax from the input fields (single source of truth)
+  // Restore selMin/selMax from saved settings first
+  if (s && s.selMin != null && s.selMax != null) {
+    selMin = parseFloat(s.selMin);
+    selMax = parseFloat(s.selMax);
+  } else {
+    selMin = 85;
+    selMax = 98;
+  }
+
+  // Update input fields to match saved values
   const minEl = document.getElementById("minProb"), maxEl = document.getElementById("maxProb");
   if (minEl && maxEl) {
-    selMin = parseFloat(minEl.value) || 85;
-    selMax = parseFloat(maxEl.value) || 98;
+    minEl.value = selMin;
+    maxEl.value = selMax;
     const presets = ["80–95%","85–98%","90–98%","95–98%"];
     const label = `${selMin}–${selMax}%`;
     activatePills("probGroup", presets.includes(label) ? label : "Custom");
