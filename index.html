@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Kalshi Scanner</title>
+<title>KalshiBot</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%23000' width='100' height='100'/%3E%3Ctext x='50' y='70' font-size='70' font-weight='bold' fill='%2300d97e' text-anchor='middle' font-family='system-ui'>KB%3C/text%3E%3C/svg%3E">
 <style>
 :root {
   --bg:       #0a0a0a;
@@ -38,7 +39,7 @@ button.nav-btn:hover{border-color:var(--green);color:var(--green)}
 button.nav-btn.active{background:var(--green);border-color:var(--green);color:#000;font-weight:700}
 
 /* ── Main content ── */
-.main{padding:16px 32px 80px;max-width:1600px;margin:0 auto}
+.main{padding:16px 32px 80px;width:100%;margin:0 auto;box-sizing:border-box}@media(max-width:1024px){.main{padding:16px 24px 80px}}@media(max-width:768px){.main{padding:12px 16px 80px}}
 h1{font-size:28px;font-weight:700;margin-bottom:4px;color:#fff}
 .sub{color:var(--muted);font-size:16px;margin-bottom:12px}
 
@@ -106,12 +107,14 @@ button.sm{padding:6px 16px;font-size:13px}
 
 /* ── Tables ── */
 .tbl-wrap{border-radius:8px;border:1px solid var(--border)}
-table{width:100%;border-collapse:collapse;background:var(--card)}
+table{width:100%;border-collapse:collapse;background:var(--card);table-layout:auto}
 thead th{background:#181818;color:#fff;font-size:16px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:15px 18px;text-align:left;white-space:nowrap;position:sticky;top:64px;z-index:10;box-shadow:0 1px 0 var(--border)}
+#posFilterHeader{position:sticky;top:64px;z-index:9;background:rgba(10,10,10,.95);backdrop-filter:blur(8px);padding:12px 0;border-bottom:1px solid var(--border)}
+#settlementsHeader{position:sticky;top:64px;z-index:9;background:rgba(10,10,10,.95);backdrop-filter:blur(8px);padding:12px 0;border-bottom:1px solid var(--border)}
 tbody tr{border-top:1px solid var(--border);transition:background .1s}
 tbody tr:hover{background:var(--hover)}
-td{padding:16px 18px;vertical-align:middle;white-space:nowrap;color:#fff;font-size:18px}
-td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+td{padding:12px 10px;vertical-align:middle;white-space:nowrap;color:#fff;font-size:18px;border-right:1px solid var(--border)}
+td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:14px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 
 .badge{display:inline-block;border-radius:5px;font-size:12px;font-weight:700;letter-spacing:.5px;padding:4px 10px}
 .badge.yes{background:#00d97e22;color:var(--green)}
@@ -121,6 +124,7 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
 .cd{font-variant-numeric:tabular-nums;color:var(--yellow);font-size:13px}
 .cd.urgent{color:var(--red);animation:pulse 1s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
 
 .buy-inline{display:flex;align-items:center;gap:6px}
 .buy-inline input{width:68px}
@@ -183,13 +187,30 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
 #fab .fab-scan:disabled{opacity:.6;cursor:default;transform:none}
 
 /* ── Tabs ── */
-.tab-nav{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px}
+.tab-nav{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px;position:sticky;top:64px;background:var(--bg);z-index:99}
 .tab-btn{background:transparent;border:none;border-bottom:3px solid transparent;margin-bottom:-2px;color:#fff;cursor:pointer;font-size:18px;font-weight:600;padding:12px 24px;transition:color .15s;white-space:nowrap}
 .tab-btn:hover{color:#fff}
 .tab-btn.active{border-bottom-color:var(--green);color:#fff}
 .tab-pane{display:none !important;width:100% !important;height:auto !important;margin:0;padding:0}
 .tab-pane.active{display:block !important;width:100% !important;height:auto !important;margin:0;padding:0}
 .pos-badge{background:var(--green);color:#000;border-radius:10px;font-size:10px;font-weight:800;padding:1px 7px;margin-left:5px;vertical-align:middle}
+
+/* ── Sticky position filters (below tab-nav) ── */
+#posFilterHeader{position:sticky;top:104px;background:var(--bg);z-index:98;padding:14px 0;border-bottom:1px solid var(--border)}
+
+/* ── Market title tooltip (desktop only) ── */
+.pos-title-wrapper{position:relative;display:inline-block}
+.pos-title-link{text-decoration:none}
+@media(min-width:768px){
+  .pos-title-link:hover::after{
+    content:attr(data-tooltip);
+    position:absolute;bottom:100%;left:0;right:0;
+    background:#1e1e1e;border:1px solid var(--green);border-radius:6px;
+    padding:8px 12px;margin-bottom:6px;font-size:12px;color:#fff;
+    white-space:normal;word-wrap:break-word;z-index:1000;
+    box-shadow:0 4px 12px rgba(0,0,0,.4)
+  }
+}
 </style>
 </head>
 <body>
@@ -218,10 +239,17 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
 <!-- ── MAIN ─────────────────────────────────────────────────────── -->
 <div class="main">
 
+<!-- ── Control Panel (Mobile Remote Control) ──────────────────── -->
+<div style="display:flex;gap:8px;margin-bottom:14px;padding:8px;background:var(--card);border-radius:8px;border:1px solid var(--border)">
+  <button onclick="controlBot('stop')" style="background:var(--red);color:#fff;padding:8px 16px;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px">⏹ Stop Bot</button>
+  <button onclick="controlBot('restart')" style="background:var(--yellow);color:#000;padding:8px 16px;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px">🔄 Restart</button>
+  <span id="botStatus" style="margin-left:auto;padding:8px 12px;font-size:12px;color:var(--muted);align-self:center">checking...</span>
+</div>
+
 <div class="tab-nav">
   <button class="tab-btn active" onclick="switchTab('scanner')">Scanner</button>
   <button class="tab-btn" id="tabPositions" onclick="switchTab('positions')">Positions</button>
-  <button class="tab-btn" onclick="switchTab('stats')">Stats</button>
+  <button class="tab-btn" onclick="switchTab('debug')">Debug</button>
   <button class="tab-btn" id="tabCoach" onclick="switchTab('coach')">Coach</button>
 </div>
 
@@ -335,6 +363,12 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
         <button class="pill" onclick="setTime(360,'6h')">6h</button>
         <button class="pill" onclick="setTime(720,'12h')">12h</button>
         <button class="pill" onclick="setTime(1440,'24h')">24h</button>
+        <button class="pill" onclick="setTime(2880,'2d')">2d</button>
+        <button class="pill" onclick="setTime(4320,'3d')">3d</button>
+        <button class="pill" onclick="setTime(10080,'1w')">1w</button>
+        <button class="pill" onclick="setTime(20160,'2w')">2w</button>
+        <button class="pill" onclick="setTime(43200,'1m')">1m</button>
+        <button class="pill" onclick="setTime(525600,'All')">All (365d)</button>
         <div class="inline">
           <button class="pill" onclick="setTime('custom')">Custom</button>
           <input type="number" id="timeCustom" value="15" min="1" placeholder="min" style="display:none;width:70px">
@@ -368,7 +402,10 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
       </div>
     </div>
     <div class="col" style="flex:1;min-width:320px">
-      <span class="label-sm" style="margin-bottom:8px;display:block">Show Categories <span style="font-size:11px;color:#666;font-weight:400;text-transform:none">(all on = show everything, uncheck to hide)</span></span>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span class="label-sm" style="margin:0">Show Categories <span style="font-size:11px;color:#666;font-weight:400;text-transform:none">(all on = show everything, uncheck to hide)</span></span>
+        <button class="pill sm" onclick="toggleAllCategories()" style="font-size:12px;padding:4px 12px">Select All</button>
+      </div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px 16px;margin-bottom:12px">
         <label class="check-row"><input type="checkbox" id="showCrypto" checked onchange="saveSettings();toggleCryptoTimes()"> Crypto</label>
         <label class="check-row"><input type="checkbox" id="showSports" checked onchange="saveSettings()"> Sports</label>
@@ -503,9 +540,9 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
         </div>
       </div>
 
-      <!-- Stop if -->
+      <!-- Stop if / Stop Loss -->
       <div>
-        <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Stop if</div>
+        <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Stop Loss — Auto-sell if you lose X</div>
         <div style="display:flex;flex-direction:column;gap:7px">
           <div style="display:flex;align-items:center;gap:8px">
             <label class="check-row" style="font-size:13px;width:80px"><input type="checkbox" id="stopProfitDolChk" style="accent-color:var(--green)"> Profit ≥</label>
@@ -518,13 +555,13 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
             <span style="color:#aaa;font-size:13px">%</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-            <label class="check-row" style="font-size:13px;width:80px"><input type="checkbox" id="stopLossDolChk" style="accent-color:var(--red)"> Loss ≥</label>
+            <label class="check-row" style="font-size:13px;width:80px"><input type="checkbox" id="stopLossDolChk" style="accent-color:var(--red)" onchange="pushSellSettings();checkStrategyConflicts()"> Loss ≥</label>
             <span style="color:#aaa;font-size:13px">$</span>
-            <input type="number" id="stopLossDol" value="10" min="0.01" step="0.01" style="width:100px">
+            <input type="number" id="stopLossDol" value="10" min="0.01" step="0.01" style="width:100px" oninput="pushSellSettings();checkStrategyConflicts()">
           </div>
           <div style="display:flex;align-items:center;gap:8px">
-            <label class="check-row" style="font-size:13px;width:80px"><input type="checkbox" id="stopLossPctChk" style="accent-color:var(--red)"> Loss ≥</label>
-            <input type="number" id="stopLossPct" value="20" min="0.1" step="0.1" style="width:100px">
+            <label class="check-row" style="font-size:13px;width:80px"><input type="checkbox" id="stopLossPctChk" style="accent-color:var(--red)" onchange="pushSellSettings();checkStrategyConflicts()"> Loss ≥</label>
+            <input type="number" id="stopLossPct" value="20" min="0.1" step="0.1" style="width:100px" oninput="pushSellSettings();checkStrategyConflicts()">
             <span style="color:#aaa;font-size:13px">%</span>
           </div>
         </div>
@@ -616,7 +653,7 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
             style="width:72px;background:#111;border:2px solid var(--yellow);border-radius:7px;color:var(--yellow);font-size:15px;font-weight:700;padding:7px 10px;outline:none"
             placeholder="¢ buy"
             onclick="setStrategy('target_price')"
-            onblur="setStrategy('target_price');saveSettings();pushStrategy()">
+            onblur="setStrategy('target_price');saveSettings();pushStrategy();checkStrategyConflicts()">
           <span style="color:var(--yellow);font-size:14px;font-weight:700">¢</span>
         </div>
       </div>
@@ -637,7 +674,7 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
             style="width:72px;background:#111;border:2px solid var(--green);border-radius:7px;color:var(--green);font-size:15px;font-weight:700;padding:7px 10px;outline:none"
             placeholder="¢ sell"
             onclick="setStrategy('target_price')"
-            onblur="setStrategy('target_price');saveSettings();pushStrategy()">
+            onblur="setStrategy('target_price');saveSettings();pushStrategy();checkStrategyConflicts()">
           <span style="color:var(--green);font-size:14px;font-weight:700">¢</span>
         </div>
       </div>
@@ -668,18 +705,20 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
   <div class="sum-row" id="sumRow"></div>
 </div>
 
+</div>
 </div><!-- /tab-scanner -->
 
 <!-- ── Positions tab ────────────────────────────────────────────── -->
 <div id="tab-positions" class="tab-pane">
-  <div id="recentlySoldWrap" style="margin-bottom:14px"></div>
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+  <div id="recentlySoldWrap" style="margin-bottom:12px;padding:8px;background:var(--card);border-radius:8px;border:1px solid var(--border);overflow-x:auto;overflow-y:hidden;max-height:44px"></div>
+  <div id="posFilterHeader" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <div class="card-title" style="margin:0;font-size:15px;color:#fff;font-weight:700">Open Positions</div>
       <select id="posSort" class="filter-sel" onchange="filterPos();saveSettings()" style="font-size:13px;padding:6px 10px">
         <option value="recent">↓ Most Recent</option>
         <option value="profit_desc">↓ Most Profit Now (sell today)</option>
         <option value="profit_asc">↑ Biggest Loss Now</option>
+        <option value="profit_smallest_loss">↓ Smallest Loss Now</option>
         <option value="maxprofit_desc">↓ Most Profit Potential (if wins)</option>
         <option value="maxprofit_asc">↑ Least Profit Potential</option>
         <option value="captured_desc">↓ Most Captured %</option>
@@ -691,6 +730,9 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
         <option value="price_desc">↓ Highest Odds</option>
         <option value="price_asc">↑ Lowest Odds</option>
       </select>
+      <label class="check-row" style="font-size:14px" title="Hides positions smaller than 1 contract (e.g., 0.5 contracts, 0.08 contracts)">
+        <input type="checkbox" id="hideSmallPositions" checked onchange="filterPos();saveSettings()"> Hide fractional positions (&lt;1)
+      </label>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <select id="posFilterSource" class="filter-sel" onchange="filterPos()">
@@ -707,7 +749,9 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
   </div>
   <div id="posWrap"><div style="text-align:center;color:var(--muted);padding:40px;font-size:14px">No open positions — buy something in the Scanner tab.</div></div>
 
-  <div style="display:flex;align-items:center;justify-content:space-between;margin:22px 0 10px;flex-wrap:wrap;gap:10px">
+  <div id="recentSettlementsTickerWrap" style="margin-top:16px;margin-bottom:12px;padding:8px;background:var(--card);border-radius:8px;border:1px solid var(--border);overflow-x:auto;overflow-y:hidden;max-height:44px"></div>
+
+  <div id="settlementsHeader" style="display:flex;align-items:center;justify-content:space-between;margin:22px 0 10px;flex-wrap:wrap;gap:10px">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <div class="card-title" style="margin:0;font-size:14px" id="settlementsTitle">Recent Settlements</div>
       <div style="display:flex;gap:4px">
@@ -723,11 +767,13 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
   <div id="settlementsWrap"><div style="text-align:center;color:var(--muted);padding:24px;font-size:13px">No settlements in the last 24 hours.</div></div>
 </div><!-- /tab-positions -->
 
-<!-- ── Stats tab ─────────────────────────────────────────────────── -->
-<div id="tab-stats" class="tab-pane">
+<!-- ── Instructions tab ─────────────────────────────────────────────────── -->
+
+<!-- ── Debug tab ─────────────────────────────────────────────────── -->
+<div id="tab-debug" class="tab-pane">
   <div class="card">
     <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
-      Performance Stats
+      Server Diagnostics
       <div style="display:flex;align-items:center;gap:10px">
         <span id="scanLogInfo" style="color:#666;font-size:11px;font-weight:400;text-transform:none;letter-spacing:0">—</span>
         <button class="sm ghost" style="font-size:12px;padding:4px 14px" onclick="loadStats()">Refresh</button>
@@ -747,7 +793,7 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
     <div style="font-size:12px;color:#666;margin-bottom:10px">Shows what the scanner sees right now — all markets expiring soon, with filter reasons</div>
     <div id="debugScanOut" style="color:var(--muted);font-size:12px;font-family:monospace;max-height:400px;overflow-y:auto;white-space:pre-wrap">Click "Run Preview" to see what markets are available right now.</div>
   </div>
-</div><!-- /tab-stats -->
+</div><!-- /tab-debug -->
 
 <!-- ── Coach tab ─────────────────────────────────────────────────── -->
 <div id="tab-coach" class="tab-pane">
@@ -815,6 +861,24 @@ td.wrap{white-space:normal;max-width:280px;line-height:1.5;font-size:14px;overfl
     <span>Scan Now<div class="fab-sub">one-time · no buying</div></span>
   </button>
 </div>
+
+<!-- Bottom Save Button & Scroll to Top -->
+<div style="position:fixed;bottom:180px;right:20px;z-index:100;display:flex;flex-direction:column;gap:10px;align-items:flex-end">
+  <button id="saveSettingsBtnBottom" onclick="saveSettings();this.textContent='✓ Saved!';this.style.background='var(--green)';this.style.color='#000';setTimeout(()=>{this.textContent='Save Settings';this.style.background='';this.style.color='';},2000)" style="background:var(--card);border:1px solid var(--border);color:#fff;border-radius:7px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;transition:all .15s">Save Settings</button>
+  <button id="scrollTopBtn" onclick="window.scrollTo({top:0,behavior:'smooth'})" style="display:none;background:var(--card);border:1px solid var(--border);color:#fff;border-radius:7px;padding:10px 14px;font-size:20px;cursor:pointer;transition:all .15s;width:48px;height:48px;display:flex;align-items:center;justify-content:center" title="Back to top">↑</button>
+</div>
+
+<script>
+// Show/hide scroll-to-top button
+window.addEventListener('scroll', () => {
+  const btn = document.getElementById('scrollTopBtn');
+  if (window.scrollY > 300) {
+    btn.style.display = 'flex';
+  } else {
+    btn.style.display = 'none';
+  }
+});
+</script>
 
 <div id="toast"></div>
 
@@ -915,9 +979,10 @@ function setSettleFilter(hours, label) {
   loadBalanceThrottled(true); // force refresh when changing settlement period
 }
 
-async function loadBalance() {
+async function loadBalance(enrich=true) {
   try {
-    const r = await fetch(`/api/portfolio?settlement_hours=${_settleHours}`);
+    const enrichParam = enrich ? "true" : "false";
+    const r = await fetch(`/api/portfolio?enrich=${enrichParam}&settlement_hours=${_settleHours}`, {timeout: 8000});
     const d = await r.json();
     if (d.balance != null) {
       const el = document.getElementById("navCash");
@@ -958,8 +1023,10 @@ async function loadBalance() {
     renderRecentlySold();
     window._lastSettlements = d.recent_settlements || [];
     renderSettlements(window._lastSettlements);
+    renderSettlementsTickerTicker();
     checkAutoStopConditions();
     refreshPnlDisplay();
+    hideNavLoading();
     // Auto-restart if we were waiting for cash and now have enough
     if (_waitingForCash && !autoModeOn) {
       const cashNow = parseFloat((document.getElementById("navCash")?.textContent || "0").replace("$","")) || 0;
@@ -969,7 +1036,11 @@ async function loadBalance() {
         startAutoMode();
       }
     }
-  } catch(e) {}
+  } catch(e) {
+    console.error("[loadBalance error]", e);
+  } finally {
+    hideNavLoading();
+  }
 }
 
 let _settleSortBy = "recent";
@@ -1018,8 +1089,8 @@ function renderSettlements(rows) {
       : won === false
         ? `<span class="badge no" style="background:rgba(255,80,80,.15);color:var(--red)">LOST</span>`
         : `<span class="badge" style="background:#333;color:#aaa">—</span>`;
-    const titleHtml = r.kalshi_url
-      ? `<a href="${r.kalshi_url}" target="_blank" style="color:#ccc;text-decoration:none" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='#ccc'">${esc(r.title)}<span style="font-size:10px;margin-left:4px;opacity:.5">↗</span></a>`
+    const titleHtml = r.ticker
+      ? `<a href="${r.kalshi_url || '#'}" target="_blank" style="color:#ccc;text-decoration:none" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='#ccc'">${esc(r.title)}<span style="font-size:10px;margin-left:4px;opacity:.5">↗</span></a>`
       : esc(r.title);
     const catTag = r.category ? `<div style="font-size:11px;color:#666;margin-top:3px">${esc(r.category)}</div>` : "";
     return `
@@ -1042,9 +1113,18 @@ function renderSettlements(rows) {
     const arrow = sSort===desc ? ' ↑' : sSort===asc ? ' ↓' : ' ↕';
     return `<th onclick="_settleSortBy='${next}';renderSettlements(window._lastSettlements||[])" style="cursor:pointer;${active?'color:var(--green)':''};white-space:nowrap">${label}${arrow}</th>`;
   }
+  // Calculate totals for settlements table row (totalPnl already calculated above)
+  let totalQty = 0, totalCost = 0, totalRevenue = 0;
+  rows.forEach(r => {
+    totalQty += (r.count || 0);
+    totalCost += (r.cost || 0);
+    totalRevenue += (r.revenue || 0);
+  });
+  const totalPnlCls = totalPnl > 0 ? "pos" : totalPnl < 0 ? "neg" : "neu";
+
   wrap.innerHTML = `
     <div class="tbl-wrap"><table>
-      <thead><tr>
+      <thead style="position:sticky;top:64px;z-index:10"><tr>
         ${sHdr('Market','title_asc','title_desc')}
         ${sHdr('Result','won_asc','won_desc')}
         ${sHdr('How Sold','howsold_asc','howsold_desc')}
@@ -1052,21 +1132,146 @@ function renderSettlements(rows) {
         ${sHdr('P&L','pnl_asc','pnl_desc')}
         ${sHdr('Settled (CDT)','recent_asc','recent')}
       </tr></thead>
-      <tbody>${body}</tbody>
+      <tbody>${body}
+        <tr style="border-top:2px solid var(--green);background:#0a1f14;font-weight:700">
+          <td colspan="4">TOTALS</td>
+          <td>$${totalQty.toFixed(2)}</td>
+          <td>$${totalCost.toFixed(2)}</td>
+          <td>$${totalRevenue.toFixed(2)}</td>
+          <td class="${totalPnlCls}">${totalPnl >= 0 ? '+' : ''}$${totalPnl.toFixed(2)}</td>
+          <td></td>
+        </tr>
+      </tbody>
     </table></div>`;
 }
+// Initialize nav with skeleton/placeholders so it's visible immediately
+const navCashEl = document.getElementById("navCash");
+const navPosEl = document.getElementById("navPositions");
+const navPortEl = document.getElementById("navPortfolio");
+if (navCashEl) navCashEl.textContent = "—";
+if (navPosEl) navPosEl.textContent = "—";
+if (navPortEl) navPortEl.textContent = "—";
+
+// Show loading indicator
+let _navLoadingIndicator = null;
+function showNavLoading() {
+  if (_navLoadingIndicator) return;
+  _navLoadingIndicator = document.createElement("div");
+  _navLoadingIndicator.style.cssText = `position:fixed;top:20px;right:20px;background:#1e3a5f;border:1px solid #4f9eff;border-radius:6px;padding:6px 12px;font-size:11px;color:#4f9eff;z-index:50;font-weight:600;letter-spacing:.5px`;
+  _navLoadingIndicator.textContent = "⟳ Loading new data...";
+  document.body.appendChild(_navLoadingIndicator);
+}
+function hideNavLoading() {
+  if (_navLoadingIndicator) { _navLoadingIndicator.remove(); _navLoadingIndicator = null; }
+}
+showNavLoading();
+// Auto-hide loading indicator after 15s timeout (safeguard if API is slow/fails)
+setTimeout(() => hideNavLoading(), 15000);
+
 // Show cached positions immediately while API loads
 try {
   const cached = localStorage.getItem("kb_positions");
   if (cached) renderBotPositions(JSON.parse(cached));
 } catch(e) {}
-loadBalance();
-loadPnl();
-setInterval(loadBalance, 60000);
-setInterval(loadPnl, 300000); // refresh PnL data every 5 min
+
+// Defer API calls until page is interactive (speeds up hard refresh)
+// Progressive loading: show positions fast, enrich market data next
+async function enrichPositionMarkets() {
+  const tickers = allPositions.map(p => p.ticker).filter(Boolean);
+  if (!tickers.length) return;
+
+  try {
+    const r = await fetch(`/api/enrich-positions?tickers=${tickers.slice(0,20).join(",")}`, {timeout: 10000});
+    const enriched = await r.json() || {};
+
+    // Merge enriched data into allPositions
+    for (const pos of allPositions) {
+      const data = enriched[pos.ticker];
+      if (data) {
+        if (data.event_ticker) pos.event_ticker = data.event_ticker;
+        if (data.title) pos.title = data.title;
+        if (data.category) pos.category = data.category;
+        if (data.current_yes != null) pos.current_yes = data.current_yes;
+        if (data.current_no != null) pos.current_no = data.current_no;
+        if (data.close_time) pos.close_time = data.close_time;
+        if (data.kalshi_url) pos.kalshi_url = data.kalshi_url;
+      }
+    }
+
+    // Re-render positions with enriched data
+    renderBotPositions(allPositions);
+  } catch(e) {
+    console.warn("[enrich] error fetching market data:", e);
+  }
+}
+
+window.addEventListener("load", () => {
+  // Phase 1 (0-2s): Load positions + balance WITHOUT market enrichment
+  loadBalance(false);
+
+  // Phase 2 (2-5s): Enrich positions with market data
+  setTimeout(() => {
+    enrichPositionMarkets();
+  }, 1500);
+
+  // Phase 3 (5-10s+): Load full balance with settlements (background)
+  setTimeout(() => {
+    loadBalance(true);
+    loadPnl();
+  }, 5000);
+}, {once: true});
+// Global background intervals (paused when page is hidden)
+let _bgBalanceInterval = null, _bgPnlInterval = null;
+function startBackgroundRefresh() {
+  if (_bgBalanceInterval) return;
+  _bgBalanceInterval = setInterval(loadBalance, 60000);
+  _bgPnlInterval = setInterval(loadPnl, 300000);
+}
+function stopBackgroundRefresh() {
+  if (_bgBalanceInterval) clearInterval(_bgBalanceInterval);
+  if (_bgPnlInterval) clearInterval(_bgPnlInterval);
+  _bgBalanceInterval = null;
+  _bgPnlInterval = null;
+}
+startBackgroundRefresh();
+
+// Pause all refreshes when page is hidden (not visible)
+let _scanTimerWasPaused = false;
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    stopBackgroundRefresh();
+    if (window._posTabRefresh) { clearInterval(window._posTabRefresh); window._posTabRefresh = null; }
+    if (window._statsRefresh) { clearInterval(window._statsRefresh); window._statsRefresh = null; }
+    if (window._coachRefresh) { clearInterval(window._coachRefresh); window._coachRefresh = null; }
+    // Pause scan if running
+    if (scanTimer) { clearInterval(scanTimer); scanTimer = null; _scanTimerWasPaused = true; }
+  } else {
+    // Page became visible again
+    startBackgroundRefresh();
+    // Resume scan if it was paused
+    if (_scanTimerWasPaused && autoModeOn) { scanTimer = setInterval(scan, 30000); _scanTimerWasPaused = false; }
+    // Re-start active tab's refresh
+    const activeBtn = document.querySelector(".tab-btn.active");
+    if (activeBtn) {
+      const match = activeBtn.getAttribute("onclick")?.match(/'(\w+)'/);
+      if (match) switchTab(match[1]);
+    }
+  }
+});
 
 
 // ── Filter pills ──────────────────────────────────────────────────────────
+
+function toggleAllCategories() {
+  const catIds = ["showCrypto","showSports","showPolitics","showEconomics","showEntertainment",
+    "showWeather","showNFL","showNBA","showMLB","showNHL","showSoccer","showGolf","showTennis","showMMA","showCombo"];
+  const allChecked = catIds.every(id => document.getElementById(id)?.checked);
+  catIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.checked = !allChecked;
+  });
+  saveSettings();
+}
 
 function toggleCryptoTimes() {
   const wrap = document.getElementById("cryptoTimeWrap");
@@ -1080,6 +1285,7 @@ function setRangeUp(min, max) {
   document.getElementById("minProb").value = min;
   document.getElementById("maxProb").value = max;
   activatePills("probGroupUp", `${min}–${max}%`);
+  onProbInput(); // Force full sync
   saveSettings();
 }
 
@@ -1114,6 +1320,7 @@ function matchPresetLabel(min, max) {
 function onProbInput() {
   selMin = parseFloat(document.getElementById("minProb").value) || 80;
   selMax = parseFloat(document.getElementById("maxProb").value) || 96;
+  // Update button highlight to match current input values
   const label = matchPresetLabel(selMin, selMax);
   activatePills("probGroupUp", label || "Custom");
   saveSettings();
@@ -1127,20 +1334,7 @@ function onProbDownInput() {
   saveSettings();
 }
 
-document.getElementById("minProb").oninput = function() {
-  selMin = parseFloat(this.value) || 85;
-  const label = `${selMin}–${selMax}%`;
-  const presets = ["80–95%","85–98%","90–98%","95–98%"];
-  activatePills("probGroup", presets.includes(label) ? label : "Custom");
-  saveSettings();
-};
-document.getElementById("maxProb").oninput = function() {
-  selMax = parseFloat(this.value) || 98;
-  const label = `${selMin}–${selMax}%`;
-  const presets = ["80–95%","85–98%","90–98%","95–98%"];
-  activatePills("probGroup", presets.includes(label) ? label : "Custom");
-  saveSettings();
-};
+// Removed duplicate/broken handlers — HTML already has oninput="onProbInput()" and onProbDownInput()
 
 function setTime(val, label) {
   selTime = val === "custom" ? parseInt(document.getElementById("timeCustom").value) : val;
@@ -1189,6 +1383,28 @@ function checkStrategyConflicts() {
     const upMax = parseFloat(document.getElementById("maxProb")?.value) || 96;
     if (buyIn > 0 && upMax > buyIn) {
       msg = `⚠ Conflict: Filter buys up to ${upMax}¢ but "Buy at" max is ${buyIn}¢ — raise Buy Up "to" to match, or lower it.`;
+    }
+
+    // Check stop-loss conflict
+    const sellAt = parseFloat(document.getElementById("targetPriceCustom")?.value) || 0;
+    const stopLossPctChk = document.getElementById("stopLossPctChk")?.checked;
+    const stopLossPct = parseFloat(document.getElementById("stopLossPct")?.value) || 0;
+
+    if (buyIn > 0 && sellAt > 0 && stopLossPctChk && stopLossPct > 0) {
+      // Calculate stop-loss trigger price
+      const isLong = sellAt > buyIn;  // buying low, selling high
+      const stopPrice = isLong
+        ? buyIn * (1 - stopLossPct / 100)  // stop below buy
+        : buyIn * (1 + stopLossPct / 100);  // stop above buy (shorting)
+
+      // Check if sell price conflicts with stop-loss
+      const conflict = isLong
+        ? (sellAt < stopPrice)  // selling below stop-loss trigger
+        : (sellAt > stopPrice);  // selling above stop-loss trigger (shorting)
+
+      if (conflict) {
+        msg = `⚠️ CONFLICT: "Sell at ${sellAt}¢" will trigger before Stop-Loss ${stopLossPct}% (${stopPrice.toFixed(1)}¢). Adjust one or turn off.`;
+      }
     }
   }
   warn.textContent = msg;
@@ -1255,9 +1471,18 @@ async function pushSellSettings() {
   try {
     const skip = document.getElementById("skipAutoSellNearResolution").checked;
     const mins = parseInt(document.getElementById("skipAutoSellMinutes").value) || 1;
+    const stopLossPctChk = document.getElementById("stopLossPctChk").checked;
+    const stopLossPct = stopLossPctChk ? parseFloat(document.getElementById("stopLossPct").value) : null;
+    const stopLossDolChk = document.getElementById("stopLossDolChk").checked;
+    const stopLossDol = stopLossDolChk ? parseFloat(document.getElementById("stopLossDol").value) : null;
     await fetch("/api/sell-settings", {
       method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({skip_auto_sell_near_resolution: skip, skip_auto_sell_minutes: mins}),
+      body: JSON.stringify({
+        skip_auto_sell_near_resolution: skip,
+        skip_auto_sell_minutes: mins,
+        stop_loss_pct: stopLossPct,
+        stop_loss_dol: stopLossDol,
+      }),
     });
   } catch(e){}
 }
@@ -1703,7 +1928,7 @@ async function buyOne(idx, override=false) {
       if (m.event_ticker) autoModeBoughtSet.add("event:" + m.event_ticker);
     }
     // Force refresh after 3s so new position appears immediately
-    setTimeout(() => loadBalanceThrottled(true), 3000);
+    setTimeout(() => loadBalanceThrottled(true), 8000);
     startPosMon();
   } catch(e) {
     msgEl.textContent = e.message;
@@ -1759,7 +1984,7 @@ async function sellPos(ticker, side, count, safeId) {
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "Sell failed");
-    const soldPos = allPositions.find(p => p.ticker === ticker);
+    const soldPos = allPositions.find(p => p.ticker === ticker && p.side === side);
     const marketTitle = soldPos?.title || ticker;
     const soldProfit = (soldPos?.buy_price != null && soldPos?.current_yes != null)
       ? Math.abs(soldPos.quantity||0) * ((side==="yes"?soldPos.current_yes:soldPos.current_no) - soldPos.buy_price) / 100 : null;
@@ -1767,13 +1992,13 @@ async function sellPos(ticker, side, count, safeId) {
     if (preProfit) chaChing();
     addToSaleTicker(marketTitle, soldProfit, side);
     selectedPosTickers.delete(ticker);
-    // Immediately remove from allPositions so it doesn't reappear
-    allPositions = allPositions.filter(p => p.ticker !== ticker);
+    // Immediately remove from allPositions so it doesn't reappear (remove specific ticker+side, not all with same ticker)
+    allPositions = allPositions.filter(p => !(p.ticker === ticker && p.side === side));
     filterPos();
-    setTimeout(() => loadBalanceThrottled(true), 3000);
+    setTimeout(() => loadBalanceThrottled(true), 8000);
   } catch(e) {
     toast(e.message,"err");
-    if (btn) { btn.disabled = false; btn.textContent = "Sell All"; }
+    if (btn) { btn.disabled = false; btn.textContent = "Sell This"; }
     // Restore the position if sell failed — put it back in the list
     loadBalanceThrottled(true);
   }
@@ -1802,8 +2027,8 @@ function renderMarkets() {
     const mainTitle = m.title || m.ticker;
     const subQ      = m.market_q && m.market_q !== mainTitle
       ? `<div style="font-size:11px;color:#888;margin-top:3px;font-style:italic">${esc(m.market_q.length > 80 ? m.market_q.slice(0,80)+"…" : m.market_q)}</div>` : "";
-    const titleHtml = m.kalshi_url
-      ? `<a href="${m.kalshi_url}" target="_blank" style="color:#fff;text-decoration:none;font-weight:600" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='#fff'">${esc(mainTitle)}<span style="font-size:10px;margin-left:3px;opacity:.5">↗</span></a>${subQ}`
+    const titleHtml = m.ticker
+      ? `<a href="${m.kalshi_url || '#'}" target="_blank" style="color:#fff;text-decoration:none;font-weight:600" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='#fff'">${esc(mainTitle)}<span style="font-size:10px;margin-left:3px;opacity:.5">↗</span></a>${subQ}`
       : `<span style="font-weight:600">${esc(mainTitle)}</span>${subQ}`;
     const catTag  = m.category ? `<div style="font-size:11px;color:#666;margin-top:2px">${esc(m.category)}</div>` : "";
     const owned   = allPositions.some(p => p.ticker === m.ticker);
@@ -1817,9 +2042,9 @@ function renderMarkets() {
     return `
     <tr${owned ? ' style="background:#0a1a10"' : ''}>
       <td style="padding:10px 8px;width:36px"><input type="checkbox" ${owned ? "" : "checked"} id="mchk-${i}" style="accent-color:var(--green);width:15px;height:15px;cursor:pointer" onchange="updateMarketCheck(${i},this.checked)"></td>
-      <td style="white-space:normal;max-width:280px;vertical-align:middle">
-        <div style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.5;font-size:14px">${titleHtml}${ownedBadge}${catTag}</div>
-        ${lowOddsBadge}
+      <td style="white-space:normal;width:auto;vertical-align:middle">
+        <div style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.5;font-size:14px">${titleHtml}${catTag}</div>
+        ${ownedBadge}${lowOddsBadge}
       </td>
       <td><span class="badge ${m.side}">${m.side.toUpperCase()}</span></td>
       <td class="price-big">${m.price}¢</td>
@@ -1958,11 +2183,15 @@ function filterPos() {
   const src  = document.getElementById("posFilterSource")?.value || "";
   const cat  = document.getElementById("posFilterCat")?.value   || "";
   const sort = document.getElementById("posSort")?.value || "recent";
+  const hideSmall = document.getElementById("hideSmallPositions")?.checked || false;
 
   let filtered = allPositions.filter(p => {
     if (src === "bot"    && !p.bot_bought) return false;
     if (src === "kalshi" &&  p.bot_bought) return false;
     if (cat && p.category !== cat)         return false;
+    if (hideSmall && Math.abs(p.quantity ?? 0) < 1.0) return false;
+    // Hide expired positions (Kalshi API hasn't moved them to settlements yet)
+    if (p.close_time && new Date(p.close_time) < new Date()) return false;
     return true;
   });
 
@@ -1981,6 +2210,11 @@ function filterPos() {
       return (getPnl(b) ?? -999) - (getPnl(a) ?? -999);
     } else if (sort === "profit_asc") {
       return (getPnl(a) ?? 999) - (getPnl(b) ?? 999);
+    } else if (sort === "profit_smallest_loss") {
+      // Smallest loss = closest to zero (least negative), then positive
+      const pnlA = getPnl(a) ?? 0, pnlB = getPnl(b) ?? 0;
+      // Sort by: losses closest to zero first, then profits highest first
+      return pnlA < 0 && pnlB < 0 ? pnlB - pnlA : pnlB - pnlA;
     } else if (sort === "value_desc") {
       const side = p => (p.quantity ?? 0) > 0 ? "yes" : "no";
       const val  = p => Math.abs(p.quantity ?? 0) * ((side(p) === "yes" ? p.current_yes : p.current_no) ?? 0) / 100;
@@ -2060,9 +2294,11 @@ function renderPositionsTable(positions) {
     const spent   = p.buy_price != null ? abs * p.buy_price / 100 : null;
     const valNow  = cur != null ? abs * cur / 100 : null;
     const maxWin  = spent != null ? abs * 0.99 - spent : null;
-    // "Captured" = current unrealized profit ÷ max possible profit
+    // "Captured" = current unrealized profit ÷ max possible profit (cap at 0% minimum, 100% max)
     const curProfit = (spent != null && valNow != null) ? valNow - spent : null;
-    const captured  = (curProfit != null && maxWin != null && maxWin > 0) ? curProfit / maxWin : null;
+    const captured  = (curProfit != null && maxWin != null && maxWin > 0)
+      ? Math.max(0, Math.min(1, curProfit / maxWin))  // clamp to 0-100%
+      : null;
     const pnlDol  = (spent != null && valNow != null) ? valNow - spent : null;
 
     const safeT = p.ticker.replace(/\\/g,"\\\\").replace(/'/g,"\\'");
@@ -2071,8 +2307,8 @@ function renderPositionsTable(positions) {
     const trBg  = pnlDol != null && pnlDol > 0.001 ? 'style="background:#071a0f"'
                 : pnlDol != null && pnlDol < -0.001 ? 'style="background:#1a0707"' : "";
 
-    const titleHtml = p.kalshi_url
-      ? `<a href="${p.kalshi_url}" target="_blank" style="color:#fff;text-decoration:none;font-weight:700" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='#fff'">${esc(p.title)}<span style="font-size:10px;margin-left:4px;opacity:.5">↗</span></a>`
+    const titleHtml = p.ticker
+      ? `<div class="pos-title-wrapper"><a href="${p.kalshi_url || '#'}" target="_blank" class="pos-title-link" style="color:#fff;font-weight:700" data-tooltip="${esc(p.title)}" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='#fff'">${esc(p.title)}<span style="font-size:10px;margin-left:4px;opacity:.5">↗</span></a></div>`
       : `<span style="font-weight:700">${esc(p.title)}</span>`;
     const catTag = p.category ? `<span style="font-size:11px;color:#666;margin-left:6px">${esc(p.category)}</span>` : "";
 
@@ -2089,7 +2325,7 @@ function renderPositionsTable(positions) {
         : "";
       sellBtnHtml = `<button id="${sid}" onclick="sellPos('${safeT}','${side}',${abs},'${sid}')"
         style="background:${bg};color:${fg};border:none;border-radius:7px;padding:8px 14px;cursor:pointer;font-weight:700;font-size:14px;white-space:nowrap;line-height:1.4;text-align:center">
-        Sell All ${sellVal}${pnlLine ? `<br><span style="font-size:11px;opacity:.85">(${pnlLine})</span>` : ""}
+        Sell This ${sellVal}${pnlLine ? `<br><span style="font-size:11px;opacity:.85">(${pnlLine})</span>` : ""}
       </button>`;
     } else {
       sellBtnHtml = `<button class="sell-btn" id="${sid}" onclick="sellPos('${safeT}','${side}',${abs},'${sid}')">Sell All</button>`;
@@ -2097,32 +2333,53 @@ function renderPositionsTable(positions) {
 
     return `
       <tr ${trBg}>
-        <td style="padding:10px 8px;width:36px"><input type="checkbox" ${chk} style="accent-color:var(--green);width:15px;height:15px;cursor:pointer" onchange="updatePosCheck('${safeT}',this.checked)"></td>
-        <td class="wrap">${titleHtml}${catTag}
+        <td style="padding:10px 6px;width:28px"><input type="checkbox" ${chk} style="accent-color:var(--green);width:15px;height:15px;cursor:pointer" onchange="updatePosCheck('${safeT}',this.checked)"></td>
+        <td style="white-space:normal;line-height:1.5;font-size:14px;vertical-align:top;padding:12px 12px;width:100%">
+          <div style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${titleHtml}${catTag}</div>
           <div style="margin-top:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <span class="badge ${side}">${side.toUpperCase()}</span>
             ${p.bot_bought ? '<span class="src-bot">KalshiBot</span>' : '<span class="src-manual">Kalshi</span>'}
           </div>
         </td>
-        <td style="font-size:15px;font-weight:600">${abs}</td>
-        <td style="font-size:15px;font-weight:600">${p.buy_price != null ? p.buy_price + "¢" : "—"}</td>
-        <td style="font-size:15px;font-weight:600">${spent != null ? "$" + spent.toFixed(2) : "—"}</td>
-        <td style="font-size:15px;font-weight:700;color:${valNow == null ? '#fff' : spent == null ? '#fff' : valNow > spent + 0.001 ? 'var(--green)' : valNow < spent - 0.001 ? 'var(--red)' : '#fff'}">${valNow != null ? "$" + valNow.toFixed(2) : "—"}</td>
-        <td style="font-size:16px;font-weight:800;color:${pnlDol == null ? '#555' : pnlDol > 0.001 ? 'var(--green)' : pnlDol < -0.001 ? 'var(--red)' : '#888'}">${pnlDol != null ? (pnlDol >= 0 ? '+' : '') + '$' + pnlDol.toFixed(2) : '—'}</td>
-        <td style="font-size:15px;color:${maxWin != null && maxWin > 0 ? 'var(--green)' : '#aaa'};font-weight:600">${maxWin != null ? (maxWin >= 0 ? '+' : '') + '$' + maxWin.toFixed(2) : '—'}</td>
-        <td style="white-space:nowrap">${captured != null ? capturedBadge(captured) : '—'}</td>
-        <td style="font-size:13px;white-space:nowrap">${p.close_time ? fmtTimeLeft(p.close_time) : '—'}</td>
-        <td>${sellBtnHtml}</td>
-        <td style="padding:10px 8px;width:36px"><input type="checkbox" ${chk} style="accent-color:var(--green);width:15px;height:15px;cursor:pointer" onchange="updatePosCheck('${safeT}',this.checked)"></td>
+        <td style="font-size:13px;font-weight:600;text-align:center">${abs}</td>
+        <td style="font-size:13px;font-weight:600;text-align:right">${p.buy_price != null ? p.buy_price + "¢" : "—"}</td>
+        <td style="font-size:13px;font-weight:600;text-align:right;color:${cur == null ? '#fff' : cur > (p.buy_price || 0) ? 'var(--green)' : cur < (p.buy_price || 0) ? 'var(--red)' : '#fff'}">${cur != null ? cur + "¢" : "—"}</td>
+        <td style="font-size:13px;font-weight:600;text-align:right">${spent != null ? "$" + spent.toFixed(2) : "—"}</td>
+        <td style="font-size:13px;font-weight:700;color:${valNow == null ? '#fff' : spent == null ? '#fff' : valNow > spent + 0.001 ? 'var(--green)' : valNow < spent - 0.001 ? 'var(--red)' : '#fff'};text-align:right">${valNow != null ? "$" + valNow.toFixed(2) : "—"}</td>
+        <td style="font-size:14px;font-weight:800;color:${pnlDol == null ? '#555' : pnlDol > 0.001 ? 'var(--green)' : pnlDol < -0.001 ? 'var(--red)' : '#888'};text-align:right">${pnlDol != null ? (pnlDol >= 0 ? '+' : '') + '$' + pnlDol.toFixed(2) : '—'}</td>
+        <td style="font-size:13px;color:${maxWin != null && maxWin > 0 ? 'var(--green)' : '#aaa'};font-weight:600;text-align:right">${maxWin != null ? (maxWin >= 0 ? '+' : '') + '$' + maxWin.toFixed(2) : '—'}</td>
+        <td style="white-space:nowrap;text-align:center;font-size:12px">${captured != null ? capturedBadge(captured) : '—'}</td>
+        <td style="font-size:12px;white-space:nowrap;text-align:right">${p.close_time ? fmtTimeLeft(p.close_time) : '—'}</td>
+        <td style="padding:8px">${sellBtnHtml}</td>
+        <td style="padding:10px 6px;width:28px"><input type="checkbox" ${chk} style="accent-color:var(--green);width:15px;height:15px;cursor:pointer" onchange="updatePosCheck('${safeT}',this.checked)"></td>
       </tr>`;
   }).join("");
+
+  // Calculate totals for positions (only include positions that have loaded data)
+  let totalSpent = 0, totalValNow = 0, totalProfitNow = 0, totalMaxProfit = 0;
+  positions.forEach(p => {
+    const abs = Math.abs(p.quantity ?? 0);
+    const spent = p.buy_price != null ? abs * p.buy_price / 100 : 0;
+    const cur = (p.quantity ?? 0) > 0 ? p.current_yes : p.current_no;
+    const valNow = cur != null ? abs * cur / 100 : null;
+    const profitNow = (spent != null && valNow != null) ? valNow - spent : 0;
+    const maxWin = spent > 0 ? abs * 0.99 - spent : 0;
+    totalSpent += spent;
+    if (valNow != null) totalValNow += valNow;  // only count loaded positions
+    if (valNow != null) totalProfitNow += profitNow;  // only count loaded positions
+    totalMaxProfit += maxWin;
+  });
+  const totalProfitCls = totalProfitNow > 0.001 ? "pos" : totalProfitNow < -0.001 ? "neg" : "neu";
+  const totalMaxCls = totalMaxProfit > 0.001 ? "pos" : totalMaxProfit < -0.001 ? "neg" : "neu";
+
   wrap.innerHTML = `
     <div class="tbl-wrap"><table>
-      <thead><tr>
+      <thead style="position:sticky;top:64px;z-index:10"><tr>
         <th style="width:36px"><input type="checkbox" style="accent-color:var(--green)" onchange="toggleAllPos(this.checked)"></th>
         <th>Market</th>
         <th>Qty</th>
         <th onclick="setSortAndFilter('boughtat_desc')" style="cursor:pointer" title="Click to sort">Bought@ ↕</th>
+        <th>Current ↕</th>
         <th onclick="setSortAndFilter('spent_desc')" style="cursor:pointer" title="Click to sort">Spent ↕</th>
         <th onclick="setSortAndFilter('value_desc')" style="cursor:pointer" title="Click to sort">Value Now ↕</th>
         <th onclick="setSortAndFilter('profit_desc')" style="cursor:pointer;color:var(--green)" title="Current profit if you sell right now — click to sort highest to lowest">Profit Now ↕</th>
@@ -2132,7 +2389,16 @@ function renderPositionsTable(positions) {
         <th></th>
         <th style="width:36px"><input type="checkbox" style="accent-color:var(--green)" onchange="toggleAllPos(this.checked)" title="Select/deselect all"></th>
       </tr></thead>
-      <tbody>${rows}</tbody>
+      <tbody>${rows}
+        <tr style="border-top:2px solid var(--green);background:#0a1f14;font-weight:700">
+          <td colspan="5" style="text-align:right">TOTALS</td>
+          <td style="font-size:15px;font-weight:700;text-align:right">$${totalSpent.toFixed(2)}</td>
+          <td style="font-size:15px;font-weight:700;color:var(--green);text-align:right">$${totalValNow.toFixed(2)}</td>
+          <td style="font-size:16px;font-weight:800;color:${totalProfitCls};text-align:right">${totalProfitNow >= 0 ? '+' : ''}$${totalProfitNow.toFixed(2)}</td>
+          <td style="font-size:15px;color:${totalMaxCls};font-weight:700;text-align:right">${totalMaxProfit >= 0 ? '+' : ''}$${totalMaxProfit.toFixed(2)}</td>
+          <td colspan="3"></td>
+        </tr>
+      </tbody>
     </table></div>`;
   updateSellSelBtn();
 }
@@ -2170,6 +2436,7 @@ async function sellSelected() {
   if (!selectedPosTickers.size) return;
   const tickers = [...selectedPosTickers];
   if (!confirm(`Sell ${tickers.length} position(s)?`)) return;
+  let soldCount = 0;
   for (const ticker of tickers) {
     const pos  = allPositions.find(p => p.ticker === ticker);
     if (!pos) continue;
@@ -2178,31 +2445,66 @@ async function sellSelected() {
     const abs  = Math.abs(qty);
     try {
       const r = await fetch("/api/sell", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ticker,side,count:abs})});
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || "Failed");
-      selectedPosTickers.delete(ticker);
-      toast(`Sold ${abs} ${side.toUpperCase()} on ${ticker}`, "ok");
-    } catch(e) { toast(`${ticker}: ${e.message}`, "err"); }
+      if (!r.ok) {
+        const d = await r.json();
+        console.error(`[sell] ${ticker} failed:`, r.status, d);
+        toast(`${ticker}: ${d.error || `Failed (${r.status})`}`, "err");
+      } else {
+        const d = await r.json();
+        console.log(`[sell] ${ticker} succeeded:`, d);
+        // ONLY remove if API confirmed success (r.ok = 200-299)
+        selectedPosTickers.delete(ticker);
+        allPositions = allPositions.filter(p => p.ticker !== ticker);
+        soldCount++;
+        toast(`✓ Sold ${abs} ${side.toUpperCase()} on ${ticker}`, "ok");
+      }
+    } catch(e) {
+      console.error(`[sell] ${ticker} error:`, e);
+      toast(`${ticker}: ${e.message}`, "err");
+    }
     await delay(300);
   }
-  loadBalanceThrottled(true);
+  if (soldCount > 0) {
+    renderBotPositions(allPositions); // re-render only if sold
+    // Delay balance refresh to give Kalshi time to update
+    setTimeout(() => loadBalanceThrottled(true), 8000);
+  }
 }
 
 async function confirmSellAll() {
   if (!allPositions.length) return;
   if (!confirm(`Sell ALL ${allPositions.length} open position(s)?`)) return;
+  let soldCount = 0;
   for (const pos of allPositions) {
     const qty  = pos.quantity ?? 0;
     const side = qty > 0 ? "yes" : "no";
     const abs  = Math.abs(qty);
     try {
       const r = await fetch("/api/sell", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ticker:pos.ticker,side,count:abs})});
-      if (!r.ok) { const d = await r.json(); toast(`${pos.ticker}: ${d.error||"failed"}`, "err"); }
-    } catch(e) { toast(`${pos.ticker}: ${e.message}`, "err"); }
+      if (!r.ok) {
+        const d = await r.json();
+        console.error(`[sell] ${pos.ticker} failed:`, r.status, d);
+        toast(`${pos.ticker}: ${d.error||`failed (${r.status})`}`, "err");
+      } else {
+        const d = await r.json();
+        console.log(`[sell] ${pos.ticker} succeeded:`, d);
+        // ONLY remove if API confirmed success (r.ok = 200-299)
+        allPositions = allPositions.filter(p => p.ticker !== pos.ticker);
+        soldCount++;
+        toast(`✓ Sold ${pos.ticker}`, "ok");
+      }
+    } catch(e) {
+      console.error(`[sell] ${pos.ticker} error:`, e);
+      toast(`${pos.ticker}: ${e.message}`, "err");
+    }
     await delay(300);
   }
   selectedPosTickers.clear();
-  loadBalanceThrottled(true);
+  if (soldCount > 0) {
+    renderBotPositions(allPositions); // re-render only if sold
+    // Delay balance refresh to give Kalshi time to update
+    setTimeout(() => loadBalanceThrottled(true), 8000);
+  }
 }
 
 // ── Scan Results Notification (30s sticky) ────────────────────────────────
@@ -2275,8 +2577,8 @@ function renderRecentBuys() {
     const maxPayout = (b.contracts * 1).toFixed(2);
     const fee       = (b.contracts * 0.01).toFixed(2);
     const netIfWin  = (b.contracts * (1 - b.price / 100) - b.contracts * 0.01).toFixed(2);
-    const titleHtml = b.kalshi_url
-      ? `<a href="${b.kalshi_url}" target="_blank" style="color:#fff;text-decoration:none;font-weight:700">${esc(b.title || b.ticker)}</a>`
+    const titleHtml = b.ticker
+      ? `<a href="${b.kalshi_url || '#'}" target="_blank" style="color:#fff;text-decoration:none;font-weight:700">${esc(b.title || b.ticker)}</a>`
       : `<span style="font-weight:700">${esc(b.title || b.ticker)}</span>`;
     const subQ = b.market_q && b.market_q !== b.title
       ? `<div style="font-size:11px;color:#aaa;margin-top:2px;font-style:italic">${esc(b.market_q.length > 90 ? b.market_q.slice(0,90)+"…" : b.market_q)}</div>` : "";
@@ -2339,7 +2641,19 @@ function chaChing() {
 let _clippyLast = null;
 async function refreshClippy() {
   try {
-    const r = await fetch("/api/coach");
+    // Send current filter settings to Coach for analysis
+    const filters = {
+      buyMin: parseFloat(document.getElementById("minProb")?.value) || 80,
+      buyMax: parseFloat(document.getElementById("maxProb")?.value) || 96,
+      timeWindow: parseInt(document.getElementById("timeCustom")?.value) || 15,
+      showCrypto: document.getElementById("showCrypto")?.checked || false,
+      showSports: document.getElementById("showSports")?.checked || false,
+      showPolitics: document.getElementById("showPolitics")?.checked || false,
+      showEconomics: document.getElementById("showEconomics")?.checked || false,
+      buyAmount: parseFloat(document.getElementById("buyAmount")?.value) || 1.0,
+      maxPerScan: parseInt(document.getElementById("autoMaxPerScan")?.value) || 5,
+    };
+    const r = await fetch("/api/coach?filters=" + encodeURIComponent(JSON.stringify(filters)));
     const d = await r.json();
     const recs = (d.recommendations || []).filter(rc => rc.type !== "info");
 
@@ -2399,7 +2713,19 @@ if (Date.now() - _lastClippy > 6 * 3600 * 1000) {
 
 async function loadCoach() {
   try {
-    const r = await fetch("/api/coach");
+    // Send current filter settings to Coach for analysis
+    const filters = {
+      buyMin: parseFloat(document.getElementById("minProb")?.value) || 80,
+      buyMax: parseFloat(document.getElementById("maxProb")?.value) || 96,
+      timeWindow: parseInt(document.getElementById("timeCustom")?.value) || 15,
+      showCrypto: document.getElementById("showCrypto")?.checked || false,
+      showSports: document.getElementById("showSports")?.checked || false,
+      showPolitics: document.getElementById("showPolitics")?.checked || false,
+      showEconomics: document.getElementById("showEconomics")?.checked || false,
+      buyAmount: parseFloat(document.getElementById("buyAmount")?.value) || 1.0,
+      maxPerScan: parseInt(document.getElementById("autoMaxPerScan")?.value) || 5,
+    };
+    const r = await fetch("/api/coach?filters=" + encodeURIComponent(JSON.stringify(filters)));
     const d = await r.json();
     const t = d.totals || {};
     const totalsEl = document.getElementById("coachTotals");
@@ -2532,31 +2858,42 @@ function renderRecentlySold() {
   _recentlySold = _recentlySold.filter(s => now - s.soldAt < SOLD_TTL);
   if (!_recentlySold.length) { wrap.innerHTML = ""; return; }
 
-  const cards = _recentlySold.map((s, i) => {
-    const secsLeft = Math.max(0, Math.round((SOLD_TTL - (now - s.soldAt)) / 1000));
+  const items = _recentlySold.map((s, i) => {
     const isProfit = s.profit != null && s.profit > 0;
     const isLoss   = s.profit != null && s.profit < 0;
     const color    = isProfit ? "var(--green)" : isLoss ? "var(--red)" : "#888";
-    const bg       = isProfit ? "#071a0f" : isLoss ? "#1a0707" : "#0a0a0a";
     const border   = isProfit ? "#1f6045" : isLoss ? "#6a1a1a" : "#333";
     const pnl      = s.profit != null ? `${s.profit >= 0 ? "+" : ""}$${s.profit.toFixed(2)}` : "—";
-    const titleHtml = s.kalshi_url
-      ? `<a href="${s.kalshi_url}" target="_blank" style="color:#fff;text-decoration:none;font-weight:700">${esc(s.title)}</a>`
-      : `<b>${esc(s.title)}</b>`;
-    return `<div style="background:${bg};border:1px solid ${border};border-radius:8px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px">
-      <div style="min-width:0">
-        <div style="font-size:11px;color:${color};font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">🤖 KalshiBot Sold · ${secsLeft}s left</div>
-        <div style="font-size:13px;color:#ddd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${titleHtml}</div>
-        <div style="margin-top:3px;font-size:11px;color:#777"><span class="badge ${s.side}">${s.side.toUpperCase()}</span> · ${s.qty} contracts · bought at ${s.buy_price}¢</div>
-      </div>
-      <div style="text-align:right;white-space:nowrap">
-        <div style="font-size:22px;font-weight:800;color:${color}">${pnl}</div>
-        <div style="font-size:11px;color:#555">profit</div>
-      </div>
-      <button onclick="_recentlySold.splice(${i},1);renderRecentlySold()" style="background:none;border:none;color:#555;font-size:18px;cursor:pointer;flex-shrink:0">×</button>
+    return `<div style="background:var(--hover);border:1px solid ${border};border-radius:6px;padding:4px 10px;display:flex;gap:8px;align-items:center;white-space:nowrap;font-size:11px;flex-shrink:0;min-width:max-content">
+      <div style="font-weight:800;color:${color};font-size:12px">${pnl}</div>
+      <div style="color:#aaa;max-width:120px;overflow:hidden;text-overflow:ellipsis">${esc(s.title)}</div>
+      <button onclick="_recentlySold.splice(${i},1);renderRecentlySold()" style="background:none;border:none;color:#555;font-size:13px;cursor:pointer;padding:0;margin-left:4px">×</button>
     </div>`;
   }).join("");
-  wrap.innerHTML = cards;
+  wrap.innerHTML = `<div style="display:flex;gap:6px;width:max-content;align-items:center">${items}</div>`;
+}
+
+function renderSettlementsTickerTicker() {
+  const wrap = document.getElementById("recentSettlementsTickerWrap");
+  if (!wrap) return;
+  const settlements = window._lastSettlements || [];
+  if (!settlements.length) { wrap.innerHTML = ""; return; }
+
+  // Show last 15 settlements as tickers (most recent first)
+  const items = settlements.slice(0, 15).map((s, i) => {
+    const pnl = s.pnl || 0;
+    const isProfit = pnl > 0.01;
+    const isLoss = pnl < -0.01;
+    const color = isProfit ? "var(--green)" : isLoss ? "var(--red)" : "#888";
+    const border = isProfit ? "#1f6045" : isLoss ? "#6a1a1a" : "#333";
+    const pnlStr = `${pnl >= 0 ? "+" : ""}$${pnl.toFixed(2)}`;
+    const title = s.title ? (s.title.length > 20 ? s.title.slice(0,20)+'…' : s.title) : "—";
+    return `<div style="background:var(--hover);border:1px solid ${border};border-radius:6px;padding:4px 10px;display:flex;gap:8px;align-items:center;white-space:nowrap;font-size:11px;flex-shrink:0;min-width:max-content">
+      <div style="font-weight:800;color:${color};font-size:12px">${pnlStr}</div>
+      <div style="color:#aaa;max-width:100px;overflow:hidden;text-overflow:ellipsis">${esc(title)}</div>
+    </div>`;
+  }).join("");
+  wrap.innerHTML = `<div style="display:flex;gap:6px;width:max-content;align-items:center">${items}</div>`;
 }
 
 function showSellPopup(title, profitDol, reason="sold") {
@@ -2574,7 +2911,7 @@ function showSellPopup(title, profitDol, reason="sold") {
     : "";
 
   const popup = document.createElement("div");
-  popup.style.cssText = `background:${bg};border:1px solid ${border};border-radius:10px;padding:12px 14px;box-shadow:0 8px 24px rgba(0,0,0,.6);animation:fadeIn .2s ease`;
+  popup.style.cssText = `background:${bg};border:2px solid ${border};border-radius:12px;padding:14px 16px;box-shadow:0 12px 40px rgba(0,0,0,.8), 0 0 20px ${isProfit ? '#00d97e44' : isLoss ? '#ff4d4d44' : '#ffffff11'};animation:slideUp .3s ease;min-width:200px`;
   popup.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
       <div style="display:flex;align-items:center;gap:8px">
@@ -2671,7 +3008,62 @@ function toCDT(isoStr) {
   } catch(e) { return "—"; }
 }
 
+// ──── Remote Control Functions (Manager) ────────────────────────
+function controlBot(action) {
+  const statusEl = document.getElementById("botStatus");
+  if (!statusEl) return;
+
+  const managerUrl = window.location.hostname === "localhost"
+    ? `http://localhost:5001/api/manager/${action}`
+    : `http://${window.location.hostname}:5001/api/manager/${action}`;
+
+  statusEl.textContent = "Status: sending...";
+
+  fetch(managerUrl, { method: "POST" })
+    .then(r => r.json())
+    .then(d => {
+      statusEl.textContent = `Status: ${d.status || action}`;
+      checkBotStatus();
+    })
+    .catch(e => {
+      statusEl.textContent = "Status: error";
+      console.error("Control error:", e);
+    });
+}
+
+function checkBotStatus() {
+  const statusEl = document.getElementById("botStatus");
+  if (!statusEl) return;
+
+  const managerUrl = window.location.hostname === "localhost"
+    ? "http://localhost:5001/api/manager/status"
+    : `http://${window.location.hostname}:5001/api/manager/status`;
+
+  fetch(managerUrl)
+    .then(r => r.json())
+    .then(d => {
+      if (d.running) {
+        // Check if actively scanning (autoModeOn is a global variable set elsewhere in the page)
+        const isScanning = typeof autoModeOn !== "undefined" && autoModeOn;
+        statusEl.textContent = isScanning ? "✓ Bot Scanning" : "✓ Bot Running";
+        statusEl.style.color = "var(--green)";
+      } else {
+        statusEl.textContent = "✗ Bot Stopped";
+        statusEl.style.color = "var(--red)";
+      }
+    })
+    .catch(e => {
+      statusEl.textContent = "status unknown";
+      statusEl.style.color = "var(--muted)";
+    });
+}
+
+// Check bot status every 10 seconds
+setInterval(checkBotStatus, 10000);
+checkBotStatus(); // Check on page load
+
 function switchTab(name) {
+  window.scrollTo(0, 0); // Jump to top when switching tabs
   document.querySelectorAll(".tab-btn").forEach(b => {
     const m = b.getAttribute("onclick")?.match(/'(\w+)'/);
     b.classList.toggle("active", m?.[1] === name);
@@ -2680,13 +3072,25 @@ function switchTab(name) {
     p.classList.toggle("active", p.id === "tab-" + name);
   });
   localStorage.setItem("activeTab", name);
-  if (name === "stats")     loadStats();
-  if (name === "coach")     loadCoach();
+  if (name === "debug") {
+    loadStats();
+    if (window._statsRefresh) clearInterval(window._statsRefresh);
+    if (!document.hidden) window._statsRefresh = setInterval(loadStats, 60000);
+  } else {
+    if (window._statsRefresh) { clearInterval(window._statsRefresh); window._statsRefresh = null; }
+  }
+  if (name === "coach") {
+    loadCoach();
+    if (window._coachRefresh) clearInterval(window._coachRefresh);
+    if (!document.hidden) window._coachRefresh = setInterval(loadCoach, 60000);
+  } else {
+    if (window._coachRefresh) { clearInterval(window._coachRefresh); window._coachRefresh = null; }
+  }
   if (name === "positions") {
     loadBalanceThrottled(true); // force refresh when switching to Positions tab
-    // Faster 15s refresh while viewing positions (clears when leaving)
+    // Live 10s refresh while viewing positions (only if page is visible)
     if (window._posTabRefresh) clearInterval(window._posTabRefresh);
-    window._posTabRefresh = setInterval(() => loadBalanceThrottled(true), 15000);
+    if (!document.hidden) window._posTabRefresh = setInterval(() => loadBalanceThrottled(true), 10000);
   } else {
     if (window._posTabRefresh) { clearInterval(window._posTabRefresh); window._posTabRefresh = null; }
   }
@@ -2896,7 +3300,7 @@ const SETTINGS_CHECKBOXES = ["showCrypto","showSports","showPolitics","showEcono
   "showEntertainment","showWeather","showNFL","showNBA","showMLB","showNHL",
   "showSoccer","showGolf","showTennis","showMMA","showCombo","goodLiq","yesOnly",
   "stopProfitDolChk","stopProfitPctChk","stopLossDolChk","stopLossPctChk",
-  "skipAutoSellNearResolution"];
+  "skipAutoSellNearResolution","hideSmallPositions"];
 const SETTINGS_INPUTS = ["buyAmount","maxBuysPerMarket","autoMaxPerScan","autoMaxConcurrent","posSort",
   "autoMins","autoBuysMax","profitCustom","profitDolCustom","minProb","maxProb","timeCustom",
   "stopProfitDol","stopProfitPct","stopLossDol","stopLossPct","skipAutoSellMinutes",
@@ -2942,7 +3346,19 @@ async function applyCoachSettings() {
   const btn = document.getElementById("coachApplyBtn");
   if (btn) { btn.textContent = "Applying…"; btn.disabled = true; }
   try {
-    const d = await fetch("/api/coach").then(r => r.json());
+    // Send current filter settings to Coach for analysis
+    const filters = {
+      buyMin: parseFloat(document.getElementById("minProb")?.value) || 80,
+      buyMax: parseFloat(document.getElementById("maxProb")?.value) || 96,
+      timeWindow: parseInt(document.getElementById("timeCustom")?.value) || 15,
+      showCrypto: document.getElementById("showCrypto")?.checked || false,
+      showSports: document.getElementById("showSports")?.checked || false,
+      showPolitics: document.getElementById("showPolitics")?.checked || false,
+      showEconomics: document.getElementById("showEconomics")?.checked || false,
+      buyAmount: parseFloat(document.getElementById("buyAmount")?.value) || 1.0,
+      maxPerScan: parseInt(document.getElementById("autoMaxPerScan")?.value) || 5,
+    };
+    const d = await fetch("/api/coach?filters=" + encodeURIComponent(JSON.stringify(filters))).then(r => r.json());
 
     // Best price band by win rate (need ≥3 trades)
     const bands = (d.by_price_band || []).filter(b => b.n >= 3).sort((a,b) => b.win_rate - a.win_rate);

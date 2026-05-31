@@ -212,14 +212,20 @@ def _get_sold_by(ticker: str) -> str:
     return "Human"
 
 def _kalshi_url(event_ticker: str, ticker: str) -> str:
-    """Build Kalshi market URL. Derives event_ticker from ticker if missing."""
+    """Build Kalshi market URL.
+
+    Kalshi URLs use format: https://kalshi.com/markets/{slug}
+    where slug is typically the market title slugified (lowercase + hyphens).
+    Since we don't have the slug from the API, use event_ticker in lowercase as fallback.
+    """
     evt = event_ticker or ""
     if not evt and ticker:
         # Derive event_ticker: everything up to but not including the last '-segment'
         parts = ticker.rsplit("-", 1)
         evt = parts[0] if len(parts) == 2 else ticker
-    if evt and ticker:
-        return f"https://kalshi.com/markets/{evt}/{ticker}"
+    if evt:
+        # Use event_ticker lowercase as slug (e.g., "KXBTCRESERVE" -> "kxbtcreserve")
+        return f"https://kalshi.com/markets/{evt.lower()}"
     return ""
 
 def _event_title(event_ticker: str) -> str:
@@ -463,7 +469,7 @@ def _monitor():
                     print(f"[monitor] {ticker} near YES settlement ({bid}¢) — holding to resolution")
                     continue
                 if bid <= 3 and pos["side"] == "yes":
-                    print(f"[monitor] {ticker} near loss ({bid}¢) — holding, no buyer available")
+                    # Skip silently - no buyer at this price, don't log spam
                     continue
 
                 # Skip auto-sell if market expires soon (per sell_settings)
@@ -492,7 +498,13 @@ def _monitor():
                 target_price_c = pos.get("target_price_cents") or sell_strategy.get("target_price_cents")
                 hit_price = target_price_c is not None and bid >= target_price_c
 
-                if hit_pct or hit_dol or hit_price:
+                # Stop-loss: sell if loss exceeds threshold
+                stop_loss_pct = sell_strategy.get("stop_loss_pct")
+                stop_loss_dol = sell_strategy.get("stop_loss_dol")
+                hit_stop_pct = stop_loss_pct is not None and profit_pct <= -stop_loss_pct
+                hit_stop_dol = stop_loss_dol is not None and profit_dollars is not None and profit_dollars <= -stop_loss_dol
+
+                if hit_pct or hit_dol or hit_price or hit_stop_pct or hit_stop_dol:
                     # Build limit sell order with current bid price (Kalshi requires price field)
                     bid_key = "yes_bid_dollars" if pos["side"] == "yes" else "no_bid_dollars"
                     bid_d = m.get(bid_key)
@@ -500,23 +512,32 @@ def _monitor():
                         print(f"[monitor] {ticker} bid too low to sell ({bid_d}) — skipping")
                         continue
                     price_key = "yes_price_dollars" if pos["side"] == "yes" else "no_price_dollars"
-                    result = kalshi_post("/portfolio/orders", {
+                    # Kalshi API only accepts whole numbers - round down fractional quantities
+                    count_val = int(pos["count"])
+
+                    order_body = {
                         "ticker":   ticker,
                         "action":   "sell",
                         "side":     pos["side"],
-                        "type":     "limit",
-                        "count":    pos["count"],
-                        price_key:  str(bid_d),
-                    })
+                        "type":     "limit",  # LIMIT order with current bid price
+                        "count":    count_val,
+                        price_key:  str(float(bid_d)),  # Kalshi API requires price as STRING
+                    }
+                    result = kalshi_post("/portfolio/orders", order_body)
                     with _lock:
                         if ticker in tracked:
                             tracked[ticker]["status"]     = "sold"
                             tracked[ticker]["sold_at"]    = datetime.now(timezone.utc).isoformat()
                             tracked[ticker]["sell_price"] = bid
-                            tracked[ticker]["sold_by"]    = "bot_auto"  # auto-sell by strategy
+                            # Mark whether this was a profit target or stop-loss
+                            if hit_stop_pct or hit_stop_dol:
+                                tracked[ticker]["sold_by"] = "bot_stop_loss"
+                            else:
+                                tracked[ticker]["sold_by"] = "bot_auto"  # auto-sell by strategy
                     _save_tracked()
                     title = pos.get("title", ticker)
-                    print(f"[monitor] Auto-sold: {title} | bid={bid}¢ profit={profit_pct:.1f}% / ${profit_dollars:.2f}")
+                    reason = "STOP-LOSS" if (hit_stop_pct or hit_stop_dol) else "PROFIT TARGET"
+                    print(f"[monitor] Auto-sold ({reason}): {title} | bid={bid}¢ profit={profit_pct:.1f}% / ${profit_dollars:.2f}")
 
             except Exception as e:
                 print(f"[monitor] Error checking {ticker}: {e}")
@@ -637,6 +658,9 @@ def auth_test():
 
 @app.route("/api/portfolio")
 def portfolio():
+    # Check if we should skip expensive market enrichment (for fast initial load)
+    enrich = request.args.get("enrich", "true").lower() != "false"
+
     # ── Balance ──
     balance = None
     total_account = None  # total account value (what Kalshi shows as Portfolio)
@@ -700,17 +724,27 @@ def portfolio():
             current_yes  = None
             current_no   = None
             close_time   = None
-            time.sleep(0.15)  # rate limit: 20 positions × 0.15s = 3s max, avoids 429
-            try:
-                mkt          = _get_market(ticker)
-                event_ticker = mkt.get("event_ticker", "")
-                market_title = _event_title(event_ticker) or mkt.get("title", ticker)
-                category     = mkt.get("category", "")
-                current_yes  = _dollars_to_cents(mkt.get("yes_bid_dollars"))
-                current_no   = _dollars_to_cents(mkt.get("no_bid_dollars"))
-                close_time   = mkt.get("close_time") or mkt.get("expiration_time")
-            except Exception:
-                pass
+            # Skip expensive market enrichment if enrich=false (for fast initial load)
+            if enrich:
+                time.sleep(0.01)
+                try:
+                    mkt          = _get_market(ticker)
+                    event_ticker = mkt.get("event_ticker", "")
+                    market_title = _event_title(event_ticker) or mkt.get("title", ticker)
+                    category     = mkt.get("category", "")
+                    current_yes  = _dollars_to_cents(mkt.get("yes_bid_dollars"))
+                    current_no   = _dollars_to_cents(mkt.get("no_bid_dollars"))
+                    close_time   = mkt.get("close_time") or mkt.get("expiration_time")
+                except Exception:
+                    pass
+            else:
+                # Fast mode: use ticker as title, no market data
+                event_ticker = ""
+                market_title = ticker
+                category = ""
+                current_yes = None
+                current_no = None
+                close_time = None
 
             # Portfolio value = contracts * current bid price
             side = "yes" if qty > 0 else "no"
@@ -769,22 +803,25 @@ def portfolio():
         category     = ""
         current_yes  = None
         current_no   = None
-        try:
-            mkt        = _get_market(ticker)
-            mkt_status = (mkt.get("status") or "").lower()
-            if mkt_status in ("settled", "resolved", "finalized", "closed"):
-                with _lock:
-                    if ticker in tracked:
-                        tracked[ticker]["status"] = "sold"
-                _save_tracked()
-                continue
-            event_ticker = mkt.get("event_ticker", "")
-            market_title = _event_title(event_ticker) or mkt.get("title", ticker)
-            category     = mkt.get("category", "")
-            current_yes  = _dollars_to_cents(mkt.get("yes_bid_dollars"))
-            current_no   = _dollars_to_cents(mkt.get("no_bid_dollars"))
-        except Exception:
-            pass
+
+        # Only enrich tracked fallback positions if enriching
+        if enrich:
+            try:
+                mkt        = _get_market(ticker)
+                mkt_status = (mkt.get("status") or "").lower()
+                if mkt_status in ("settled", "resolved", "finalized", "closed"):
+                    with _lock:
+                        if ticker in tracked:
+                            tracked[ticker]["status"] = "sold"
+                    _save_tracked()
+                    continue
+                event_ticker = mkt.get("event_ticker", "")
+                market_title = _event_title(event_ticker) or mkt.get("title", ticker)
+                category     = mkt.get("category", "")
+                current_yes  = _dollars_to_cents(mkt.get("yes_bid_dollars"))
+                current_no   = _dollars_to_cents(mkt.get("no_bid_dollars"))
+            except Exception:
+                pass
 
         side = info.get("side", "yes")
         count = info.get("count", 0)
@@ -829,8 +866,11 @@ def portfolio():
 
     total_value = total_account if total_account is not None else round((balance or 0) + portfolio_value, 2)
 
-    settle_hours = int(request.args.get("settlement_hours", 24))
-    recent_settlements = _cached_settlements(hours=settle_hours)
+    # Load settlements only if enriching (skip for fast load)
+    recent_settlements = []
+    if enrich:
+        settle_hours = int(request.args.get("settlement_hours", 24))
+        recent_settlements = _cached_settlements(hours=settle_hours)
 
     return jsonify({
         "balance":            balance,           # spendable cash
@@ -1651,10 +1691,19 @@ def sell():
     data    = request.get_json(silent=True) or {}
     ticker  = data.get("ticker", "")
     side    = data.get("side", "")
-    count   = int(data.get("count", 0))
 
-    if not ticker or side not in ("yes", "no") or count < 1:
-        return jsonify({"error": "Invalid fields"}), 400
+    # Safely convert count to float (supports fractional quantities like 0.08, 0.91)
+    try:
+        count = float(data.get("count", 0))
+    except (ValueError, TypeError):
+        return jsonify({"error": f"Invalid count: {data.get('count')}"}), 400
+
+    if not ticker:
+        return jsonify({"error": "Missing ticker"}), 400
+    if side not in ("yes", "no"):
+        return jsonify({"error": f"Invalid side '{side}' (must be 'yes' or 'no')"}), 400
+    if count < 0.001:
+        return jsonify({"error": f"Invalid count {count} (must be > 0)"}), 400
 
     try:
         # Fetch current bid to include as price (Kalshi requires it)
@@ -1668,20 +1717,58 @@ def sell():
         if bid_cents < 1:
             return jsonify({"error": f"Cannot sell — current bid is 0¢ (market likely already resolved or no buyers). Check Kalshi directly."}), 400
 
+        # Kalshi API only accepts whole numbers - sell what we can, leave fractional for Kalshi
+        count_int = int(count)  # Floor: 1.53 → 1, 0.53 → 0
+
+        if count_int < 1:
+            # Less than 1 contract - can't sell, but don't error
+            print(f"[sell] {ticker}: {count} contracts (fractional, skipping)")
+            return jsonify({"ok": True, "note": f"Skipped {ticker}: only {count} contracts (fractional, will resolve at expiry)"}), 200
+
+        # Try LIMIT order first (better price)
         order_payload = {
             "ticker": ticker,
             "action": "sell",
             "side":   side,
             "type":   "limit",
-            "count":  count,
+            "count":  count_int,
         }
         price_key = "yes_price_dollars" if side == "yes" else "no_price_dollars"
         order_payload[price_key] = str(bid_d)
 
+        print(f"[sell] {ticker} {side} × {count_int} LIMIT @ {bid_d}")
         result = kalshi_post("/portfolio/orders", order_payload)
+        order_status = result.get("order", {}).get("status", "")
+
+        # If LIMIT order was canceled, check profit and retry with MARKET if profitable
+        if order_status == "canceled":
+            print(f"[sell] LIMIT canceled, checking profit before retry")
+            # Calculate current profit
+            bot_info = tracked.get(ticker)
+            buy_price = bot_info.get("buy_price") if bot_info else None
+
+            if buy_price is not None:
+                current_price = _dollars_to_cents(mkt_data.get("yes_bid_dollars") if side == "yes" else mkt_data.get("no_bid_dollars"))
+                if current_price is not None:
+                    profit_cents = count_int * (current_price - buy_price)
+                    profit_dollars = profit_cents / 100
+
+                    if profit_dollars > 0:
+                        # In profit - retry with MARKET order
+                        print(f"[sell] Profit ${profit_dollars:.2f} > 0, retrying with MARKET order")
+                        order_payload["type"] = "market"
+                        del order_payload[price_key]  # Remove price for market order
+                        result = kalshi_post("/portfolio/orders", order_payload)
+                        print(f"[sell] MARKET order response: {result.get('order', {}).get('status', 'unknown')}")
+                    else:
+                        print(f"[sell] Not profitable (${profit_dollars:.2f}), keeping LIMIT result")
+                        # Return with note that limit failed and we didn't retry (not profitable)
+                        return jsonify({"ok": False, "note": f"LIMIT order canceled and position not in profit (${profit_dollars:.2f}), use manual market order if desired"}), 400
     except req.HTTPError as e:
+        print(f"[sell] HTTPError {e.response.status_code}: {e.response.text[:300]}")
         return jsonify({"error": f"Sell failed ({e.response.status_code}): {e.response.text[:200]}"}), 502
     except Exception as e:
+        print(f"[sell] Exception: {type(e).__name__}: {e}")
         return jsonify({"error": str(e)}), 500
 
     with _lock:
@@ -1781,7 +1868,51 @@ def set_sell_settings():
         sell_settings["skip_auto_sell_near_resolution"] = bool(data["skip_auto_sell_near_resolution"])
     if "skip_auto_sell_minutes" in data:
         sell_settings["skip_auto_sell_minutes"] = max(1, int(data["skip_auto_sell_minutes"]))
+    if "stop_loss_pct" in data and data["stop_loss_pct"] is not None:
+        sell_settings["stop_loss_pct"] = float(data["stop_loss_pct"])
+    elif "stop_loss_pct" in data:
+        sell_settings["stop_loss_pct"] = None
+    if "stop_loss_dol" in data and data["stop_loss_dol"] is not None:
+        sell_settings["stop_loss_dol"] = float(data["stop_loss_dol"])
+    elif "stop_loss_dol" in data:
+        sell_settings["stop_loss_dol"] = None
     return jsonify({"ok": True, "settings": sell_settings})
+
+
+@app.route("/api/enrich-positions", methods=["GET"])
+def enrich_positions():
+    """Fetch market data for specific position tickers (called after initial fast load).
+
+    Query params:
+    - tickers: comma-separated list (e.g., "TICKER1,TICKER2,TICKER3")
+
+    Returns: { "ticker": {...enriched market data...}, ... }
+    """
+    ticker_str = request.args.get("tickers", "")
+    if not ticker_str:
+        return jsonify({})
+
+    tickers = [t.strip() for t in ticker_str.split(",") if t.strip()]
+    result = {}
+
+    for ticker in tickers[:50]:  # limit to 50 at a time to avoid huge requests
+        time.sleep(0.01)  # gentle rate limit
+        try:
+            mkt = _get_market(ticker)
+            event_ticker = mkt.get("event_ticker", "")
+            result[ticker] = {
+                "event_ticker": event_ticker,
+                "title": _event_title(event_ticker) or mkt.get("title", ticker),
+                "category": mkt.get("category", ""),
+                "current_yes": _dollars_to_cents(mkt.get("yes_bid_dollars")),
+                "current_no": _dollars_to_cents(mkt.get("no_bid_dollars")),
+                "close_time": mkt.get("close_time") or mkt.get("expiration_time"),
+                "kalshi_url": _kalshi_url(event_ticker, ticker),
+            }
+        except Exception:
+            result[ticker] = {}
+
+    return jsonify(result)
 
 
 @app.route("/api/stats")
@@ -1895,6 +2026,15 @@ def coach():
     """Stats analyzer over tracked positions, scan log, and recent settlements.
     Returns structured insights + recommendations the frontend renders in the Coach tab."""
     from collections import defaultdict
+    import json
+
+    # Parse filter settings from frontend (optional)
+    filters = {}
+    try:
+        filters_json = request.args.get("filters", "{}")
+        filters = json.loads(filters_json) if filters_json else {}
+    except Exception:
+        pass
 
     with _lock:
         snap = {k: dict(v) for k, v in tracked.items()}
@@ -2047,6 +2187,94 @@ def coach():
     if total_n < 5:
         recs.append({"type":"info", "msg": f"Sample size is small ({total_n} trades) — recommendations get sharper with more data."})
 
+    # ── Settings-based tips ──────────────────────────────────────────────────────
+    # Analyze current configuration for obvious issues or improvements
+
+    # Check sell strategy settings
+    if sell_strategy.get("mode") == "profit":
+        target_pct = sell_strategy.get("target_pct")
+        if target_pct and target_pct < 2:
+            recs.append({"type":"tip", "msg": f"💡 Your profit target is {target_pct}% — very low! Try 5-10% for better risk/reward."})
+
+    if sell_strategy.get("target_dollars") and sell_strategy.get("target_dollars") < 0.01:
+        recs.append({"type":"tip", "msg": f"💡 Dollar profit target is tiny ($0.01) — you'll miss bigger wins. Try $0.10+"})
+
+    # Check stop-loss conflicts
+    stop_loss_pct = sell_strategy.get("stop_loss_pct")
+    target_pct = sell_strategy.get("target_pct") or 10
+    if stop_loss_pct and stop_loss_pct > 0 and stop_loss_pct > target_pct * 2:
+        recs.append({"type":"tip", "msg": f"⚠️ Stop-loss ({stop_loss_pct}%) >> profit target ({target_pct}%) — you'll hit losses before wins!"})
+
+    # Check target price conflicts
+    target_price_c = sell_strategy.get("target_price_cents")
+    buy_in_price_c = sell_strategy.get("buy_in_price_cents")
+    if target_price_c and buy_in_price_c:
+        if target_price_c <= buy_in_price_c and target_pct is None:  # shorting without checking if intentional
+            recs.append({"type":"tip", "msg": f"ℹ️ Selling at {target_price_c}¢ when you buy at {buy_in_price_c}¢ (shorting). Verify this is intentional."})
+
+    # Check if tracking positions exist
+    open_count = len([p for p in snap.values() if p.get("status") == "open"])
+    if open_count == 0 and total_n < 3:
+        recs.append({"type":"info", "msg": "💡 No active positions yet. Hit **Start Bot** to begin buying — Coach gets smarter with trade data."})
+
+    # Performance-based behavioral tips
+    if total_n >= 5 and total_wins > 0:
+        win_rate_pct = (total_wins / total_n) * 100
+        if win_rate_pct > 75:
+            recs.append({"type":"tip", "msg": f"✅ Your {win_rate_pct:.0f}% win rate is excellent! Consider tightening stop-loss to lock in gains."})
+        elif win_rate_pct < 40:
+            recs.append({"type":"tip", "msg": f"📊 Your {win_rate_pct:.0f}% win rate is low. Check if you're buying too conservatively or holding losers too long."})
+
+    # ── Filter-based tips (from frontend settings) ───────────────────────────────
+    if filters:
+        buy_min = filters.get("buyMin", 80)
+        buy_max = filters.get("buyMax", 96)
+        time_window = filters.get("timeWindow", 15)
+        buy_amount = filters.get("buyAmount", 1.0)
+
+        # Tip: Buy range too narrow
+        range_width = buy_max - buy_min
+        if range_width < 10:
+            recs.append({"type":"tip", "msg": f"🎯 Your buy range ({buy_min}-{buy_max}%) is very tight. Widen to {buy_min-10}-{buy_max}% to find more opportunities."})
+
+        # Tip: Buy range too high
+        if buy_min > 85:
+            recs.append({"type":"tip", "msg": f"🎯 You're buying conservatively ({buy_min}-{buy_max}%). Try 50-96% to catch more profitable moves."})
+
+        # Tip: Time window too restrictive
+        if time_window < 20:
+            recs.append({"type":"tip", "msg": f"⏱️ {time_window}-min window is restrictive. Expand to 15-60 min for more trading opportunities."})
+
+        # Tip: Buy amount might be too low
+        if buy_amount < 0.5 and total_n >= 5:
+            recs.append({"type":"tip", "msg": f"💰 Buy amount (${buy_amount:.2f}) is very small. Try $1-5 for meaningful position sizing."})
+
+        # Tip: Category filters
+        cats_enabled = sum([
+            1 if filters.get("showCrypto") else 0,
+            1 if filters.get("showSports") else 0,
+            1 if filters.get("showPolitics") else 0,
+            1 if filters.get("showEconomics") else 0,
+        ])
+        if cats_enabled == 0:
+            recs.append({"type":"tip", "msg": "📂 All categories are disabled! Enable at least one to start buying."})
+        elif cats_enabled == 1:
+            recs.append({"type":"tip", "msg": "📂 Only 1 category enabled. Enable 2+ for more variety and diversification."})
+
+        # Tip: Check if profitable categories are disabled
+        for cat_row in cat_rows:
+            cat_key = cat_row.get("key", "").lower()
+            pnl = cat_row.get("total_pnl", 0)
+            if pnl > 2.0:  # profitable category
+                if cat_key == "crypto" and not filters.get("showCrypto"):
+                    recs.append({"type":"tip", "msg": f"💡 **Crypto** is +${pnl:.2f} profitable but disabled! Enable it."})
+                elif cat_key == "sports" and not filters.get("showSports"):
+                    recs.append({"type":"tip", "msg": f"💡 **Sports** is +${pnl:.2f} profitable but disabled! Enable it."})
+                elif cat_key == "politics" and not filters.get("showPolitics"):
+                    recs.append({"type":"tip", "msg": f"💡 **Politics** is +${pnl:.2f} profitable but disabled! Enable it."})
+                elif cat_key == "economics" and not filters.get("showEconomics"):
+                    recs.append({"type":"tip", "msg": f"💡 **Economics** is +${pnl:.2f} profitable but disabled! Enable it."})
+
     # ── Generate 5 Ranked Strategies ──────────────────────────────────────────
     strategies = []
 
@@ -2147,4 +2375,188 @@ def coach():
 
 if __name__ == "__main__":
     print("Open http://localhost:5000")
-    app.run(debug=False, port=5000)
+    app.run(debug=False, host="0.0.0.0", port=5000)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GROUP EXIT STRATEGY — Group positions by expiration, auto-sell losers, 
+# hold winners until group profit target is met, optional limited martingale
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _group_positions_by_expiration(positions: list) -> dict:
+    """
+    Group positions by close_time (expiration).
+    Returns: {
+        "2026-05-31T21:00:00Z": [pos1, pos2, ...],
+        "2026-06-01T21:00:00Z": [pos3, pos4, ...],
+    }
+    """
+    groups = {}
+    for pos in positions:
+        expiry = pos.get("close_time") or ""
+        if expiry:
+            if expiry not in groups:
+                groups[expiry] = []
+            groups[expiry].append(pos)
+    return groups
+
+
+def _calc_group_pnl(group_positions: list) -> dict:
+    """
+    Calculate P&L for a group of positions.
+    Returns: {
+        "total_profit": float (in dollars),
+        "winning": [list of positions with profit > 0],
+        "losing": [list of positions with profit < 0],
+        "break_even": [list of positions with profit ≈ 0],
+    }
+    """
+    total = 0.0
+    winning = []
+    losing = []
+    break_even = []
+    
+    for pos in group_positions:
+        current_yes = pos.get("current_yes")
+        current_no = pos.get("current_no")
+        buy_price = pos.get("buy_price")
+        qty = abs(pos.get("quantity", 0))
+        
+        if not qty or buy_price is None:
+            continue
+        
+        side = "yes" if pos.get("quantity", 0) > 0 else "no"
+        current_price = current_yes if side == "yes" else current_no
+        
+        if current_price is None:
+            continue
+        
+        profit_cents = qty * (current_price - buy_price)
+        profit_dollars = profit_cents / 100
+        total += profit_dollars
+        
+        if profit_dollars > 0.005:  # small buffer for break-even
+            winning.append({**pos, "profit": profit_dollars})
+        elif profit_dollars < -0.005:
+            losing.append({**pos, "profit": profit_dollars})
+        else:
+            break_even.append({**pos, "profit": profit_dollars})
+    
+    return {
+        "total_profit": round(total, 2),
+        "winning": winning,
+        "losing": losing,
+        "break_even": break_even,
+    }
+
+
+@app.route("/api/group-exits", methods=["GET"])
+def group_exits_analysis():
+    """
+    Analyze positions grouped by expiration and recommend exits.
+    
+    Returns: {
+        "groups": {
+            "2026-05-31T21:00:00Z": {
+                "total_profit": -0.50,
+                "winning": [...],
+                "losing": [...],
+                "recommendation": "sell_losers_below_5"  # or "hold_all", "sell_all", etc.
+            },
+            ...
+        }
+    }
+    """
+    try:
+        # Get settings
+        auto_sell_losers = request.args.get("auto_sell_losers", "true").lower() == "true"
+        loss_threshold = float(request.args.get("loss_threshold", 0.50))  # max loss per position
+        group_profit_target = float(request.args.get("group_profit_target", 0.25))  # total profit target
+        
+        # Fetch positions
+        bal_data = kalshi_get("/portfolio/balance")
+        positions = []
+        cursor = None
+        while True:
+            params = {"count": 200}
+            if cursor:
+                params["cursor"] = cursor
+            pos_data = kalshi_get("/portfolio/positions", params)
+            batch = pos_data.get("market_positions", pos_data.get("positions", []))
+            if not batch:
+                break
+            for p in batch:
+                ticker = p.get("market_id") or p.get("ticker", "")
+                if not ticker:
+                    continue
+                qty_raw = p.get("position_fp", p.get("position", p.get("quantity_owned", 0)))
+                try:
+                    qty = float(qty_raw)
+                except (TypeError, ValueError):
+                    qty = 0
+                if abs(qty) < 0.001:
+                    continue
+                
+                # Get market data
+                try:
+                    mkt = _get_market(ticker)
+                    current_yes = _dollars_to_cents(mkt.get("yes_bid_dollars"))
+                    current_no = _dollars_to_cents(mkt.get("no_bid_dollars"))
+                    close_time = mkt.get("close_time") or mkt.get("expiration_time", "")
+                except Exception:
+                    current_yes = None
+                    current_no = None
+                    close_time = ""
+                
+                # Get buy price from tracking
+                bot_info = tracked.get(ticker)
+                buy_price = bot_info.get("buy_price") if bot_info else None
+                
+                positions.append({
+                    "ticker": ticker,
+                    "quantity": qty,
+                    "current_yes": current_yes,
+                    "current_no": current_no,
+                    "buy_price": buy_price,
+                    "close_time": close_time,
+                    "bot_bought": bot_info is not None,
+                })
+            
+            cursor = pos_data.get("cursor")
+            if not cursor:
+                break
+        
+        # Group by expiration
+        groups = _group_positions_by_expiration(positions)
+        
+        result = {}
+        for expiry, group_pos in groups.items():
+            analysis = _calc_group_pnl(group_pos)
+            
+            # Recommendation logic
+            recommendation = "hold"
+            if analysis["losing"] and auto_sell_losers:
+                if analysis["total_profit"] < -loss_threshold:
+                    # Sell losers to cut losses
+                    recommendation = "sell_losers"
+                elif len(analysis["winning"]) > 0 and len(analysis["losing"]) > len(analysis["winning"]) * 2:
+                    # More than 2x losers as winners - sell bottom performers
+                    recommendation = "sell_underperformers"
+            
+            if analysis["total_profit"] >= group_profit_target:
+                recommendation = "sell_all_take_profit"
+            
+            result[expiry] = {
+                "total_profit": analysis["total_profit"],
+                "winning_count": len(analysis["winning"]),
+                "losing_count": len(analysis["losing"]),
+                "total_positions": len(group_pos),
+                "recommendation": recommendation,
+                "winning": [{"ticker": p["ticker"], "profit": p["profit"]} for p in analysis["winning"]],
+                "losing": [{"ticker": p["ticker"], "profit": p["profit"]} for p in analysis["losing"]],
+            }
+        
+        return jsonify({"groups": result})
+    except Exception as e:
+        print(f"[group-exits] error: {e}")
+        return jsonify({"error": str(e)}), 500
