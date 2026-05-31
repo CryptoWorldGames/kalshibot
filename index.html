@@ -892,10 +892,8 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
       <button class="sm" onclick="confirmSellAll()" style="background:var(--red);color:#fff;border:none">Sell All</button>
     </div>
   </div>
-  <div id="posWrap"><div style="text-align:center;color:var(--muted);padding:40px;font-size:14px">No open positions — buy something in the Scanner tab.</div></div>
 
-  <div id="recentSettlementsTickerWrap" style="margin-top:16px;margin-bottom:12px;padding:8px;background:var(--card);border-radius:8px;border:1px solid var(--border);overflow-x:auto;overflow-y:hidden;max-height:44px"></div>
-
+  <!-- RECENT SETTLEMENTS (TOP) -->
   <div id="settlementsHeader" style="display:flex;align-items:center;justify-content:space-between;margin:22px 0 10px;flex-wrap:wrap;gap:10px">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <div class="card-title" style="margin:0;font-size:14px" id="settlementsTitle">Recent Settlements</div>
@@ -910,6 +908,11 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <div id="settlementsSummary" style="font-size:13px;color:var(--muted)"></div>
   </div>
   <div id="settlementsWrap"><div style="text-align:center;color:var(--muted);padding:24px;font-size:13px">No settlements in the last 24 hours.</div></div>
+
+  <div id="recentSettlementsTickerWrap" style="margin-top:16px;margin-bottom:12px;padding:8px;background:var(--card);border-radius:8px;border:1px solid var(--border);overflow-x:auto;overflow-y:hidden;max-height:44px"></div>
+
+  <!-- OPEN POSITIONS (BELOW) -->
+  <div id="posWrap"><div style="text-align:center;color:var(--muted);padding:40px;font-size:14px">No open positions — buy something in the Scanner tab.</div></div>
 </div><!-- /tab-positions -->
 
 <!-- ── Instructions tab ─────────────────────────────────────────────────── -->
