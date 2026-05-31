@@ -39,7 +39,7 @@ button.nav-btn:hover{border-color:var(--green);color:var(--green)}
 button.nav-btn.active{background:var(--green);border-color:var(--green);color:#000;font-weight:700}
 
 /* ── Main content ── */
-.main{padding:16px 32px 80px;width:100%;margin:0 auto;box-sizing:border-box}@media(max-width:1024px){.main{padding:16px 24px 80px}}@media(max-width:768px){.main{padding:12px 16px 80px}}
+.main{padding:16px 32px 100px;width:100%;margin:0 auto;box-sizing:border-box}@media(max-width:1024px){.main{padding:16px 24px 100px}}@media(max-width:768px){.main{padding:12px 16px 90px}}
 h1{font-size:28px;font-weight:700;margin-bottom:4px;color:#fff}
 .sub{color:var(--muted);font-size:16px;margin-bottom:12px}
 
@@ -74,12 +74,12 @@ button.sell-btn{background:var(--red);color:#fff;padding:6px 16px;font-size:13px
 button.sm{padding:6px 16px;font-size:13px}
 
 /* ── Floating Buttons ── */
-.fab-container{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:10px;z-index:50}
-.fab{padding:14px 28px;font-size:15px;font-weight:700;border-radius:10px;border:none;cursor:pointer;transition:all .2s;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.3)}
+.fab-container{position:fixed;bottom:0;left:0;right:0;display:flex;flex-direction:row;gap:8px;z-index:50;background:var(--card);border-top:1px solid var(--border);padding:10px 16px;justify-content:center;flex-wrap:wrap}
+.fab{padding:12px 24px;font-size:14px;font-weight:700;border-radius:10px;border:none;cursor:pointer;transition:all .2s;white-space:nowrap;box-shadow:none;flex:1;min-width:140px}
 .fab-scan{background:var(--green);color:#000}
-.fab-scan:hover{opacity:.9;transform:scale(1.05)}
+.fab-scan:hover{opacity:.9;transform:scale(1.02)}
 .fab-auto{background:var(--blue);color:#fff}
-.fab-auto:hover{opacity:.9;transform:scale(1.05)}
+.fab-auto:hover{opacity:.9;transform:scale(1.02)}
 
 /* ── Layout ── */
 .row{display:flex;flex-wrap:wrap;gap:14px 24px;align-items:flex-end}
@@ -170,21 +170,6 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 #toast.ok{border-color:var(--green);color:var(--green)}
 #toast.err{border-color:var(--red);color:var(--red);border-width:2px}
 
-/* ── Floating Start FAB (bottom-right) ── */
-#fab{position:fixed;right:24px;bottom:24px;display:flex;flex-direction:column;gap:10px;z-index:400;align-items:flex-end}
-#fab .fab-scan,#fab .fab-auto{
-  border-radius:999px;font-weight:800;letter-spacing:.4px;
-  padding:14px 24px;font-size:15px;border:none;cursor:pointer;
-  box-shadow:0 8px 24px #000a, 0 0 0 1px #ffffff10;
-  display:flex;align-items:center;gap:10px;white-space:nowrap;
-  transition:transform .12s, box-shadow .15s, opacity .15s;
-}
-#fab .fab-scan:hover,#fab .fab-auto:hover{transform:translateY(-2px);box-shadow:0 12px 28px #000c, 0 0 0 1px #ffffff18}
-#fab .fab-scan{background:var(--green);color:#000}
-#fab .fab-auto{background:#1e3a5f;color:#4f9eff;border:1px solid #4f9eff}
-#fab .fab-auto.running{background:#3a1a1a;color:var(--red);border-color:var(--red)}
-#fab .fab-scan .fab-sub,#fab .fab-auto .fab-sub{font-weight:500;font-size:11px;opacity:.75;letter-spacing:.2px}
-#fab .fab-scan:disabled{opacity:.6;cursor:default;transform:none}
 
 /* ── Tabs ── */
 .tab-nav{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px;position:sticky;top:64px;background:var(--bg);z-index:99}
@@ -210,6 +195,131 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     white-space:normal;word-wrap:break-word;z-index:1000;
     box-shadow:0 4px 12px rgba(0,0,0,.4)
   }
+}
+
+/* ── MOBILE OPTIMIZATIONS (375px-480px) ── */
+@media(max-width:480px){
+  /* CRITICAL MOBILE FIXES - NO OVERFLOW */
+  *{box-sizing:border-box}
+  html{width:100%;overflow-x:hidden}
+  body{font-size:16px;padding-top:56px;width:100%;overflow-x:hidden;margin:0;padding-left:0;padding-right:0}
+
+  nav{height:56px;padding:0 8px;width:100%}
+  .nav-logo{font-size:14px;margin-right:8px}
+  .nav-funds{flex-direction:column;gap:0;display:none}
+  button.nav-btn{font-size:11px;padding:4px 8px;margin-left:4px}
+
+  /* Main content - CRITICAL FIX */
+  .main{padding:6px 8px 70px;width:100%;max-width:100%;margin:0;box-sizing:border-box;overflow-x:hidden}
+  h1{font-size:18px;word-wrap:break-word}
+  .sub{font-size:13px}
+
+  /* Control panel */
+  div[style*="control-panel"],
+  div[style*="display:flex;gap:8px;margin-bottom:14px"]{
+    flex-direction: column !important;
+    gap: 4px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Buttons - touch-friendly but fit width */
+  button{padding:10px 12px;font-size:13px;min-height:44px;width:auto;max-width:100%}
+  button.sm{padding:8px 10px;font-size:11px}
+
+  /* Cards and content - PREVENT OVERFLOW */
+  .card{padding:10px 12px;margin-bottom:6px;border-radius:6px;width:100%;box-sizing:border-box;overflow-x:hidden}
+  .card-title{font-size:13px;margin-bottom:10px;word-wrap:break-word}
+
+  /* Pills and buttons - WRAP */
+  .pill{padding:6px 12px;font-size:12px}
+  .btn-group{gap:4px;margin-bottom:2px;flex-wrap:wrap}
+
+  /* Inputs - SMALLER */
+  input[type=number],input[type=text]{font-size:13px;padding:6px 8px;width:60px;min-width:50px;max-width:90px}
+
+  /* Two-column sections → One column */
+  .two-col-section{grid-template-columns:1fr !important;gap:6px;width:100%;box-sizing:border-box}
+
+  /* Floating action buttons - BOTTOM BAR */
+  .fab-container{bottom:0;right:0;left:0;gap:2px;flex-direction:row;background:var(--card);border-top:1px solid var(--border);padding:6px 4px;justify-content:center;flex-wrap:wrap}
+  .fab{padding:8px 10px;font-size:11px;width:auto;max-width:calc(100vw - 20px);flex:1;min-width:80px}
+
+  /* Tab nav - PREVENT SCROLL */
+  .tab-nav{display:flex;gap:0;border-bottom:1px solid var(--border);overflow-x:auto;scroll-behavior:smooth;-webkit-overflow-scrolling:touch;width:100%;max-width:100%}
+  .tab-btn{flex:1;min-width:60px;padding:10px 8px;font-size:12px;border:none;background:transparent;border-bottom:2px solid transparent;white-space:nowrap;width:auto}
+  .tab-btn.active{border-bottom-color:var(--green);color:var(--green)}
+
+  /* Tables - responsive and fit */
+  table{font-size:12px;width:100%;max-width:100%;box-sizing:border-box;overflow-x:auto}
+  thead th{padding:8px 6px;font-size:11px}
+  td{padding:6px 4px;font-size:11px;overflow:hidden;text-overflow:ellipsis}
+
+  /* Hide unnecessary desktop elements */
+  .fund-block{display:none}
+  .market-title-tooltip{display:none}
+
+  /* Checkboxes and labels */
+  .check-row{font-size:13px;gap:8px}
+  .label-sm{font-size:11px}
+
+  /* Status indicator */
+  #botStatus{font-size:10px;padding:4px 6px}
+
+  /* Filter selects */
+  .filter-sel{font-size:12px;padding:4px 8px;width:100%;max-width:100%}
+
+  /* Row layouts - VERTICAL */
+  .row{gap:6px 10px;flex-direction:column;width:100%}
+  .col{gap:4px}
+
+  /* Inline elements */
+  .inline{gap:6px;flex-direction:column;align-items:flex-start;width:100%}
+
+  /* Price display */
+  .price-big{font-size:12px}
+  .cd{font-size:10px}
+
+  /* Radio pills - FIT WIDTH */
+  .radio-pill{padding:6px 10px;font-size:12px;gap:4px}
+  .profit-presets{gap:4px;flex-wrap:wrap}
+
+  /* Badges */
+  .badge{font-size:10px;padding:2px 6px}
+
+  /* Buy inline */
+  .buy-inline{flex-wrap:wrap}
+  .buy-inline input{width:45px;font-size:11px}
+
+  /* Prevent text overflow */
+  td.wrap{max-width:100%;word-break:break-word}
+
+  /* Form labels - prevent overflow */
+  span[style*="font-size:14px"]{font-size:12px !important;word-wrap:break-word;display:block;margin-bottom:4px}
+}
+
+/* Extra small screens (320px-375px) */
+@media(max-width:375px){
+  body{font-size:13px;padding-top:48px;width:100%;overflow-x:hidden}
+  nav{height:48px;padding:0 6px;width:100%}
+  .nav-logo{font-size:12px;margin-right:6px}
+  .main{padding:4px 6px 80px;width:100%;max-width:100%;overflow-x:hidden}
+  h1{font-size:16px;word-wrap:break-word}
+
+  button{padding:8px 10px;font-size:12px;min-height:40px;max-width:100%}
+  .pill{padding:4px 10px;font-size:11px}
+  input[type=number],input[type=text]{font-size:12px;width:50px;min-width:45px;max-width:80px}
+  table{font-size:11px;width:100%;max-width:100%}
+  thead th{padding:6px 4px;font-size:10px}
+  td{padding:4px 2px;font-size:10px;overflow:hidden;text-overflow:ellipsis}
+
+  .tab-btn{min-width:50px;padding:8px 6px;font-size:11px}
+  .fab-container{bottom:0;right:0;left:0;gap:1px;flex-direction:row;background:var(--card);border-top:1px solid var(--border);padding:4px 2px;justify-content:center}
+  .fab{padding:6px 8px;font-size:10px;max-width:calc(100vw - 16px);flex:1;min-width:70px}
+  .main{padding:4px 6px 60px}
+  .card{padding:8px 10px;margin-bottom:4px}
+  .card-title{font-size:12px;margin-bottom:8px}
 }
 </style>
 </head>
@@ -238,13 +348,6 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 
 <!-- ── MAIN ─────────────────────────────────────────────────────── -->
 <div class="main">
-
-<!-- ── Control Panel (Mobile Remote Control) ──────────────────── -->
-<div style="display:flex;gap:8px;margin-bottom:14px;padding:8px;background:var(--card);border-radius:8px;border:1px solid var(--border)">
-  <button onclick="controlBot('stop')" style="background:var(--red);color:#fff;padding:8px 16px;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px">⏹ Stop Bot</button>
-  <button onclick="controlBot('restart')" style="background:var(--yellow);color:#000;padding:8px 16px;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px">🔄 Restart</button>
-  <span id="botStatus" style="margin-left:auto;padding:8px 12px;font-size:12px;color:var(--muted);align-self:center">checking...</span>
-</div>
 
 <div class="tab-nav">
   <button class="tab-btn active" onclick="switchTab('scanner')">Scanner</button>
@@ -850,22 +953,10 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   <div style="margin-top:8px;font-size:11px;color:#666">From your last <span id="clippyN">0</span> trades · <a href="#" onclick="switchTab('coach');return false" style="color:var(--blue);text-decoration:none">see full Coach →</a></div>
 </div>
 
-<!-- ── Floating Start FAB ──────────────────────────────────────── -->
-<div id="fab">
-  <button class="fab-auto" id="fabAuto" onclick="toggleAutoMode()" title="Loop: scan every 10s AND auto-buy what matches">
-    <span style="font-size:18px" id="fabAutoIcon">▶</span>
-    <span><span id="fabAutoText">Start Bot</span><div class="fab-sub" id="fabAutoSub">scan + buy on a loop</div></span>
-  </button>
-  <button class="fab-scan" id="scanBtn" onclick="scan()" title="One-time scan — does NOT buy anything">
-    <span style="font-size:18px">⟳</span>
-    <span>Scan Now<div class="fab-sub">one-time · no buying</div></span>
-  </button>
-</div>
-
-<!-- Bottom Save Button & Scroll to Top -->
-<div style="position:fixed;bottom:180px;right:20px;z-index:100;display:flex;flex-direction:column;gap:10px;align-items:flex-end">
-  <button id="saveSettingsBtnBottom" onclick="saveSettings();this.textContent='✓ Saved!';this.style.background='var(--green)';this.style.color='#000';setTimeout(()=>{this.textContent='Save Settings';this.style.background='';this.style.color='';},2000)" style="background:var(--card);border:1px solid var(--border);color:#fff;border-radius:7px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;transition:all .15s">Save Settings</button>
-  <button id="scrollTopBtn" onclick="window.scrollTo({top:0,behavior:'smooth'})" style="display:none;background:var(--card);border:1px solid var(--border);color:#fff;border-radius:7px;padding:10px 14px;font-size:20px;cursor:pointer;transition:all .15s;width:48px;height:48px;display:flex;align-items:center;justify-content:center" title="Back to top">↑</button>
+<!-- ── Bot Control Bar (Bottom Floating) ────────────────────────────── -->
+<div class="fab-container">
+  <button class="fab" id="botControlBtn" onclick="controlBotFromBar()" style="background:var(--yellow);color:#000;flex:1">🔄 Restart Bot</button>
+  <span id="botBarStatus" style="padding:12px 16px;font-size:13px;color:var(--muted);align-self:center">Bot Status: checking...</span>
 </div>
 
 <script>
@@ -3061,6 +3152,65 @@ function checkBotStatus() {
 // Check bot status every 10 seconds
 setInterval(checkBotStatus, 10000);
 checkBotStatus(); // Check on page load
+
+// ──── Bottom Bar Bot Control ────────────────────────────────────
+function updateBotControlBar() {
+  const btn = document.getElementById("botControlBtn");
+  const status = document.getElementById("botBarStatus");
+  if (!btn || !status) return;
+
+  const managerUrl = window.location.hostname === "localhost"
+    ? "http://localhost:5001/api/manager/status"
+    : `http://${window.location.hostname}:5001/api/manager/status`;
+
+  fetch(managerUrl)
+    .then(r => r.json())
+    .then(d => {
+      if (d.running) {
+        btn.textContent = "⏹ Stop Bot";
+        btn.style.background = "var(--red)";
+        btn.style.color = "#fff";
+        btn.onclick = () => controlBotFromBar("stop");
+        status.textContent = "✓ Bot Running";
+        status.style.color = "var(--green)";
+      } else {
+        btn.textContent = "🔄 Restart Bot";
+        btn.style.background = "var(--yellow)";
+        btn.style.color = "#000";
+        btn.onclick = () => controlBotFromBar("restart");
+        status.textContent = "✗ Bot Stopped";
+        status.style.color = "var(--red)";
+      }
+    })
+    .catch(e => {
+      status.textContent = "Status unknown";
+      status.style.color = "var(--muted)";
+    });
+}
+
+function controlBotFromBar(action) {
+  const status = document.getElementById("botBarStatus");
+  if (!status) return;
+
+  const managerUrl = window.location.hostname === "localhost"
+    ? `http://localhost:5001/api/manager/${action}`
+    : `http://${window.location.hostname}:5001/api/manager/${action}`;
+
+  status.textContent = "Sending...";
+  fetch(managerUrl, { method: "POST" })
+    .then(r => r.json())
+    .then(d => {
+      setTimeout(updateBotControlBar, 500);
+    })
+    .catch(e => {
+      status.textContent = "Error";
+      console.error("Control error:", e);
+    });
+}
+
+// Update bar on page load and every 10 seconds
+updateBotControlBar();
+setInterval(updateBotControlBar, 10000);
 
 function switchTab(name) {
   window.scrollTo(0, 0); // Jump to top when switching tabs
