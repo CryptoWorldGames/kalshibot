@@ -22,7 +22,9 @@
       "Bash(git commit *)",
       "Bash(git branch *)",
       "Bash(git remote *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "mcp__80ea11ab-91cc-4a03-9ec1-3a03380a7f99__read_file_content",
+      "mcp__80ea11ab-91cc-4a03-9ec1-3a03380a7f99__get_file_metadata"
     ]
   },
   "hooks": {
