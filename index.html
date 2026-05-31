@@ -3892,26 +3892,19 @@ function loadSettings() {
     selMax = 98;
   }
 
-  // Update input fields to match saved values (Buy Up)
-  const minEl = document.getElementById("minProb"), maxEl = document.getElementById("maxProb");
-  if (minEl && maxEl) {
-    minEl.value = selMin;
-    maxEl.value = selMax;
-    const presets = ["80–95%","85–98%","90–98%","95–98%"];
-    const label = `${selMin}–${selMax}%`;
-    activatePills("probGroupUp", presets.includes(label) ? label : "Custom");
+  // Highlight pills based on restored input values (generic for both Buy Up & Down)
+  const upMin = document.getElementById("minProb")?.value;
+  const upMax = document.getElementById("maxProb")?.value;
+  if (upMin && upMax) {
+    const upLabel = matchPresetLabel(parseInt(upMin), parseInt(upMax)) || "Custom";
+    activatePills("probGroupUp", upLabel);
   }
 
-  // Check Buy Down custom pill if values don't match presets
-  const minDownEl = document.getElementById("minProbDown"), maxDownEl = document.getElementById("maxProbDown");
-  if (minDownEl && maxDownEl) {
-    const downMin = parseFloat(minDownEl.value);
-    const downMax = parseFloat(maxDownEl.value);
-    const downLabel = `${downMin}–${downMax}%`;
-    const presets = ["80–96%"];  // Buy Down only has 80-96 as default preset
-    if (!presets.includes(downLabel) && downMin && downMax) {
-      activatePills("probGroupDown", "Custom");
-    }
+  const downMin = document.getElementById("minProbDown")?.value;
+  const downMax = document.getElementById("maxProbDown")?.value;
+  if (downMin && downMax) {
+    const downLabel = matchPresetLabel(parseInt(downMin), parseInt(downMax)) || "Custom";
+    activatePills("probGroupDown", downLabel);
   }
 
   if (s.selTime) { selTime = parseInt(s.selTime); activatePills("timeGroup", selTime < 60 ? selTime + " min" : (selTime/60)+"h"); }
