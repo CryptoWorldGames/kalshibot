@@ -1733,10 +1733,11 @@ def sell():
             "type":   "limit",
             "count":  count_int,
         }
-        price_key = "yes_price_dollars" if side == "yes" else "no_price_dollars"
-        order_payload[price_key] = str(bid_d)
+        # Use cents for price field (same as buy endpoint)
+        price_key = "yes_price" if side == "yes" else "no_price"
+        order_payload[price_key] = bid_cents  # Use cents as integer (same as buy endpoint)
 
-        print(f"[sell] {ticker} {side} × {count_int} LIMIT @ {bid_d}")
+        print(f"[sell] {ticker} {side} × {count_int} LIMIT @ {bid_d} (${bid_cents}¢)")
         result = kalshi_post("/portfolio/orders", order_payload)
         order_status = result.get("order", {}).get("status", "")
 
@@ -1756,9 +1757,14 @@ def sell():
                     if profit_dollars > 0:
                         # In profit - retry with MARKET order
                         print(f"[sell] Profit ${profit_dollars:.2f} > 0, retrying with MARKET order")
-                        order_payload["type"] = "market"
-                        del order_payload[price_key]  # Remove price for market order
-                        result = kalshi_post("/portfolio/orders", order_payload)
+                        market_payload = {
+                            "ticker": ticker,
+                            "action": "sell",
+                            "side": side,
+                            "type": "market",
+                            "count": count_int,
+                        }
+                        result = kalshi_post("/portfolio/orders", market_payload)
                         print(f"[sell] MARKET order response: {result.get('order', {}).get('status', 'unknown')}")
                     else:
                         print(f"[sell] Not profitable (${profit_dollars:.2f}), keeping LIMIT result")
