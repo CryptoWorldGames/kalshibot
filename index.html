@@ -395,6 +395,13 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   <button class="tab-btn" id="tabCoach" onclick="switchTab('coach')">Coach</button>
 </div>
 
+<!-- ── Bot Status Bar ─────────────────────────────────────────────── -->
+<div style="display:flex;align-items:center;justify-content:center;gap:20px;padding:4px 16px;border-top:2px solid #00d97e;border-bottom:1px solid var(--border);min-height:28px;background:rgba(0,217,126,0.05)">
+  <div style="flex:1;min-width:80px"></div>
+  <div id="botStatusCenter" style="font-size:13px;font-weight:700;color:#00d97e;white-space:nowrap">✓ BOT RUNNING</div>
+  <div id="botStatusRight" style="flex:1;min-width:80px;text-align:right;font-size:11px;color:var(--muted)"></div>
+</div>
+
 <!-- ── Sale Ticker ─────────────────────────────────────────────── -->
 <div id="saleTicker" style="display:none;padding:6px 0;border-bottom:1px solid var(--border);margin-bottom:12px;min-height:28px">
   <div id="saleTickerItems" style="display:flex;flex-wrap:wrap;gap:6px 0;width:100%"></div>
@@ -3412,6 +3419,7 @@ let _statusCheckInterval = null;
 function updateBotControlBar() {
   const btn = document.getElementById("botControlBtn");
   const status = document.getElementById("botBarStatus");
+  const centerStatus = document.getElementById("botStatusCenter");
   if (!btn || !status) return;
 
   const managerUrl = window.location.hostname === "localhost"
@@ -3429,6 +3437,7 @@ function updateBotControlBar() {
         status.textContent = "✓ Bot Running";
         status.style.color = "#00d97e";
         status.style.borderColor = "#00d97e";
+        if (centerStatus) centerStatus.textContent = "✓ BOT RUNNING";
       } else {
         btn.style.background = "#f5c542";
         btn.style.color = "#000";
@@ -3436,11 +3445,13 @@ function updateBotControlBar() {
         status.textContent = "✗ Bot Stopped";
         status.style.color = "#ff4d4d";
         status.style.borderColor = "#ff4d4d";
+        if (centerStatus) centerStatus.textContent = "✗ BOT STOPPED";
       }
     })
     .catch(e => {
       status.textContent = "Status unknown";
       status.style.color = "var(--muted)";
+      if (centerStatus) centerStatus.textContent = "⚠ STATUS UNKNOWN";
       console.error("Status check error:", e);
     });
 }
