@@ -1129,7 +1129,10 @@ function setSettleFilter(hours, label) {
 async function loadBalance(enrich=true) {
   try {
     const enrichParam = enrich ? "true" : "false";
-    const r = await fetch(`/api/portfolio?enrich=${enrichParam}&settlement_hours=${_settleHours}`, {timeout: 8000});
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const r = await fetch(`/api/portfolio?enrich=${enrichParam}&settlement_hours=${_settleHours}`, {signal: controller.signal});
+    clearTimeout(timeoutId);
     const d = await r.json();
     if (d.balance != null) {
       const el = document.getElementById("navCash");
