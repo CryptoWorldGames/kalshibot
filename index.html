@@ -1474,7 +1474,13 @@ function activatePills(groupId, label) {
 
 function setStrategy(mode) {
   stratMode = mode;
-  // Strictly one active at a time — deactivate all others first
+
+  // Uncheck all radio buttons first, then check the one matching this mode
+  document.querySelectorAll("input[name='strat']").forEach(rb => {
+    rb.checked = (rb.value === mode);
+  });
+
+  // Update CSS classes for visual highlighting
   ["pillResolution","pillProfit","pillProfitDol","pillProfitPrice"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.classList.remove("active");
@@ -4082,8 +4088,8 @@ setInterval(async () => {
 </script>
 
 <!-- Version Info -->
-<div style="position:fixed;bottom:0;right:8px;font-size:9px;color:#444;font-family:monospace;padding:4px 0;text-align:right;pointer-events:none">
-  <div>v1.2.0 · <span id="lastUpdate">—</span></div>
+<div style="position:fixed;bottom:0;left:50%;transform:translateX(-50%);font-size:9px;color:#444;font-family:monospace;padding:4px 0;text-align:center;pointer-events:none;white-space:nowrap">
+  <div>v1.2.1 · <span id="lastUpdate">—</span></div>
 </div>
 <script>
 const lastUpdateEl = document.getElementById("lastUpdate");
