@@ -4163,7 +4163,10 @@ setInterval(async () => {
     return;
   }
   try {
-    const r = await fetch("/api/stats", {signal: AbortSignal.timeout(2000)});
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 2000);
+    const r = await fetch("/api/stats", {signal: ctrl.signal});
+    clearTimeout(timeout);
     if (!r.ok) throw new Error(r.status);
     _stopBotStoppedAlert();
   } catch(e) {
