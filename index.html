@@ -2991,7 +2991,7 @@ async function refreshClippy() {
     const filters = {
       buyMin: parseFloat(document.getElementById("minProb")?.value) || 80,
       buyMax: parseFloat(document.getElementById("maxProb")?.value) || 96,
-      timeWindow: parseInt(document.getElementById("timeCustom")?.value) || 15,
+      timeWindow: selTime || 15,  // Use global selTime, not timeCustom input
       showCrypto: document.getElementById("showCrypto")?.checked || false,
       showSports: document.getElementById("showSports")?.checked || false,
       showPolitics: document.getElementById("showPolitics")?.checked || false,
@@ -3063,7 +3063,7 @@ async function loadCoach() {
     const filters = {
       buyMin: parseFloat(document.getElementById("minProb")?.value) || 80,
       buyMax: parseFloat(document.getElementById("maxProb")?.value) || 96,
-      timeWindow: parseInt(document.getElementById("timeCustom")?.value) || 15,
+      timeWindow: selTime || 15,  // Use global selTime, not timeCustom input
       showCrypto: document.getElementById("showCrypto")?.checked || false,
       showSports: document.getElementById("showSports")?.checked || false,
       showPolitics: document.getElementById("showPolitics")?.checked || false,
@@ -3885,7 +3885,7 @@ async function applyCoachSettings() {
     const filters = {
       buyMin: parseFloat(document.getElementById("minProb")?.value) || 80,
       buyMax: parseFloat(document.getElementById("maxProb")?.value) || 96,
-      timeWindow: parseInt(document.getElementById("timeCustom")?.value) || 15,
+      timeWindow: selTime || 15,  // Use global selTime, not timeCustom input
       showCrypto: document.getElementById("showCrypto")?.checked || false,
       showSports: document.getElementById("showSports")?.checked || false,
       showPolitics: document.getElementById("showPolitics")?.checked || false,
