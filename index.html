@@ -3412,9 +3412,10 @@ function checkBotStatus() {
     });
 }
 
-// Check bot status every 10 seconds
-setInterval(checkBotStatus, 10000);
-checkBotStatus(); // Check on page load
+// Check bot status every 10 seconds (only if manager is available)
+// Comment out to run Flask standalone without manager
+// setInterval(checkBotStatus, 10000);
+// checkBotStatus(); // Check on page load
 
 // ──── Bottom Bar Bot Control ────────────────────────────────────
 let botIsRunning = false;
@@ -3540,9 +3541,10 @@ function handleBotButtonClick() {
     });
 }
 
-// Update bar on page load and every 10 seconds
-updateBotControlBar();
-setInterval(updateBotControlBar, 10000);
+// Update bar on page load and every 10 seconds (only if manager is available)
+// Comment out to run Flask standalone without manager
+// updateBotControlBar();
+// setInterval(updateBotControlBar, 10000);
 
 // Attach click handler to button (when DOM is ready)
 if (document.readyState === "loading") {
