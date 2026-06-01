@@ -522,23 +522,43 @@ def _monitor():
                             pass
 
                 # Use per-position target if set, otherwise fall back to current global settings
-                target_pct     = pos.get("target_pct")     or (sell_strategy.get("target_pct")     if sell_strategy.get("mode") == "profit" else None)
-                target_dollars = pos.get("target_dollars") or sell_strategy.get("target_dollars")
                 profit_dollars = pos["count"] * (bid - pos["buy_price"]) / 100 if pos.get("buy_price") else None
 
-                hit_pct   = target_pct is not None and profit_pct >= target_pct and (pos.get("strategy") == "profit" or sell_strategy.get("mode") == "profit")
-                hit_dol   = target_dollars is not None and profit_dollars is not None and profit_dollars >= target_dollars
-                # Target price: sell when bid reaches the specified price in cents
-                target_price_c = pos.get("target_price_cents") or sell_strategy.get("target_price_cents")
-                hit_price = target_price_c is not None and bid >= target_price_c
+                # ENFORCE SINGLE-MODE STRATEGY: only check conditions matching the current mode
+                strat_mode = sell_strategy.get("mode", "resolution")
 
-                # Stop-loss: sell if loss exceeds threshold
+                # Initialize all as False; only set based on active mode
+                hit_pct = False
+                hit_dol = False
+                hit_price = False
+                hit_stop_pct = False
+                hit_stop_dol = False
+
+                # Only check profit % if mode is "profit"
+                if strat_mode == "profit":
+                    target_pct = pos.get("target_pct") or sell_strategy.get("target_pct")
+                    hit_pct = target_pct is not None and profit_pct >= target_pct
+
+                # Only check profit $ if mode is "profit"
+                if strat_mode == "profit":
+                    target_dollars = pos.get("target_dollars") or sell_strategy.get("target_dollars")
+                    hit_dol = target_dollars is not None and profit_dollars is not None and profit_dollars >= target_dollars
+
+                # Only check target price if mode is "profit" (used for price targets)
+                if strat_mode == "profit":
+                    target_price_c = pos.get("target_price_cents") or sell_strategy.get("target_price_cents")
+                    hit_price = target_price_c is not None and bid >= target_price_c
+
+                # Stop-loss applies to all modes (safety measure)
                 stop_loss_pct = sell_strategy.get("stop_loss_pct")
                 stop_loss_dol = sell_strategy.get("stop_loss_dol")
                 hit_stop_pct = stop_loss_pct is not None and profit_pct <= -stop_loss_pct
                 hit_stop_dol = stop_loss_dol is not None and profit_dollars is not None and profit_dollars <= -stop_loss_dol
 
-                if hit_pct or hit_dol or hit_price or hit_stop_pct or hit_stop_dol:
+                # "resolution" mode: don't auto-sell (skip all conditions above)
+                should_sell = (hit_pct or hit_dol or hit_price or hit_stop_pct or hit_stop_dol) if strat_mode != "resolution" else (hit_stop_pct or hit_stop_dol)
+
+                if should_sell:
                     # Build limit sell order with current bid price (Kalshi requires price field)
                     bid_key = "yes_bid_dollars" if pos["side"] == "yes" else "no_bid_dollars"
                     bid_d = m.get(bid_key)
