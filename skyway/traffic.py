@@ -114,29 +114,31 @@ def build_trajectory(node_ids: List[str], vehicle: str, t_start: float, alt_bump
     cruise_alt = _cruise_alt(node_ids, vehicle, alt_bump)
     elev0 = airspace.VP[node_ids[0]]["elev_m"]
     elev1 = airspace.VP[node_ids[-1]]["elev_m"]
+    spd = prof["cruise_mps"]
 
-    climb_t = cruise_alt / prof["climb_mps"]
-    descend_t = cruise_alt / prof["climb_mps"]
-    cruise_t = ground / prof["cruise_mps"]
-    total_t = climb_t + cruise_t + descend_t
+    # Continuous motion with a trapezoidal altitude profile: the aircraft moves
+    # forward the whole time (no vertical hover columns) so a cockpit camera
+    # always has a valid forward vector. Climb/descend over the route ends.
+    climb_d = min(0.28 * ground, cruise_alt * 6)
+    desc_d = min(0.28 * ground, cruise_alt * 6)
+    if climb_d + desc_d > ground:
+        climb_d = desc_d = ground * 0.4
+    total_t = max(ground / spd, 1.0)
 
-    dt = 4.0
+    dt = 3.0
     disp, res = [], []
     t = 0.0
-    while t <= total_t + 0.1:
-        if t < climb_t:                      # vertical climb at origin
-            frac = 0.0
-            alt = elev0 + (cruise_alt) * (t / climb_t)
-            spd = prof["climb_mps"]
-        elif t < climb_t + cruise_t:         # cruise along route
-            frac = (t - climb_t) / cruise_t if cruise_t else 1.0
-            alt = elev0 + cruise_alt + (elev1 - elev0) * frac
-            spd = prof["cruise_mps"]
-        else:                                # vertical descent at dest
-            frac = 1.0
-            td = t - climb_t - cruise_t
-            alt = elev1 + cruise_alt * max(0.0, 1 - td / max(descend_t, 1e-6))
-            spd = prof["climb_mps"]
+    while t <= total_t + 1e-6:
+        dist = min(ground, spd * t)
+        frac = dist / ground if ground else 1.0
+        if climb_d > 0 and dist < climb_d:
+            agl = cruise_alt * (dist / climb_d)
+        elif desc_d > 0 and dist > ground - desc_d:
+            agl = cruise_alt * max(0.0, (ground - dist) / desc_d)
+        else:
+            agl = cruise_alt
+        base = elev0 + (elev1 - elev0) * frac
+        alt = base + agl
         lat, lon, hdg = geo.interpolate_along(pts, frac)
         ts = t_start + t
         disp.append({"t": round(ts, 1), "lat": round(lat, 6), "lon": round(lon, 6),

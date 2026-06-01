@@ -1,18 +1,31 @@
-# Skyway — Autonomous Drone & eVTOL 4D Airspace System
+# Skyway — eVTOL Flight Game + Autonomous Airspace System
 
-A self-contained prototype of a **UAS Traffic Management (UTM)** "sky roadmap":
-it plans and strategically deconflicts autonomous **drone** and **eVTOL** flights
-in **4D** (latitude · longitude · altitude · **time**), synchronises with the
-**FAA-required data shares**, and shows **everyone else in the air in real time**
-on a CesiumJS globe whose clock/timeline lets you scrub through time.
+Fly an **eVTOL air taxi** (or delivery drone) on **autopilot** down a glowing
+**AR sky-lane** — a navigation line through the air, like Google Maps but
+airborne — and **blast through floating hoop-gates for points**. Every
+**landing pad and airport** is pinned on a real-world map.
 
-> Scenario region: the Dallas–Fort Worth metroplex (matches the project's CDT
-> timezone). Fully runnable offline — no API keys or Cesium ion token required.
+Under the hood it's a real **UAS Traffic Management (UTM)** engine: it plans and
+strategically deconflicts flights in **4D** (latitude · longitude · altitude ·
+**time**), syncs the **FAA-required data shares**, routes **around No-Fly
+Zones**, and shows **other aircraft in the air** around you.
+
+> Scenario region: the Dallas–Fort Worth metroplex. Fully runnable offline —
+> no API keys, no Cesium ion token required (OpenStreetMap imagery).
 
 ```bash
 pip install flask
 python -m skyway.server        # -> http://localhost:5057
 ```
+
+### How to play
+1. Pick **take off from** / **fly to** pads, an aircraft, and autopilot speed.
+2. Hit **ENGAGE AUTOPILOT** — the cockpit camera locks onto the AR line.
+3. Fly the line through every gold **hoop** for combo points; a clean run earns
+   a perfect-run bonus. Press **C** to toggle cockpit/chase, **Esc** for the menu.
+
+The autopilot route is the same 4D-deconflicted path the UTM engine produces, so
+it automatically bends **around active No-Fly Zones**.
 
 ---
 
@@ -24,7 +37,8 @@ python -m skyway.server        # -> http://localhost:5057
 | **4D strategic deconfliction** | Every operation reserves a time-stamped 4D tube. New flights are checked for **horizontal + vertical + time** separation against all reservations and refused/adjusted before takeoff — the FAA UTM "deconfliction before flight" model. |
 | **Automatic resolution** | On conflict the planner first **delays** departure (time-shift), then nudges the **cruise altitude band**, then **reroutes** around prohibited zones. |
 | **FAA data shares** | Adapters for **UAS Facility Maps** (UASFM altitude ceilings), **NOTAMs**, **TFRs**, and **Remote ID** (Part 89). Live FAA NOTAM API is used when credentials are present, otherwise a deterministic simulation. |
-| **Who's in the air, in 4D** | Live drones, eVTOLs and non-cooperative **crewed (ADS-B) traffic** rendered as time-dynamic Cesium entities. Drag the timeline to see the airspace at any moment, past or future. |
+| **First-person flight game** | A cockpit/chase camera flies the AR sky-lane on autopilot through **hoop-gates** scored with a combo multiplier; landing pads & airports are map pins. |
+| **Who's in the air** | Live drones, eVTOLs and non-cooperative **crewed (ADS-B) traffic** rendered as moving Cesium entities you pass in the sky. |
 | **Real-time sync** | Server-Sent-Events stream pushes newly cleared operations and live snapshots to every connected client. |
 
 ---

@@ -206,21 +206,21 @@ class FAADataShare:
         now = time.time()
         return [
             {
-                "id": "TFR-1934", "type": "TFR", "label": "Stadium TFR — event security",
+                "id": "NFZ-1934", "type": "No-Fly Zone", "label": "Stadium event — No-Fly Zone",
                 "kind": "circle", "lat": 32.7900, "lon": -97.0200, "radius_m": 1700,
                 "alt_min_m": 0, "alt_max_m": 700,
                 "t_start": now - 600, "t_end": now + 3600 * 3,
                 "severity": "prohibited",
             },
             {
-                "id": "NOTAM-7A21", "type": "NOTAM", "label": "Crane operation 410ft AGL",
+                "id": "NFZ-7A21", "type": "Caution", "label": "Tall crane — caution area",
                 "kind": "circle", "lat": 32.9483, "lon": -96.7299, "radius_m": 600,
                 "alt_min_m": 0, "alt_max_m": 130,
                 "t_start": now - 3600, "t_end": now + 3600 * 24,
                 "severity": "caution",
             },
             {
-                "id": "NOTAM-5C09", "type": "NOTAM", "label": "Wildfire — TFR firefighting ops",
+                "id": "NFZ-5C09", "type": "No-Fly Zone", "label": "Restricted area — No-Fly Zone",
                 "kind": "circle", "lat": 32.9020, "lon": -96.9000, "radius_m": 1400,
                 "alt_min_m": 0, "alt_max_m": 500,
                 "t_start": now - 1800, "t_end": now + 3600 * 6,
