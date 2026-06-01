@@ -4057,6 +4057,50 @@ document.addEventListener("visibilitychange", () => {
     if (overdue && !scanInProgress) scan();
   }
 });
+
+// ── Bot Down Alarm ────────────────────────────────────────────────────────────
+let _botAlarmInterval = null, _botAlarmSnoozedUntil = 0;
+function _playAlarm() {
+  if (Date.now() < _botAlarmSnoozedUntil) return;
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.frequency.value = 800; g.gain.setValueAtTime(0.3, t);
+    o.start(t); o.stop(t + 0.15); o.start(t + 0.25); o.stop(t + 0.4);
+  } catch(e) {}
+}
+function _showBotDownAlert() {
+  const bar = document.getElementById("botStoppedAlertBar");
+  if (bar && bar.style.display !== "flex") {
+    bar.style.display = "flex";
+    if (_botAlarmInterval) clearInterval(_botAlarmInterval);
+    _botAlarmInterval = setInterval(_playAlarm, 5000);
+    _playAlarm();
+  }
+}
+function _hideBotDownAlert() {
+  const bar = document.getElementById("botStoppedAlertBar");
+  if (bar) bar.style.display = "none";
+  if (_botAlarmInterval) { clearInterval(_botAlarmInterval); _botAlarmInterval = null; }
+  _botAlarmSnoozedUntil = 0;
+}
+window.snoozeBotAlert = function(min) {
+  _botAlarmSnoozedUntil = Date.now() + (min * 60 * 1000);
+  toast(`🔇 Snoozed for ${min}min`, "ok");
+};
+setInterval(async () => {
+  if (!autoModeOn) { _hideBotDownAlert(); return; }
+  try {
+    const ctrl = new AbortController(), t = setTimeout(() => ctrl.abort(), 2000);
+    await fetch("/api/stats", {signal: ctrl.signal});
+    clearTimeout(t);
+    _hideBotDownAlert();
+  } catch(e) {
+    _showBotDownAlert();
+  }
+}, 5000);
 </script>
 
 </body>
