@@ -2415,9 +2415,6 @@ function filterPos() {
     const qty = p.quantity ?? 0;
     if (Math.abs(qty) < 0.001) return false;  // Hide positions with < 0.001 qty (essentially sold)
 
-    // Hide positions with no buy price (incomplete data - likely manual trades)
-    if (p.buy_price == null && Math.abs(qty) > 0.001) return false;
-
     // Hide positions that were recently sold (even if API still shows them as open)
     const wasSold = _recentlySold.some(s => s.ticker === p.ticker);
     if (wasSold) return false;
@@ -2426,8 +2423,6 @@ function filterPos() {
     if (src === "kalshi" &&  p.bot_bought) return false;
     if (cat && p.category !== cat)         return false;
     if (hideSmall && Math.abs(qty) < 1.0) return false;
-    // Hide expired positions (Kalshi API hasn't moved them to settlements yet)
-    if (p.close_time && new Date(p.close_time) < new Date()) return false;
     // Hide positions with 95%+ loss
     if (hide95Loss && p.buy_price != null) {
       const side = qty > 0 ? "yes" : "no";

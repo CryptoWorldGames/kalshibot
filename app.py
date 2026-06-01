@@ -434,7 +434,40 @@ def _market_bid(m: dict, side: str) -> float | None:
 
 def _monitor():
     while True:
-        time.sleep(45)  # 45s — cached market data means no extra Kalshi calls
+        time.sleep(45)
+        # Auto-adopt manually bought Kalshi positions into tracked so the sell
+        # strategy applies to them too.  Only adds; never overwrites bot entries.
+        try:
+            port = kalshi_get("/portfolio/positions", {"limit": 200})
+            for p in port.get("positions", []):
+                ticker = p.get("market_ticker") or p.get("ticker", "")
+                qty    = p.get("position", 0) or 0
+                if not ticker or abs(qty) < 0.001:
+                    continue
+                with _lock:
+                    if ticker not in tracked:
+                        ttd = float(p.get("total_traded_dollars") or 0)
+                        raw_price = round(ttd / abs(qty) * 100) if ttd > 0 else None
+                        buy_price = raw_price if raw_price and raw_price <= 99 else None
+                        if buy_price is None:
+                            continue  # can't auto-sell without a cost basis
+                        side = "yes" if qty > 0 else "no"
+                        tracked[ticker] = {
+                            "side":       side,
+                            "count":      abs(qty),
+                            "buy_price":  buy_price,
+                            "title":      ticker,
+                            "strategy":   sell_strategy.get("mode", "profit"),
+                            "target_pct": sell_strategy.get("target_pct"),
+                            "target_dollars": sell_strategy.get("target_dollars"),
+                            "bought_at":  None,
+                            "status":     "open",
+                            "bot_bought": False,
+                        }
+                        print(f"[monitor] adopted manual position {ticker} qty={abs(qty)} buy_price={buy_price}¢")
+        except Exception as e:
+            print(f"[monitor] adopt error: {e}")
+
         with _lock:
             tickers = list(tracked.keys())
 
