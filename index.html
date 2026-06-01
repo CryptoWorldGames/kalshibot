@@ -469,7 +469,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
       </div>
 
       <!-- BUY DOWN -->
-      <div style="border:2px solid #fff;border-radius:8px;padding:12px 14px">
+      <div style="border:2px solid #fff;border-radius:8px;padding:12px 14px;margin-bottom:10px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
           <label class="check-row" style="font-size:14px;font-weight:700;color:var(--red)">
             <input type="checkbox" id="enableBuyDown" onchange="saveSettings()"> 📉 BUY DOWN (NO)
@@ -493,6 +493,54 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
           <span style="font-size:13px;color:#aaa">% &nbsp;±</span>
           <input type="number" id="spreadDown" value="" min="0" max="49" placeholder="0" style="width:55px" title="±spread" oninput="applySpread('down')">
           <span style="font-size:11px;color:#555">spread</span>
+        </div>
+      </div>
+
+      <!-- CATEGORIES -->
+      <div style="border:2px solid #fff;border-radius:8px;padding:12px 14px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <span class="label-sm" style="margin:0;font-size:14px;font-weight:700;color:var(--green)">📊 Show Categories</span>
+          <button class="pill sm" onclick="toggleAllCategories()" style="font-size:12px;padding:4px 12px">Select All</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px 16px">
+          <label class="check-row"><input type="checkbox" id="showCrypto" checked onchange="saveSettings();toggleCryptoTimes()"> Crypto</label>
+          <label class="check-row"><input type="checkbox" id="showSports" checked onchange="saveSettings()"> Sports</label>
+          <label class="check-row"><input type="checkbox" id="showPolitics" checked onchange="saveSettings()"> Politics</label>
+          <label class="check-row"><input type="checkbox" id="showEconomics" checked onchange="saveSettings()"> Economics</label>
+          <label class="check-row"><input type="checkbox" id="showEntertainment" checked onchange="saveSettings()"> Entertainment</label>
+          <label class="check-row"><input type="checkbox" id="showWeather" checked onchange="saveSettings()"> Weather</label>
+          <label class="check-row"><input type="checkbox" id="showNFL" checked onchange="saveSettings()"> NFL</label>
+          <label class="check-row"><input type="checkbox" id="showNBA" checked onchange="saveSettings()"> NBA</label>
+          <label class="check-row"><input type="checkbox" id="showMLB" checked onchange="saveSettings()"> MLB</label>
+          <label class="check-row"><input type="checkbox" id="showNHL" checked onchange="saveSettings()"> NHL</label>
+          <label class="check-row"><input type="checkbox" id="showSoccer" checked onchange="saveSettings()"> Soccer</label>
+          <label class="check-row"><input type="checkbox" id="showGolf" checked onchange="saveSettings()"> Golf</label>
+          <label class="check-row"><input type="checkbox" id="showTennis" checked onchange="saveSettings()"> Tennis</label>
+          <label class="check-row"><input type="checkbox" id="showMMA" checked onchange="saveSettings()"> MMA/UFC</label>
+          <label class="check-row"><input type="checkbox" id="showCombo" checked onchange="saveSettings()"> Combo/Parlay</label>
+        </div>
+        <div id="cryptoTimeWrap" style="border:1px solid #2a2a2a;border-radius:6px;padding:8px 12px;margin-top:10px">
+          <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Crypto contract types (timed only)</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px 14px">
+            <label class="check-row" style="font-size:14px"><input type="checkbox" id="crypto15m" checked onchange="saveSettings()"> 15 min</label>
+            <label class="check-row" style="font-size:14px"><input type="checkbox" id="crypto30m" checked onchange="saveSettings()"> 30 min</label>
+            <label class="check-row" style="font-size:14px"><input type="checkbox" id="crypto1h"  checked onchange="saveSettings()"> 1 hour</label>
+            <label class="check-row" style="font-size:14px"><input type="checkbox" id="cryptoDaily" onchange="saveSettings()"> Daily/Range</label>
+            <label class="check-row" style="font-size:14px"><input type="checkbox" id="cryptoWeekly" onchange="saveSettings()"> Weekly+</label>
+          </div>
+        </div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px">
+          <label class="check-row" title="Hides markets/events with many price-level variants (e.g. BTC range B73500, B73250...). Keeps clean binary YES/NO markets only.">
+            <input type="checkbox" id="hideMultiOutcome" checked onchange="saveSettings()"> Hide multi-outcome <span style="color:var(--yellow);font-size:11px;margin-left:4px">✓ rec</span>
+          </label>
+        </div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px">
+          <label class="check-row" title="Requires ≥10 open interest. Skips thin markets.">
+            <input type="checkbox" id="goodLiq" checked onchange="saveSettings()"> Active only (skip thin) <span style="color:var(--green);font-size:11px;margin-left:4px">✓</span>
+          </label>
+          <label class="check-row">
+            <input type="checkbox" id="yesOnly" checked onchange="saveSettings()"> YES side only <span style="color:var(--green);font-size:11px;margin-left:4px">✓</span>
+          </label>
         </div>
       </div>
 
@@ -548,56 +596,6 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
           <span style="font-size:14px;color:#fff">min left</span>
         </div>
         <div style="font-size:11px;color:#555;margin-top:4px">e.g. set 2 = skip markets expiring in &lt;2 min (too late to act)</div>
-      </div>
-    </div>
-    <div class="col" style="flex:1;min-width:320px" id="categoriesCol">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;cursor:pointer" onclick="const col = document.getElementById('categoriesCol'); const body = col.querySelector('.categories-body'); body.style.display = body.style.display === 'none' ? 'block' : 'none'">
-        <span class="label-sm" style="margin:0">▶ Show Categories <span style="font-size:11px;color:#666;font-weight:400;text-transform:none">(all on = show everything, uncheck to hide)</span></span>
-        <button class="pill sm" onclick="event.stopPropagation(); toggleAllCategories()" style="font-size:12px;padding:4px 12px">Select All</button>
-      </div>
-      <div class="categories-body" style="display:none">
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px 16px;margin-bottom:12px">
-        <label class="check-row"><input type="checkbox" id="showCrypto" checked onchange="saveSettings();toggleCryptoTimes()"> Crypto</label>
-        <label class="check-row"><input type="checkbox" id="showSports" checked onchange="saveSettings()"> Sports</label>
-        <label class="check-row"><input type="checkbox" id="showPolitics" checked onchange="saveSettings()"> Politics</label>
-        <label class="check-row"><input type="checkbox" id="showEconomics" checked onchange="saveSettings()"> Economics</label>
-        <label class="check-row"><input type="checkbox" id="showEntertainment" checked onchange="saveSettings()"> Entertainment</label>
-        <label class="check-row"><input type="checkbox" id="showWeather" checked onchange="saveSettings()"> Weather</label>
-        <label class="check-row"><input type="checkbox" id="showNFL" checked onchange="saveSettings()"> NFL</label>
-        <label class="check-row"><input type="checkbox" id="showNBA" checked onchange="saveSettings()"> NBA</label>
-        <label class="check-row"><input type="checkbox" id="showMLB" checked onchange="saveSettings()"> MLB</label>
-        <label class="check-row"><input type="checkbox" id="showNHL" checked onchange="saveSettings()"> NHL</label>
-        <label class="check-row"><input type="checkbox" id="showSoccer" checked onchange="saveSettings()"> Soccer</label>
-        <label class="check-row"><input type="checkbox" id="showGolf" checked onchange="saveSettings()"> Golf</label>
-        <label class="check-row"><input type="checkbox" id="showTennis" checked onchange="saveSettings()"> Tennis</label>
-        <label class="check-row"><input type="checkbox" id="showMMA" checked onchange="saveSettings()"> MMA/UFC</label>
-        <label class="check-row"><input type="checkbox" id="showCombo" checked onchange="saveSettings()"> Combo/Parlay</label>
-      </div>
-      <!-- Crypto time periods — shown only when Crypto is checked -->
-      <div id="cryptoTimeWrap" style="border:1px solid #2a2a2a;border-radius:6px;padding:8px 12px;margin-bottom:10px">
-        <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Crypto contract types (timed only)</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px 14px">
-          <label class="check-row" style="font-size:14px"><input type="checkbox" id="crypto15m" checked onchange="saveSettings()"> 15 min</label>
-          <label class="check-row" style="font-size:14px"><input type="checkbox" id="crypto30m" checked onchange="saveSettings()"> 30 min</label>
-          <label class="check-row" style="font-size:14px"><input type="checkbox" id="crypto1h"  checked onchange="saveSettings()"> 1 hour</label>
-          <label class="check-row" style="font-size:14px"><input type="checkbox" id="cryptoDaily" onchange="saveSettings()"> Daily/Range</label>
-          <label class="check-row" style="font-size:14px"><input type="checkbox" id="cryptoWeekly" onchange="saveSettings()"> Weekly+</label>
-        </div>
-      </div>
-
-      <div style="display:flex;gap:16px;flex-wrap:wrap">
-        <label class="check-row" title="Hides markets/events with many price-level variants (e.g. BTC range B73500, B73250...). Keeps clean binary YES/NO markets only.">
-          <input type="checkbox" id="hideMultiOutcome" checked onchange="saveSettings()"> Hide multi-outcome contracts <span style="color:var(--yellow);font-size:11px;margin-left:4px">✓ rec</span>
-        </label>
-      </div>
-      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px">
-        <label class="check-row" title="Requires ≥10 open interest. Skips thin markets.">
-          <input type="checkbox" id="goodLiq" checked onchange="saveSettings()"> Active only (skip thin) <span style="color:var(--green);font-size:11px;margin-left:4px">✓</span>
-        </label>
-        <label class="check-row">
-          <input type="checkbox" id="yesOnly" checked onchange="saveSettings()"> YES side only <span style="color:var(--green);font-size:11px;margin-left:4px">✓</span>
-        </label>
-      </div>
       </div>
     </div>
   </div>
