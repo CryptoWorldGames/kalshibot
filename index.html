@@ -770,55 +770,30 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
       </div>
     </div>
 
-    <!-- Option 4: Buy at X cents, sell when price hits Y cents -->
+    <!-- Option 4: Sell when price hits X cents -->
     <label class="radio-pill" id="pillProfitPrice" onclick="setStrategy('target_price')" style="align-items:center">
       <input type="radio" name="strat" value="target_price">
-      <span>🎯 Buy at X¢ → Sell when hits Y¢</span>
+      <span>🎯 Sell when price hits X¢</span>
     </label>
-    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;padding-left:12px;margin-top:6px">
-
-      <!-- BUY IN price -->
-      <div>
-        <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Buy at (max price to buy)</div>
-        <div class="btn-group" id="buyInGroup" style="margin-bottom:6px">
-          <button class="pill" onclick="setBuyIn(15)">15¢</button>
-          <button class="pill" onclick="setBuyIn(25)">25¢</button>
-          <button class="pill" onclick="setBuyIn(35)">35¢</button>
-          <button class="pill" onclick="setBuyIn(50)">50¢</button>
-          <button class="pill" onclick="setBuyIn(75)">75¢</button>
-        </div>
-        <div style="display:flex;align-items:center;gap:4px" onclick="event.stopPropagation()">
-          <input type="number" id="buyInPriceCustom" value="25" min="1" max="99" step="1"
-            style="width:72px;background:#111;border:2px solid var(--yellow);border-radius:7px;color:var(--yellow);font-size:15px;font-weight:700;padding:7px 10px;outline:none"
-            placeholder="¢ buy"
-            onclick="setStrategy('target_price')"
-            onblur="setStrategy('target_price');saveSettings();pushStrategy();checkStrategyConflicts()">
-          <span style="color:var(--yellow);font-size:14px;font-weight:700">¢</span>
-        </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding-left:12px" onclick="setStrategy('target_price')">
+      <div class="btn-group" id="profitPriceGroup" style="margin:0">
+        <button class="pill" onclick="setTargetPrice(30)">30¢</button>
+        <button class="pill" onclick="setTargetPrice(40)">40¢</button>
+        <button class="pill" onclick="setTargetPrice(50)">50¢</button>
+        <button class="pill" onclick="setTargetPrice(60)">60¢</button>
+        <button class="pill" onclick="setTargetPrice(75)">75¢</button>
+        <button class="pill" onclick="setTargetPrice(90)">90¢</button>
       </div>
-
-      <!-- SELL OUT price -->
-      <div>
-        <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Sell when price hits</div>
-        <div class="btn-group" id="profitPriceGroup" style="margin-bottom:6px">
-          <button class="pill" onclick="setTargetPrice(30)">30¢</button>
-          <button class="pill" onclick="setTargetPrice(40)">40¢</button>
-          <button class="pill" onclick="setTargetPrice(50)">50¢</button>
-          <button class="pill" onclick="setTargetPrice(60)">60¢</button>
-          <button class="pill" onclick="setTargetPrice(75)">75¢</button>
-          <button class="pill" onclick="setTargetPrice(90)">90¢</button>
-        </div>
-        <div style="display:flex;align-items:center;gap:4px" onclick="event.stopPropagation()">
-          <input type="number" id="targetPriceCustom" value="35" min="1" max="99" step="1"
-            style="width:72px;background:#111;border:2px solid var(--green);border-radius:7px;color:var(--green);font-size:15px;font-weight:700;padding:7px 10px;outline:none"
-            placeholder="¢ sell"
-            onclick="setStrategy('target_price')"
-            onblur="setStrategy('target_price');saveSettings();pushStrategy();checkStrategyConflicts()">
-          <span style="color:var(--green);font-size:14px;font-weight:700">¢</span>
-        </div>
+      <div style="display:flex;align-items:center;gap:4px" onclick="event.stopPropagation()">
+        <input type="number" id="targetPriceCustom" value="35" min="1" max="99" step="1"
+          style="width:72px;background:#111;border:2px solid var(--green);border-radius:7px;color:var(--green);font-size:15px;font-weight:700;padding:7px 10px;outline:none"
+          placeholder="¢ sell"
+          onclick="setStrategy('target_price')"
+          onblur="setStrategy('target_price');saveSettings();pushStrategy();checkStrategyConflicts()">
+        <span style="color:var(--green);font-size:14px;font-weight:700">¢</span>
       </div>
-
     </div>
+
 
   </div>
     <div id="stratConflictWarn" style="display:none;background:#3a1a00;border:1px solid var(--yellow);color:var(--yellow);border-radius:6px;padding:8px 12px;font-size:12px;margin:8px 0"></div>
@@ -1002,7 +977,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <span id="botBarStatus" style="font-size:11px;color:#ff4d4d;background:#000;border:1px solid #ff4d4d;border-radius:3px;padding:2px 6px;white-space:nowrap;font-weight:600;text-align:center;pointer-events:none">✗ Stopped</span>
   </div>
   <button onclick="window.scrollTo({top:0,behavior:'smooth'})" style="background:transparent;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:8px;min-width:34px;height:34px" title="Scroll to top">↑</button>
-  <button onclick="saveBtnClick(this)" id="saveBtn" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer;padding:6px 12px;font-size:12px;font-weight:600;transition:all .2s;height:34px" title="Save settings"><span class="save-text-pc">Save Settings</span><span class="save-text-mobile">Save</span></button>
+  <button onclick="saveBtnClick(this)" id="saveBtn" style="background:var(--green);color:#000;border:none;border-radius:6px;cursor:pointer;padding:6px 12px;font-size:12px;font-weight:700;transition:all .2s;height:34px;min-width:100px" title="Save all settings now"><span class="save-text-pc">Save Settings</span><span class="save-text-mobile">Save</span></button>
 </div>
 
 <script>
@@ -1571,12 +1546,14 @@ function setProfit(pct) {
   stratPct = pct;
   document.getElementById("profitCustom").value = pct;
   activatePills("profitGroup", pct + "%");
+  setStrategy("profit");  // FIX: Switch to profit mode when clicking profit buttons
   pushStrategy();
 }
 
 function setProfitDol(dol) {
   document.getElementById("profitDolCustom").value = dol.toFixed(2);
   activatePills("profitDolGroup", "$" + dol.toFixed(2));
+  setStrategy("profit_dollars");  // FIX: Switch to profit_dollars mode when clicking dollar buttons
   pushStrategy();
 }
 
@@ -3510,14 +3487,21 @@ function saveBtnClick(btn) {
   const mobileText = btn.querySelector(".save-text-mobile");
   const oldPc = pcText?.textContent;
   const oldMobile = mobileText?.textContent;
-  btn.style.color = "#00d97e";  // Green - actual color value, not CSS var
+
+  // Bright white feedback for 3 seconds
+  btn.style.color = "#fff";
+  btn.style.fontWeight = "700";
+  btn.style.background = "var(--green)";
   if (pcText) pcText.textContent = "✓ Saved!";
   if (mobileText) mobileText.textContent = "✓";
+
   setTimeout(() => {
-    btn.style.color = "";  // Reset to CSS default
+    btn.style.color = "#000";
+    btn.style.fontWeight = "700";
+    btn.style.background = "var(--green)";
     if (pcText) pcText.textContent = oldPc;
     if (mobileText) mobileText.textContent = oldMobile;
-  }, 2000);
+  }, 3000);
 }
 
 function handleBotButtonClick() {
@@ -4095,6 +4079,19 @@ setInterval(async () => {
     _showBotDownAlert();
   }
 }, 5000);
+</script>
+
+<!-- Version Info -->
+<div style="position:fixed;bottom:0;right:8px;font-size:9px;color:#444;font-family:monospace;padding:4px 0;text-align:right;pointer-events:none">
+  <div>v1.2.0 · <span id="lastUpdate">—</span></div>
+</div>
+<script>
+const lastUpdateEl = document.getElementById("lastUpdate");
+if (lastUpdateEl) {
+  const now = new Date();
+  const timeStr = now.toLocaleString("en-US", {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit", second:"2-digit", hour12:false});
+  lastUpdateEl.textContent = timeStr;
+}
 </script>
 
 </body>

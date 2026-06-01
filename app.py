@@ -1906,19 +1906,33 @@ def pnl_history():
 def set_strategy():
     data = request.get_json(silent=True) or {}
     mode = data.get("mode", "resolution")
-    pct  = float(data.get("target_pct", 10)) if data.get("target_pct") is not None else None
-    dol  = float(data.get("target_dollars")) if data.get("target_dollars") is not None else None
 
     if mode not in ("resolution", "profit"):
         return jsonify({"error": "mode must be resolution or profit"}), 400
 
-    tp  = float(data.get("target_price_cents"))   if data.get("target_price_cents")   is not None else None
-    bip = float(data.get("buy_in_price_cents"))   if data.get("buy_in_price_cents")   is not None else None
-    sell_strategy["mode"]                = mode
-    if pct is not None: sell_strategy["target_pct"]         = pct
-    if dol is not None: sell_strategy["target_dollars"]      = dol
-    if tp  is not None: sell_strategy["target_price_cents"]  = tp
-    if bip is not None: sell_strategy["buy_in_price_cents"]  = bip
+    try:
+        pct  = float(data.get("target_pct", 10)) if data.get("target_pct") is not None else None
+        dol  = float(data.get("target_dollars")) if data.get("target_dollars") is not None else None
+        tp   = float(data.get("target_price_cents")) if data.get("target_price_cents") is not None else None
+        bip  = float(data.get("buy_in_price_cents")) if data.get("buy_in_price_cents") is not None else None
+
+        # Validate numeric ranges to prevent nonsensical values
+        if pct is not None and (pct < 1 or pct > 999):
+            return jsonify({"error": "target_pct must be 1-999"}), 400
+        if dol is not None and (dol < 0.01 or dol > 1000):
+            return jsonify({"error": "target_dollars must be 0.01-1000"}), 400
+        if tp is not None and (tp < 1 or tp > 99):
+            return jsonify({"error": "target_price_cents must be 1-99"}), 400
+        if bip is not None and (bip < 1 or bip > 99):
+            return jsonify({"error": "buy_in_price_cents must be 1-99"}), 400
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid numeric values"}), 400
+
+    sell_strategy["mode"] = mode
+    if pct is not None: sell_strategy["target_pct"] = pct
+    if dol is not None: sell_strategy["target_dollars"] = dol
+    if tp is not None: sell_strategy["target_price_cents"] = tp
+    if bip is not None: sell_strategy["buy_in_price_cents"] = bip
     try: STRATEGY_FILE.write_text(json.dumps(sell_strategy), encoding="utf-8")
     except Exception: pass
     return jsonify({"ok": True, "strategy": sell_strategy})
