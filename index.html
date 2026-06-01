@@ -880,7 +880,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
         <option value="price_asc">↑ Lowest Odds</option>
       </select>
       <label class="check-row" style="font-size:14px" title="Hides positions smaller than 1 contract (e.g., 0.5 contracts, 0.08 contracts)">
-        <input type="checkbox" id="hideSmallPositions" checked onchange="filterPos();saveSettings()"> Hide fractional positions (&lt;1)
+        <input type="checkbox" id="hideSmallPositions" onchange="filterPos();saveSettings()"> Hide fractional positions (&lt;1)
       </label>
       <label class="check-row" style="font-size:14px" title="Hides positions with 95% or more loss (letting them ride to resolution)">
         <input type="checkbox" id="hide95LossPositions" onchange="filterPos();saveSettings()"> Hide 95%+ loss (riding)
@@ -2522,7 +2522,7 @@ function filterPos() {
 function renderPositionsTable(positions) {
   const wrap = document.getElementById("posWrap");
   if (!wrap) return;
-  updatePosTabBadge(allPositions.length);
+  updatePosTabBadge(positions.length);
   if (!allPositions.length) {
     wrap.innerHTML = '<div style="text-align:center;color:var(--muted);padding:40px;font-size:14px">No open positions — buy something in the Scanner tab.</div>';
     return;
