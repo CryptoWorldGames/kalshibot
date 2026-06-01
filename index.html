@@ -1161,7 +1161,7 @@ async function loadBalance(enrich=true) {
           const profit = cur != null ? qty * (cur - p.buy_price) / 100 : null;
           if (profit != null) {
             const totalReceived = cur != null ? qty * cur / 100 : null;
-            announceSell(qty, profit, cur, totalReceived);  // cha-ching/trumpet + voice
+            announceSell(qty, profit, cur, totalReceived, p.category);  // cha-ching/trumpet + voice
           }
           // Determine if this was a bot auto-sell or market resolution
           const wasResolution = cur != null && (cur <= 1 || cur >= 99);
@@ -2096,7 +2096,7 @@ async function buyOne(idx, override=false) {
     msgEl.textContent = `✓ ${d.contracts} contracts · $${d.spent}`;
     msgEl.className = "row-msg ok";
     toast(`✓ Bought ${d.contracts} ${m.side.toUpperCase()} · ${m.title || m.ticker}`, "ok");
-    announceBuy(d.contracts, m.price, parseFloat(d.spent));
+    announceBuy(d.contracts, m.price, parseFloat(d.spent), m.category);
     // Flash the row green so it's obvious the bot bought it
     const row = document.getElementById(`btn-${idx}`)?.closest("tr");
     if (row) {
@@ -2209,7 +2209,7 @@ async function sellPos(ticker, side, count, safeId) {
     if (soldProfit != null) {
       const sellPriceCents = side === "yes" ? soldPos?.current_yes : soldPos?.current_no;
       const totalReceived = (sellPriceCents != null) ? count * sellPriceCents / 100 : null;
-      announceSell(count, soldProfit, sellPriceCents, totalReceived);
+      announceSell(count, soldProfit, sellPriceCents, totalReceived, soldPos?.category);
     }
     addToSaleTicker(marketTitle, soldProfit, side);
     selectedPosTickers.delete(ticker);
@@ -2943,7 +2943,13 @@ function playChaChingFile() {
   } catch(e) { chaChing(); }
 }
 
-function announceBuy(count, priceCents, totalDollars) {
+// "Crypto" -> "crypto", blank -> "" ; produces "1 crypto contract" / "2 contracts"
+function contractPhrase(count, category) {
+  const cat = category ? String(category).trim().toLowerCase() + " " : "";
+  return `${count} ${cat}contract${count > 1 ? "s" : ""}`;
+}
+
+function announceBuy(count, priceCents, totalDollars, category) {
   const customBeep = localStorage.getItem("customSound_buy");
   if (customBeep) {
     try { new Audio(customBeep).play().catch(() => playBeep(900, 0.15, 0.35)); }
@@ -2952,8 +2958,7 @@ function announceBuy(count, priceCents, totalDollars) {
     playBeep(900, 0.15, 0.35);
   }
   setTimeout(() => {
-    const c = `${count} contract${count > 1 ? "s" : ""}`;
-    let text = `you bought ${c}`;
+    let text = `you bought ${contractPhrase(count, category)}`;
     if (priceCents != null) text += ` for ${Math.round(priceCents)} cent${Math.round(priceCents) === 1 ? "" : "s"} each`;
     if (totalDollars != null) text += `, for a total of ${moneyWords(totalDollars)}`;
     speakText(text);
@@ -2986,9 +2991,8 @@ function playSadTrumpet() {
   } catch(e) {}
 }
 
-function announceSell(count, profit, sellPriceCents, totalReceived) {
-  const c = `${count} contract${count > 1 ? "s" : ""}`;
-  let detail = `you sold ${c}`;
+function announceSell(count, profit, sellPriceCents, totalReceived, category) {
+  let detail = `you sold ${contractPhrase(count, category)}`;
   if (sellPriceCents != null) detail += ` for ${Math.round(sellPriceCents)} cent${Math.round(sellPriceCents) === 1 ? "" : "s"} each`;
   if (totalReceived != null) detail += `, for a total of ${moneyWords(totalReceived)}`;
 
