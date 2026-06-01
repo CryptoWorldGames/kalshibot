@@ -158,5 +158,32 @@ git push
   crypto at $0.05, enable **Buy Down** or raise Max spend. ← user decision.
 - Changes are LOCAL only (not committed/pushed yet).
 
-*Last updated: 2026-05-31*
+---
+
+## 2026-06-01 Session — Skyway: drone/eVTOL 4D airspace subsystem (NEW, separate from the trading bot)
+
+Added a **self-contained `skyway/` package** on branch
+`claude/drone-evtol-airspace-system-DhTg6`. It is unrelated to KalshiBot trading
+— a standalone UAS Traffic Management (UTM) prototype. Documented here per the
+"always update CONTEXT.md" rule.
+
+- **What:** Autonomous drone + eVTOL "sky roadmap" — plans/strategically
+  deconflicts flights in **4D** (lat·lon·alt·**time**), syncs FAA data shares
+  (UAS Facility Maps, NOTAMs, TFRs, Remote ID), shows all other aircraft live on
+  a CesiumJS globe with a scrubbable timeline.
+- **Run:** `pip install flask` then `python -m skyway.server` → http://localhost:5057
+- **Files:** `geo.py` (4D math), `airspace.py` (vertiports/skylanes/UASFM grid +
+  FAA adapters), `deconfliction.py` (4D reservation engine, sep 150 m / 25 m / 8 s),
+  `traffic.py` (route planning, trajectory gen, simulator, Remote ID),
+  `server.py` (Flask REST + SSE), `static/index.html` (Cesium 4D UI, tokenless OSM).
+- **Deconfliction:** time-shift → altitude bump → reroute around prohibited TFRs.
+  Routing is advisory-aware (drops corridors crossing active TFRs).
+- **FAA live mode:** auto-enables when `FAA_NOTAM_CLIENT_ID` / `_SECRET` env set;
+  otherwise deterministic simulation so it runs fully offline.
+- **Verified:** all REST endpoints + SSE tested; 40/56 vertiport pairs clear,
+  remaining 16 are legitimate traffic-saturation refusals.
+- **Note:** Flask was NOT in the container originally; installed for testing.
+  `requirements.txt` already lists `flask>=3.0.0`. Scenario region = DFW metroplex.
+
+*Last updated: 2026-06-01*
 *GitHub: https://github.com/CryptoWorldGames/kalshibot*

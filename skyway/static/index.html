@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Skyway — Autonomous Drone &amp; eVTOL 4D Airspace</title>
+<link href="https://cdn.jsdelivr.net/npm/cesium@1.123.0/Build/Cesium/Widgets/widgets.css" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/cesium@1.123.0/Build/Cesium/Cesium.js"></script>
+<style>
+  :root{ --bg:#0b1020; --panel:#121a30ee; --line:#26324f; --txt:#dce6f7; --mut:#8aa0c8;
+         --drone:#36d399; --evtol:#38bdf8; --warn:#fbbf24; --bad:#f87171; }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
+            font:13px/1.4 system-ui,Segoe UI,Roboto,sans-serif;overflow:hidden}
+  #cesium{position:absolute;inset:0}
+  .cesium-widget-credits{display:none!important}
+  header{position:absolute;top:0;left:0;right:0;height:46px;z-index:10;display:flex;
+         align-items:center;gap:14px;padding:0 14px;background:linear-gradient(#0b1020ee,#0b102099);
+         border-bottom:1px solid var(--line)}
+  header h1{font-size:15px;margin:0;font-weight:700;letter-spacing:.3px}
+  header h1 small{color:var(--mut);font-weight:500}
+  .pill{padding:2px 8px;border-radius:20px;background:#1b2747;border:1px solid var(--line);
+        font-size:11px;color:var(--mut)}
+  .pill b{color:var(--txt)}
+  .panel{position:absolute;z-index:9;background:var(--panel);border:1px solid var(--line);
+          border-radius:12px;backdrop-filter:blur(6px);box-shadow:0 8px 30px #0008}
+  #left{top:58px;left:12px;width:210px;padding:12px}
+  #right{top:58px;right:12px;width:268px;max-height:calc(100vh - 150px);
+         display:flex;flex-direction:column}
+  #planner{bottom:12px;left:12px;width:330px;padding:12px}
+  h3{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--mut)}
+  .row{display:flex;align-items:center;gap:8px;margin:6px 0}
+  .sw{width:11px;height:11px;border-radius:3px;flex:none}
+  label.tog{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;margin:5px 0}
+  input,select{background:#0d1530;color:var(--txt);border:1px solid var(--line);
+               border-radius:7px;padding:6px 8px;font:inherit;width:100%}
+  button{background:#1d4ed8;color:#fff;border:0;border-radius:8px;padding:8px 10px;
+         font:inherit;font-weight:600;cursor:pointer;width:100%}
+  button.ghost{background:#1b2747;color:var(--txt);border:1px solid var(--line)}
+  button:hover{filter:brightness(1.1)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  #trafficList{overflow:auto;padding:0 12px 12px}
+  .ac{display:flex;align-items:center;gap:8px;padding:6px 6px;border-radius:8px;cursor:pointer}
+  .ac:hover{background:#1b2747}
+  .ac .cs{font-weight:700} .ac .meta{color:var(--mut);font-size:11px}
+  .tag{font-size:10px;padding:1px 6px;border-radius:10px;border:1px solid var(--line)}
+  .stat{display:flex;justify-content:space-between;margin:3px 0}
+  .stat b{font-variant-numeric:tabular-nums}
+  #result{margin-top:8px;font-size:12px;color:var(--mut);min-height:16px}
+  #result.ok{color:var(--drone)} #result.err{color:var(--bad)}
+  .adv{font-size:11px;padding:5px 6px;border-left:3px solid var(--warn);margin:5px 0;background:#1b274780}
+  .adv.bad{border-color:var(--bad)}
+  .scrolly{overflow:auto}
+  a{color:#7aa7ff}
+</style>
+</head>
+<body>
+<div id="cesium"></div>
+
+<header>
+  <h1>🛩️ Skyway <small>· autonomous drone + eVTOL · 4D UTM</small></h1>
+  <span class="pill">Airborne <b id="hbAir">0</b></span>
+  <span class="pill">Operations <b id="hbOps">0</b></span>
+  <span class="pill">Data share <b id="hbMode">…</b></span>
+  <span class="pill" id="hbClock">UTC —</span>
+</header>
+
+<div id="left" class="panel">
+  <h3>Sky roadmap layers</h3>
+  <label class="tog"><input type="checkbox" id="lyLanes" checked><span class="sw" style="background:#5b8cff"></span>Skylane corridors</label>
+  <label class="tog"><input type="checkbox" id="lyPorts" checked><span class="sw" style="background:#cbd5e1"></span>Vertiports</label>
+  <label class="tog"><input type="checkbox" id="lyUasfm" checked><span class="sw" style="background:#f59e0b"></span>UASFM ceilings</label>
+  <label class="tog"><input type="checkbox" id="lyAdv" checked><span class="sw" style="background:#f87171"></span>NOTAM / TFR</label>
+  <label class="tog"><input type="checkbox" id="lyPaths" checked><span class="sw" style="background:#94a3b8"></span>4D flight paths</label>
+  <h3 style="margin-top:12px">Legend</h3>
+  <div class="row"><span class="sw" style="background:var(--drone)"></span>Delivery drone</div>
+  <div class="row"><span class="sw" style="background:var(--evtol)"></span>eVTOL air taxi</div>
+  <div class="row"><span class="sw" style="background:#e879f9"></span>Crewed (ADS-B)</div>
+</div>
+
+<div id="right" class="panel">
+  <div style="padding:12px 12px 0"><h3>Live traffic — who's in the air</h3></div>
+  <div id="trafficList" class="scrolly"></div>
+</div>
+
+<div id="planner" class="panel">
+  <h3>Plan a 4D flight (strategic deconfliction)</h3>
+  <div class="grid2">
+    <div><label class="meta">From</label><select id="pFrom"></select></div>
+    <div><label class="meta">To</label><select id="pTo"></select></div>
+  </div>
+  <div class="grid2" style="margin-top:8px">
+    <div><label class="meta">Vehicle</label>
+      <select id="pVeh"><option value="drone">Delivery drone</option><option value="evtol">eVTOL air taxi</option></select></div>
+    <div><label class="meta">Depart in (s)</label><input id="pDep" type="number" value="30" min="0" step="10"></div>
+  </div>
+  <div class="grid2" style="margin-top:10px">
+    <button id="pGo">Request clearance</button>
+    <button class="ghost" id="pInject">Inject random op</button>
+  </div>
+  <div id="result"></div>
+  <div class="grid2" style="margin-top:8px">
+    <button class="ghost" id="btnStats">Stats</button>
+    <button class="ghost" id="btnReset">Reset scenario</button>
+  </div>
+  <div id="statsBox" class="scrolly" style="max-height:120px;margin-top:8px;display:none"></div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const VCOL = { drone:Cesium.Color.fromCssColorString('#36d399'),
+               evtol:Cesium.Color.fromCssColorString('#38bdf8') };
+const EXTCOL = Cesium.Color.fromCssColorString('#e879f9');
+
+Cesium.Ion.defaultAccessToken = undefined;
+const viewer = new Cesium.Viewer('cesium', {
+  baseLayer: new Cesium.ImageryLayer(new Cesium.UrlTemplateImageryProvider({
+    url:'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    credit:'© OpenStreetMap contributors', maximumLevel:19 })),
+  baseLayerPicker:false, geocoder:false, homeButton:false, navigationHelpButton:false,
+  sceneModePicker:true, fullscreenButton:false, animation:true, timeline:true,
+  infoBox:true, selectionIndicator:true, terrain:undefined,
+});
+viewer.scene.globe.depthTestAgainstTerrain = false;
+viewer.scene.skyAtmosphere.show = true;
+
+const layers = { lanes:[], ports:[], uasfm:[], adv:[], ops:{} };
+let VP = {};
+
+function fmtClock(jd){
+  const d = Cesium.JulianDate.toDate(jd);
+  return 'UTC ' + d.toISOString().substr(11,8);
+}
+
+// ---- load static airspace ------------------------------------------------
+async function loadAirspace(){
+  const a = await (await fetch('/api/airspace')).json();
+  VP = Object.fromEntries(a.vertiports.map(v=>[v.id,v]));
+  // vertiports
+  a.vertiports.forEach(v=>{
+    layers.ports.push(viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(v.lon, v.lat, v.elev_m+5),
+      point:{pixelSize:9, color:Cesium.Color.WHITE, outlineColor:Cesium.Color.fromCssColorString('#1d4ed8'), outlineWidth:2},
+      label:{text:v.name.split(' ')[0], font:'11px sans-serif', pixelOffset:new Cesium.Cartesian2(0,-16),
+             fillColor:Cesium.Color.WHITE, showBackground:true, backgroundColor:Cesium.Color.fromCssColorString('#0b1020cc'),
+             scale:0.85, distanceDisplayCondition:new Cesium.DistanceDisplayCondition(0,120000)},
+      cylinder:{length:300, topRadius:14, bottomRadius:14, material:Cesium.Color.fromCssColorString('#1d4ed888')},
+    }));
+  });
+  // skylanes — colored by altitude band, drawn at cruise height
+  a.skylanes.forEach(l=>{
+    const mid=(l.floor_m+l.ceil_m)/2;
+    const hue = Math.max(0,Math.min(1,(mid-30)/120));
+    const col = Cesium.Color.fromHsl(0.6-hue*0.25, 0.7, 0.6, 0.9);
+    layers.lanes.push(viewer.entities.add({
+      polyline:{ positions:Cesium.Cartesian3.fromDegreesArrayHeights(
+                   l.path.flatMap(p=>[p[1],p[0],mid])),
+                 width:3, material:new Cesium.PolylineArrowMaterialProperty(col) }
+    }));
+  });
+  // UASFM restricted cells (ceiling < 400ft) as translucent footprints
+  a.uasfm_grid.filter(c=>c.ceiling_ft<400).forEach(c=>{
+    const r=1-c.ceiling_ft/400;
+    layers.uasfm.push(viewer.entities.add({
+      rectangle:{ coordinates:Cesium.Rectangle.fromDegrees(c.lon_min,c.lat_min,c.lon_max,c.lat_max),
+        height:0, material:Cesium.Color.fromHsl(0.08*(1-r)+0.0, 0.9, 0.5, 0.18+0.25*r),
+        outline:false }
+    }));
+  });
+  // fill planner dropdowns
+  const opts=a.vertiports.map(v=>`<option value="${v.id}">${v.name}</option>`).join('');
+  $('#pFrom').innerHTML=opts; $('#pTo').innerHTML=opts; $('#pTo').selectedIndex=3;
+  // frame the scene
+  viewer.camera.flyTo({ destination: Cesium.Cartesian3.fromDegrees(a.center[1], a.center[0]-0.25, 42000),
+    orientation:{ heading:0, pitch:Cesium.Math.toRadians(-55), roll:0 }, duration:0 });
+}
+
+async function loadAdvisories(){
+  layers.adv.forEach(e=>viewer.entities.remove(e)); layers.adv=[];
+  const d = await (await fetch('/api/faa/advisories')).json();
+  $('#hbMode').textContent = d.mode;
+  d.advisories.forEach(av=>{
+    if(av.kind!=='circle') return;
+    const bad = av.severity==='prohibited';
+    const mid=(av.alt_min_m+av.alt_max_m)/2, len=Math.max(40, av.alt_max_m-av.alt_min_m);
+    layers.adv.push(viewer.entities.add({
+      name:`${av.type} ${av.id}`,
+      description:`<b>${av.label}</b><br>${av.type} ${av.id}<br>${av.alt_min_m}–${av.alt_max_m} m`,
+      position:Cesium.Cartesian3.fromDegrees(av.lon, av.lat, mid),
+      cylinder:{ length:len, topRadius:av.radius_m, bottomRadius:av.radius_m,
+        material:(bad?Cesium.Color.RED:Cesium.Color.ORANGE).withAlpha(0.16),
+        outline:true, outlineColor:(bad?Cesium.Color.RED:Cesium.Color.ORANGE).withAlpha(0.6)},
+    }));
+  });
+  renderAdvList(d.advisories);
+}
+
+// ---- operations -> 4D time-dynamic entities ------------------------------
+function addOperation(op){
+  if(layers.ops[op.id]) return;
+  const traj=op.trajectory; if(!traj||traj.length<2) return;
+  const pos=new Cesium.SampledPositionProperty();
+  traj.forEach(s=>pos.addSample(Cesium.JulianDate.fromDate(new Date(s.t*1000)),
+                 Cesium.Cartesian3.fromDegrees(s.lon, s.lat, s.alt)));
+  pos.setInterpolationOptions({interpolationDegree:1, interpolationAlgorithm:Cesium.LinearApproximation});
+  const start=Cesium.JulianDate.fromDate(new Date(traj[0].t*1000));
+  const stop=Cesium.JulianDate.fromDate(new Date(traj[traj.length-1].t*1000));
+  const ext = op.source==='ADS-B';
+  const col = ext?EXTCOL:VCOL[op.vehicle];
+  const e=viewer.entities.add({
+    id:op.id, name:`${op.callsign} · ${op.operator}`,
+    description:`<b>${op.callsign}</b> — ${op.vehicle} (${op.source})<br>Operator: ${op.operator}`
+      +`<br>Remote ID: ${op.rid.uas_id}<br>Route: ${op.route.join(' → ')}`
+      +`<br>Cruise ${op.summary.cruise_alt_ft} ft · ${op.summary.ground_km} km`,
+    availability:new Cesium.TimeIntervalCollection([new Cesium.TimeInterval({start,stop})]),
+    position:pos, orientation:new Cesium.VelocityOrientationProperty(pos),
+    point:{pixelSize:ext?9:11, color:col, outlineColor:Cesium.Color.BLACK, outlineWidth:1},
+    label:{text:op.callsign, font:'11px sans-serif', pixelOffset:new Cesium.Cartesian2(0,14),
+           fillColor:col, scale:0.8, distanceDisplayCondition:new Cesium.DistanceDisplayCondition(0,60000)},
+    path:{ leadTime:120, trailTime:90, width:ext?1.5:2.2, resolution:2,
+           material:new Cesium.PolylineGlowMaterialProperty({glowPower:0.25, color:col.withAlpha(0.7)})},
+  });
+  e._op=op;
+  layers.ops[op.id]=e;
+}
+
+async function loadOperations(){
+  const d=await (await fetch('/api/operations')).json();
+  d.operations.forEach(addOperation);
+  // configure the 4D clock to span the whole scenario, start "now"
+  let lo=Infinity, hi=-Infinity;
+  d.operations.forEach(o=>{ lo=Math.min(lo,o.summary.t_start); hi=Math.max(hi,o.summary.t_end); });
+  const start=Cesium.JulianDate.fromDate(new Date(lo*1000));
+  const stop=Cesium.JulianDate.fromDate(new Date(hi*1000));
+  viewer.clock.startTime=start.clone(); viewer.clock.stopTime=stop.clone();
+  viewer.clock.currentTime=Cesium.JulianDate.fromDate(new Date(d.server_time*1000));
+  viewer.clock.clockRange=Cesium.ClockRange.LOOP_STOP;
+  viewer.clock.multiplier=6; viewer.clock.shouldAnimate=true;
+  viewer.timeline.zoomTo(start,stop);
+}
+
+// ---- live traffic side panel (driven by the Cesium clock) ----------------
+let lastList=0;
+viewer.clock.onTick.addEventListener(()=>{
+  const jd=viewer.clock.currentTime;
+  $('#hbClock').textContent=fmtClock(jd);
+  const now=Date.now();
+  if(now-lastList<500) return; lastList=now;
+  const rows=[];
+  for(const id in layers.ops){
+    const e=layers.ops[id]; const op=e._op;
+    const p=e.position.getValue(jd); if(!p) continue;
+    const c=Cesium.Cartographic.fromCartesian(p);
+    rows.push({op, alt:c.height,
+      lon:Cesium.Math.toDegrees(c.longitude), lat:Cesium.Math.toDegrees(c.latitude)});
+  }
+  rows.sort((a,b)=>b.alt-a.alt);
+  $('#hbAir').textContent=rows.length;
+  $('#hbOps').textContent=Object.keys(layers.ops).length;
+  $('#trafficList').innerHTML=rows.map(r=>{
+    const col=r.op.source==='ADS-B'?'#e879f9':(r.op.vehicle==='drone'?'#36d399':'#38bdf8');
+    return `<div class="ac" data-id="${r.op.id}">
+      <span class="sw" style="background:${col}"></span>
+      <div style="flex:1">
+        <div><span class="cs">${r.op.callsign}</span>
+          <span class="tag">${r.op.source==='ADS-B'?'crewed':r.op.vehicle}</span></div>
+        <div class="meta">${r.op.operator} · ${Math.round(r.alt/0.3048)} ft</div>
+      </div></div>`;
+  }).join('') || '<div class="meta" style="padding:8px">No aircraft airborne at this time.</div>';
+});
+
+$('#trafficList').addEventListener('click', ev=>{
+  const el=ev.target.closest('.ac'); if(!el) return;
+  const e=layers.ops[el.dataset.id]; if(e){ viewer.selectedEntity=e; viewer.trackedEntity=e; }
+});
+
+function renderAdvList(advs){
+  // re-use stats box area? show in left panel bottom via title — keep simple: tooltip on entities.
+}
+
+// ---- planner -------------------------------------------------------------
+$('#pGo').onclick=async()=>{
+  const body={origin:$('#pFrom').value, dest:$('#pTo').value, vehicle:$('#pVeh').value,
+              depart_in_s:Number($('#pDep').value)};
+  const r=$('#result'); r.className=''; r.textContent='Requesting strategic deconfliction…';
+  try{
+    const res=await (await fetch('/api/route/plan',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();
+    if(!res.ok){ r.className='err'; r.textContent='✖ '+(res.error||'no clearance'); return; }
+    addOperation(res.operation);
+    const rz=res.resolution;
+    r.className='ok';
+    r.textContent=`✔ Cleared ${res.operation.callsign}: delay ${rz.delay_s}s, `
+      +`alt adj ${rz.alt_bump_m}m, cruise ${res.operation.summary.cruise_alt_ft}ft, `
+      +`${res.operation.summary.ground_km}km. Conflicts resolved: ${rz.attempts.length}.`;
+    const e=layers.ops[res.operation.id]; if(e) viewer.selectedEntity=e;
+  }catch(err){ r.className='err'; r.textContent='✖ '+err; }
+};
+
+$('#pInject').onclick=async()=>{
+  const res=await (await fetch('/api/operations/add',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:'{}'})).json();
+  if(res.ok){ addOperation(res.operation);
+    $('#result').className='ok'; $('#result').textContent='Injected '+res.operation.callsign; }
+};
+
+$('#btnStats').onclick=async()=>{
+  const box=$('#statsBox');
+  if(box.style.display==='block'){ box.style.display='none'; return; }
+  const s=await (await fetch('/api/stats')).json();
+  box.style.display='block';
+  box.innerHTML=`
+    <div class="stat"><span>Data share</span><b>${s.data_share_mode}</b></div>
+    <div class="stat"><span>Operations</span><b>${s.operations_total}</b></div>
+    <div class="stat"><span>Airborne now</span><b>${s.airborne_now}</b></div>
+    <div class="stat"><span>Drones / eVTOL</span><b>${s.drones} / ${s.evtols}</b></div>
+    <div class="stat"><span>Skylanes</span><b>${s.skylanes}</b></div>
+    <div class="stat"><span>Vertiports</span><b>${s.vertiports}</b></div>
+    <div class="stat"><span>Advisories</span><b>${s.advisories}</b></div>`;
+};
+
+$('#btnReset').onclick=async()=>{
+  await fetch('/api/scenario/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+  for(const id in layers.ops){ viewer.entities.remove(layers.ops[id]); }
+  layers.ops={};
+  await loadOperations();
+  $('#result').className=''; $('#result').textContent='Scenario reseeded.';
+};
+
+// ---- layer toggles -------------------------------------------------------
+$('#lyLanes').onchange=e=>layers.lanes.forEach(x=>x.show=e.target.checked);
+$('#lyPorts').onchange=e=>layers.ports.forEach(x=>x.show=e.target.checked);
+$('#lyUasfm').onchange=e=>layers.uasfm.forEach(x=>x.show=e.target.checked);
+$('#lyAdv').onchange=e=>layers.adv.forEach(x=>x.show=e.target.checked);
+$('#lyPaths').onchange=e=>{ for(const id in layers.ops){ layers.ops[id].path.show=e.target.checked; } };
+
+// ---- live SSE ------------------------------------------------------------
+function connectStream(){
+  const es=new EventSource('/api/stream');
+  es.onmessage=ev=>{
+    let m; try{ m=JSON.parse(ev.data);}catch{ return; }
+    if(m.event==='operation_added' && m.operation){
+      addOperation(m.operation);
+      // extend clock window if needed
+      const end=Cesium.JulianDate.fromDate(new Date(m.operation.summary.t_end*1000));
+      if(Cesium.JulianDate.greaterThan(end, viewer.clock.stopTime)){
+        viewer.clock.stopTime=end.clone(); viewer.timeline.zoomTo(viewer.clock.startTime,end);
+      }
+    }
+  };
+  es.onerror=()=>{ es.close(); setTimeout(connectStream, 4000); };
+}
+
+// ---- boot ----------------------------------------------------------------
+(async()=>{
+  await loadAirspace();
+  await loadAdvisories();
+  await loadOperations();
+  connectStream();
+})();
+</script>
+</body>
+</html>
