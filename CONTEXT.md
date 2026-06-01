@@ -1,5 +1,10 @@
 # KalshiBot — Full Context File
 
+> **⚠️ Shared memory — multiple projects.** This context file is memory for
+> several distinct projects: **kalshibot**, **cns bot**, and **cns tree**. Do NOT
+> apply, reuse, or carry over this context for any project that is **not** in that
+> list without first asking the user.
+
 > **For future Claude instances:** Read this file AND the GitHub repo at https://github.com/CryptoWorldGames/kalshibot
 > This is the authoritative context. Update this file at the end of every session.
 
