@@ -7,6 +7,7 @@ Run: python manager.py
 
 import subprocess
 import signal
+import socket
 import sys
 import time
 import json
@@ -137,24 +138,32 @@ def signal_handler(sig, frame):
     sys.exit(0)
 
 if __name__ == "__main__":
-    # Start Flask
     start_flask()
 
-    # Start auto-restart monitor thread
     monitor_thread = threading.Thread(target=auto_restart_monitor, daemon=True)
     monitor_thread.start()
 
-    # Handle signals
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    # Start manager HTTP server
-    print(f"[manager] Manager running on port {MANAGER_PORT}")
-    print(f"[manager] Flask running on port {FLASK_PORT}")
-    print("[manager] Endpoints: /api/manager/status, /start, /stop, /restart")
+    # Bind manager HTTP server — retry if port is briefly still in use from prior run
+    manager_server = None
+    for attempt in range(10):
+        try:
+            manager_server = HTTPServer(("0.0.0.0", MANAGER_PORT), ManagerHandler)
+            manager_server.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            break
+        except OSError as e:
+            print(f"[manager] Port {MANAGER_PORT} busy (attempt {attempt+1}/10), retrying in 2s... ({e})")
+            time.sleep(2)
 
-    manager_server = HTTPServer(("0.0.0.0", MANAGER_PORT), ManagerHandler)
-    try:
-        manager_server.serve_forever()
-    except KeyboardInterrupt:
-        signal_handler(None, None)
+    if manager_server is None:
+        print(f"[manager] ERROR: Could not bind port {MANAGER_PORT} after 10 attempts. Continuing without remote control.")
+    else:
+        print(f"[manager] Manager running on port {MANAGER_PORT}")
+        print(f"[manager] Flask running on port {FLASK_PORT}")
+        print("[manager] Endpoints: /api/manager/status, /start, /stop, /restart")
+        try:
+            manager_server.serve_forever()
+        except KeyboardInterrupt:
+            signal_handler(None, None)
