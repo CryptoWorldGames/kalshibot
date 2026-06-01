@@ -1686,8 +1686,10 @@ async function scan() {
   // Safety: force-unlock after 30s so scan button never stays stuck
   const _scanSafety = setTimeout(() => { scanInProgress = false; }, 30000);
   const btn = document.getElementById("scanBtn");
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spin"></span>Scanning…';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span>Scanning…';
+  }
   setStatus("Scanning…","");
 
   // Only clear markets if last results are older than 60 seconds
@@ -1859,8 +1861,10 @@ async function scan() {
   } finally {
     clearTimeout(_scanSafety);
     scanInProgress = false;
-    btn.disabled = false;
-    btn.textContent = "Scan Now";
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Scan Now";
+    }
   }
 }
 
