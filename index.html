@@ -3491,55 +3491,8 @@ function saveBtnClick(btn) {
 }
 
 function handleBotButtonClick() {
-  const btn = document.getElementById("botControlBtn");
-  const status = document.getElementById("botBarStatus");
-  const action = botIsRunning ? "stop" : "restart";
-
-  if (!status || !btn) return;
-
-  const managerUrl = window.location.hostname === "localhost"
-    ? `http://localhost:5100/api/manager/${action}`
-    : `http://${window.location.hostname}:5100/api/manager/${action}`;
-
-  // Show "Please wait" message
-  if (action === "stop") {
-    status.textContent = "⏳ Please wait while stopping bot";
-    status.style.color = "#ffa500";
-    status.style.borderColor = "#ffa500";
-  } else {
-    status.textContent = "⏳ Please wait while restarting bot";
-    status.style.color = "#ffa500";
-    status.style.borderColor = "#ffa500";
-  }
-  btn.disabled = true;
-  btn.style.opacity = "0.6";
-
-  fetch(managerUrl, { method: "POST" })
-    .then(r => r.json())
-    .then(d => {
-      // Poll every 500ms for up to 10 seconds during transition
-      let checks = 0;
-      const pollInterval = setInterval(() => {
-        checks++;
-        updateBotControlBar();
-        if (checks >= 20 || !btn.disabled) {
-          clearInterval(pollInterval);
-          btn.disabled = false;
-          btn.style.opacity = "1";
-        }
-      }, 500);
-    })
-    .catch(e => {
-      status.textContent = "⚠ Error - check console";
-      status.style.color = "#ff4d4d";
-      status.style.borderColor = "#ff4d4d";
-      console.error("Control error:", e);
-      setTimeout(() => {
-        btn.disabled = false;
-        btn.style.opacity = "1";
-        updateBotControlBar();
-      }, 2000);
-    });
+  // Just toggle auto mode — don't call manager API which restarts Flask
+  autoModeOn ? stopAutoMode("Stopped manually") : startAutoMode();
 }
 
 // Update bar on page load and every 10 seconds (only if manager is available)
