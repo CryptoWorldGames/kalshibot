@@ -13,6 +13,9 @@ import time
 import json
 from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
+
+class ReusingHTTPServer(HTTPServer):
+    allow_reuse_address = True  # Must be set before socket.bind() is called
 from urllib.parse import urlparse
 import threading
 
@@ -146,24 +149,27 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    # Bind manager HTTP server — retry if port is briefly still in use from prior run
+    # Bind manager HTTP server — ReusingHTTPServer sets SO_REUSEADDR before bind
     manager_server = None
-    for attempt in range(10):
+    for attempt in range(15):
         try:
-            manager_server = HTTPServer(("0.0.0.0", MANAGER_PORT), ManagerHandler)
-            manager_server.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            manager_server = ReusingHTTPServer(("0.0.0.0", MANAGER_PORT), ManagerHandler)
             break
         except OSError as e:
-            print(f"[manager] Port {MANAGER_PORT} busy (attempt {attempt+1}/10), retrying in 2s... ({e})")
+            print(f"[manager] Port {MANAGER_PORT} busy (attempt {attempt+1}/15), retrying in 2s... ({e})")
             time.sleep(2)
 
     if manager_server is None:
-        print(f"[manager] ERROR: Could not bind port {MANAGER_PORT} after 10 attempts. Continuing without remote control.")
+        print(f"[manager] ERROR: Could not bind port {MANAGER_PORT}. Flask still running — no remote control.")
+        # Keep process alive so Flask auto-restart still works
+        while RUNNING:
+            time.sleep(5)
     else:
         print(f"[manager] Manager running on port {MANAGER_PORT}")
         print(f"[manager] Flask running on port {FLASK_PORT}")
         print("[manager] Endpoints: /api/manager/status, /start, /stop, /restart")
         try:
             manager_server.serve_forever()
-        except KeyboardInterrupt:
+        except Exception as e:
+            print(f"[manager] Server error: {e}")
             signal_handler(None, None)
