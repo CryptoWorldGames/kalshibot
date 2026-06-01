@@ -1019,6 +1019,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 // Show/hide scroll-to-top button
 window.addEventListener('scroll', () => {
   const btn = document.getElementById('scrollTopBtn');
+  if (!btn) return; // Element doesn't exist, silently skip
   if (window.scrollY > 300) {
     btn.style.display = 'flex';
   } else {
