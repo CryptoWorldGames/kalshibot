@@ -1192,6 +1192,8 @@ async function loadBalance(enrich=true) {
     }
   } catch(e) {
     console.error("[loadBalance error]", e);
+    // Detect Flask going down (connection refused = TypeError, not AbortError)
+    if (e.name !== "AbortError") _onFlaskConnectionLost();
   } finally {
     hideNavLoading();
   }
@@ -3993,8 +3995,36 @@ setProfit(parseFloat(document.getElementById("profitCustom")?.value) || 10);
 syncFabButtons();
 // Always push current sell strategy to Flask on page load (survives Flask restarts)
 setTimeout(() => { pushStrategy(); pushSellSettings(); }, 1000);
-// Removed auto-restart — user must manually click "Start Bot" to ensure scan loop actually runs
-localStorage.removeItem("kb_bot_was_running");
+
+// ── Flask crash recovery ───────────────────────────────────────────────────
+// When Flask crashes the manager restarts it within ~5s. The browser detects
+// repeated connection failures and polls until Flask is back, then reloads.
+let _flaskDownTimer = null;
+function _onFlaskConnectionLost() {
+  if (_flaskDownTimer) return;  // already polling
+  console.warn("[flask] connection lost — polling for recovery...");
+  _flaskDownTimer = setInterval(async () => {
+    try {
+      const r = await fetch("/", {method:"HEAD", cache:"no-store", signal: AbortSignal.timeout(3000)});
+      if (r.ok) {
+        clearInterval(_flaskDownTimer);
+        _flaskDownTimer = null;
+        console.warn("[flask] back up — reloading page");
+        window.location.reload();
+      }
+    } catch(e) {}
+  }, 5000);
+}
+
+// ── Auto-restart bot if it was running before page reload / Flask crash ───
+if (localStorage.getItem("kb_bot_was_running")) {
+  setTimeout(() => {
+    if (!autoModeOn) {
+      console.log("[boot] resuming bot (was running before reload)");
+      startAutoMode();
+    }
+  }, 2500);  // wait for settings + strategy to load first
+}
 // Auto-save on blur (click out) from ANY input or select on the page
 document.querySelectorAll("input, select").forEach(el => {
   el.addEventListener("change", saveSettings);
