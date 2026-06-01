@@ -597,6 +597,17 @@ def index():
     return send_from_directory(HERE, "index.html")
 
 
+@app.route("/audio/<path:filename>")
+def serve_audio(filename):
+    # Serves user-supplied sounds (e.g. audio/chaching.mp3) committed to the repo.
+    return send_from_directory(HERE / "audio", filename)
+
+
+@app.route("/photos/<path:filename>")
+def serve_photos(filename):
+    return send_from_directory(HERE / "photos", filename)
+
+
 @app.route("/api/debug")
 def debug():
     data = kalshi_get("/markets", {"status": "open", "limit": 3})
@@ -1418,8 +1429,13 @@ def scan():
         max_age_mins   = float(max_age_raw) if max_age_raw else None
         no_buy_within_raw = request.args.get("no_buy_within_mins", "")
         no_buy_within_mins = float(no_buy_within_raw) if no_buy_within_raw else None
-        crypto_times_raw = request.args.get("crypto_times", "15m,30m,1h,daily,weekly")
-        crypto_times = set(crypto_times_raw.split(",")) if crypto_times_raw else {"15m","30m","1h","daily","weekly"}
+        crypto_times_raw = request.args.get("crypto_times", "")
+        # "none"/empty = Crypto enabled but no time-type sub-filter selected → allow ALL crypto types
+        # (previously this became {"none"} which matched no real market type and blocked all crypto)
+        if (not crypto_times_raw) or crypto_times_raw.strip().lower() == "none":
+            crypto_times = None
+        else:
+            crypto_times = set(t.strip() for t in crypto_times_raw.split(",") if t.strip())
         hide_multi = request.args.get("hide_multi", "false").lower() == "true"
 
         # Cap minutes to prevent timedelta overflow (max ~1 year = 525600 min)
@@ -1467,6 +1483,12 @@ def scan():
     # ── Approach 1: direct probe of known short-term series (fastest) ─────────
     # These bypass KXMV completely; each is a direct series query
     KNOWN_SERIES = [
+        # Crypto — 15-minute timed markets (rotate every 15 min; must probe directly)
+        "KXBTC15M", "KXETH15M", "KXSOL15M", "KXHYPE15M",
+        "KXDOGE15M", "KXBNB15M", "KXXRP15M",
+        # Crypto — 30-minute / 1-hour timed
+        "KXBTC30M", "KXETH30M", "KXSOL30M",
+        "KXBTC1H", "KXETH1H", "KXSOL1H",
         # Crypto (daily/weekly ranges)
         "KXBTC", "KXBTCD", "KXBTCW", "KXBTCM",
         "KXETH", "KXETHUSD", "KXETHD",

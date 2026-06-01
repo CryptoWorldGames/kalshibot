@@ -139,5 +139,24 @@ git push
 
 ---
 
-*Last updated: 2026-05-30*
+## 2026-05-31 Session 2 — Start/Stop fix + why crypto wasn't buying
+
+- **Start/Stop button "restarts instead" — FIXED.** `syncFabButtons()` bailed early
+  (`if (!fabAuto) return;`) because the FAB was removed in favor of bottom bar
+  `#botControlBtn`. So the button text, status pill, and green "BOT RUNNING" banner were
+  hardcoded and never reflected `autoModeOn`. Rewrote `syncFabButtons()` to drive all of them.
+  Bottom bar is now green "▶ Start Bot" when stopped, red "⏹ Stop Bot" when running.
+- **crypto_times=none blocked all crypto — FIXED** (app.py). Crypto checked + no time-type
+  boxes → `none` → was `{"none"}` (matched nothing). Now `none`/empty → no sub-filter (all
+  crypto). Scan total 1 → 11.
+- **15-min crypto series added to KNOWN_SERIES** (app.py): KXBTC15M/KXETH15M/KXSOL15M/
+  KXHYPE15M/KXDOGE15M/KXBNB15M/KXXRP15M (+30M/1H) so they're probed every cycle.
+- **loadBalance timeout 8s → 15s** (index.html) — stops "AbortError" console spam.
+- **WHY nothing bought at $0.05 (config, not a bug):** a nickel only affords contracts ≤5¢.
+  Affordable 15-min crypto is usually the "no" side (2–5¢); with **Buy Down OFF** those are
+  skipped, so it only bought the rare cheap "yes" market (e.g. politics @2¢). To buy 15-min
+  crypto at $0.05, enable **Buy Down** or raise Max spend. ← user decision.
+- Changes are LOCAL only (not committed/pushed yet).
+
+*Last updated: 2026-05-31*
 *GitHub: https://github.com/CryptoWorldGames/kalshibot*

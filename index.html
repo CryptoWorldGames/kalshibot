@@ -396,9 +396,9 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 </div>
 
 <!-- ── Bot Status Bar (BELOW TABS) ─────────────────────────────────────────────── -->
-<div id="botStatusBar" style="display:flex;align-items:center;justify-content:center;gap:20px;padding:6px 16px;border-bottom:1px solid var(--border);min-height:28px;background:#00d97e;position:relative;z-index:100">
+<div id="botStatusBar" style="display:flex;align-items:center;justify-content:center;gap:20px;padding:6px 16px;border-bottom:1px solid var(--border);min-height:28px;background:#2a2a2a;position:relative;z-index:100">
   <div style="flex:1;min-width:80px"></div>
-  <div id="botStatusCenter" style="font-size:13px;font-weight:700;color:#000;white-space:nowrap">✓ BOT RUNNING</div>
+  <div id="botStatusCenter" style="font-size:13px;font-weight:700;color:#fff;white-space:nowrap">✗ BOT STOPPED — click Start Bot</div>
   <div id="botStatusRight" style="flex:1;min-width:80px;text-align:right;font-size:11px;color:#000"></div>
 </div>
 
@@ -517,7 +517,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
         <button class="pill" onclick="setTime(10080,'1w')">1w</button>
         <button class="pill" onclick="setTime(20160,'2w')">2w</button>
         <button class="pill" onclick="setTime(43200,'1m')">1m</button>
-        <button class="pill" onclick="setTime(525600,'All')">All (365d)</button>
+        <button class="pill" onclick="setTime(525600,'All (365d)')">All (365d)</button>
         <div class="inline">
           <button class="pill" onclick="setTime('custom')">Custom</button>
           <input type="number" id="timeCustom" value="15" min="1" placeholder="min" style="display:none;width:70px">
@@ -1007,9 +1007,9 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 
 <!-- ── Bot Control Bar (Bottom Floating) ────────────────────────────── -->
 <div style="position:fixed;bottom:0;left:0;right:0;z-index:50;background:var(--card);border-top:1px solid var(--border);padding:10px 16px;display:flex;gap:8px;align-items:center">
-  <button id="botControlBtn" style="flex:1;background:#ff4d4d;color:#fff;border:1px solid #fff;padding:14px 24px;font-size:16px;font-weight:700;cursor:pointer;text-align:center;white-space:nowrap;user-select:none;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;transition:all 0.3s;border-radius:0;min-height:50px;position:relative;z-index:10000;pointer-events:auto !important;line-height:1.2" title="Stop or restart the bot">⏹ Stop Bot</button>
+  <button id="botControlBtn" style="flex:1;background:#00d97e;color:#000;border:1px solid #fff;padding:14px 24px;font-size:16px;font-weight:700;cursor:pointer;text-align:center;white-space:nowrap;user-select:none;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;transition:all 0.3s;border-radius:0;min-height:50px;position:relative;z-index:10000;pointer-events:auto !important;line-height:1.2" title="Start or stop the auto-buy bot">▶ Start Bot</button>
   <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;gap:2px;padding:0">
-    <span id="botBarStatus" style="font-size:11px;color:#00d97e;background:#000;border:1px solid #00d97e;border-radius:3px;padding:2px 6px;white-space:nowrap;font-weight:600;text-align:center;pointer-events:none">✓ Running</span>
+    <span id="botBarStatus" style="font-size:11px;color:#ff4d4d;background:#000;border:1px solid #ff4d4d;border-radius:3px;padding:2px 6px;white-space:nowrap;font-weight:600;text-align:center;pointer-events:none">✗ Stopped</span>
   </div>
   <button onclick="window.scrollTo({top:0,behavior:'smooth'})" style="background:transparent;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:8px;min-width:34px;height:34px" title="Scroll to top">↑</button>
   <button onclick="saveBtnClick(this)" id="saveBtn" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer;padding:6px 12px;font-size:12px;font-weight:600;transition:all .2s;height:34px" title="Save settings"><span class="save-text-pc">Save Settings</span><span class="save-text-mobile">Save</span></button>
@@ -1131,7 +1131,7 @@ async function loadBalance(enrich=true) {
   try {
     const enrichParam = enrich ? "true" : "false";
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
     const r = await fetch(`/api/portfolio?enrich=${enrichParam}&settlement_hours=${_settleHours}`, {signal: controller.signal});
     clearTimeout(timeoutId);
     const d = await r.json();
@@ -1159,7 +1159,10 @@ async function loadBalance(enrich=true) {
           const cur    = side === "yes" ? p.current_yes : p.current_no;
           const qty    = Math.abs(p.quantity ?? 0);
           const profit = cur != null ? qty * (cur - p.buy_price) / 100 : null;
-          if (profit != null && profit > 0) chaChing();
+          if (profit != null) {
+            const totalReceived = cur != null ? qty * cur / 100 : null;
+            announceSell(qty, profit, cur, totalReceived);  // cha-ching/trumpet + voice
+          }
           // Determine if this was a bot auto-sell or market resolution
           const wasResolution = cur != null && (cur <= 1 || cur >= 99);
           showSellPopup(p.title || p.ticker, profit, wasResolution ? "resolved" : "sold");
@@ -1652,29 +1655,49 @@ async function pushSellSettings() {
 // ── Scan ──────────────────────────────────────────────────────────────────
 
 function syncFabButtons() {
-  const fabAuto     = document.getElementById("fabAuto");
-  const fabAutoText = document.getElementById("fabAutoText");
-  const fabAutoIcon = document.getElementById("fabAutoIcon");
-  const fabAutoSub  = document.getElementById("fabAutoSub");
-  if (!fabAuto) return;
   const onScanner = localStorage.getItem("activeTab") !== "positions" &&
                     localStorage.getItem("activeTab") !== "stats" &&
                     localStorage.getItem("activeTab") !== "coach";
+
+  // Optional FAB (may not exist in current layout) — guard each element.
+  const fabAuto = document.getElementById("fabAuto");
+  if (fabAuto) {
+    const fabAutoText = document.getElementById("fabAutoText");
+    const fabAutoIcon = document.getElementById("fabAutoIcon");
+    const fabAutoSub  = document.getElementById("fabAutoSub");
+    if (autoModeOn) {
+      fabAuto.classList.add("running");
+      if (fabAutoText) fabAutoText.textContent = "Stop Bot";
+      if (fabAutoIcon) fabAutoIcon.textContent = "■";
+      if (fabAutoSub)  fabAutoSub.textContent  = "bot running — click to stop";
+      fabAuto.style.display = "";
+    } else {
+      fabAuto.classList.remove("running");
+      if (fabAutoText) fabAutoText.textContent = "Start Bot";
+      if (fabAutoIcon) fabAutoIcon.textContent = "▶";
+      if (fabAutoSub)  fabAutoSub.textContent  = "scan + buy on a loop";
+      fabAuto.style.display = onScanner ? "" : "none";
+    }
+  }
+
   const scanBtn2 = document.getElementById("scanBtn");
+  if (scanBtn2) scanBtn2.style.display = onScanner ? "" : "none";
+
+  // Bottom control bar + top banner — THE real bot state (autoModeOn = scan loop).
+  const botBtn       = document.getElementById("botControlBtn");
+  const barStatus    = document.getElementById("botBarStatus");
+  const statusBar    = document.getElementById("botStatusBar");
+  const centerStatus = document.getElementById("botStatusCenter");
   if (autoModeOn) {
-    fabAuto.classList.add("running");
-    fabAutoText.textContent = "Stop Bot";
-    fabAutoIcon.textContent = "■";
-    fabAutoSub.textContent  = "bot running — click to stop";
-    fabAuto.style.display = "";  // always show Stop Bot
-    if (scanBtn2) scanBtn2.style.display = onScanner ? "" : "none";
+    if (botBtn) { botBtn.textContent = "⏹ Stop Bot"; botBtn.style.background = "#ff4d4d"; botBtn.style.color = "#fff"; }
+    if (barStatus) { barStatus.textContent = "✓ Running"; barStatus.style.color = "#00d97e"; barStatus.style.borderColor = "#00d97e"; }
+    if (statusBar) { statusBar.style.background = "#00d97e"; statusBar.style.display = "flex"; }
+    if (centerStatus) { centerStatus.textContent = "✓ BOT RUNNING"; centerStatus.style.color = "#000"; }
   } else {
-    fabAuto.classList.remove("running");
-    fabAutoText.textContent = "Start Bot";
-    fabAutoIcon.textContent = "▶";
-    fabAutoSub.textContent  = "scan + buy on a loop";
-    fabAuto.style.display = onScanner ? "" : "none";  // hide Start Bot on non-scanner
-    if (scanBtn2) scanBtn2.style.display = onScanner ? "" : "none";
+    if (botBtn) { botBtn.textContent = "▶ Start Bot"; botBtn.style.background = "#00d97e"; botBtn.style.color = "#000"; }
+    if (barStatus) { barStatus.textContent = "✗ Stopped"; barStatus.style.color = "#ff4d4d"; barStatus.style.borderColor = "#ff4d4d"; }
+    if (statusBar) { statusBar.style.background = "#2a2a2a"; statusBar.style.display = "flex"; }
+    if (centerStatus) { centerStatus.textContent = "✗ BOT STOPPED — click Start Bot"; centerStatus.style.color = "#fff"; }
   }
 }
 
@@ -2073,7 +2096,7 @@ async function buyOne(idx, override=false) {
     msgEl.textContent = `✓ ${d.contracts} contracts · $${d.spent}`;
     msgEl.className = "row-msg ok";
     toast(`✓ Bought ${d.contracts} ${m.side.toUpperCase()} · ${m.title || m.ticker}`, "ok");
-    announceBuy(d.contracts);
+    announceBuy(d.contracts, m.price, parseFloat(d.spent));
     // Flash the row green so it's obvious the bot bought it
     const row = document.getElementById(`btn-${idx}`)?.closest("tr");
     if (row) {
@@ -2184,7 +2207,9 @@ async function sellPos(ticker, side, count, safeId) {
     toast(`✓ Sold ${count} ${side.toUpperCase()} · ${marketTitle}`, "ok");
     // Announce sell with audio feedback (happy for profit, sad for loss)
     if (soldProfit != null) {
-      announceSell(count, soldProfit);
+      const sellPriceCents = side === "yes" ? soldPos?.current_yes : soldPos?.current_no;
+      const totalReceived = (sellPriceCents != null) ? count * sellPriceCents / 100 : null;
+      announceSell(count, soldProfit, sellPriceCents, totalReceived);
     }
     addToSaleTicker(marketTitle, soldProfit, side);
     selectedPosTickers.delete(ticker);
@@ -2896,24 +2921,43 @@ function speakText(text) {
   } catch(e) {}
 }
 
-function announceBuy(count) {
+// Speak a dollar amount naturally: 0.05 -> "5 cents", 1.50 -> "1 dollar and 50 cents"
+function moneyWords(dollars) {
+  const cents = Math.round((parseFloat(dollars) || 0) * 100);
+  if (cents <= 0) return "nothing";
+  if (cents < 100) return `${cents} cent${cents === 1 ? "" : "s"}`;
+  const d = Math.floor(cents / 100);
+  const c = cents % 100;
+  const dPart = `${d} dollar${d === 1 ? "" : "s"}`;
+  return c === 0 ? dPart : `${dPart} and ${c} cent${c === 1 ? "" : "s"}`;
+}
+
+// Play the user-supplied cash-register file (audio/chaching.mp3) if present,
+// else fall back to the synthesized cha-ching. localStorage custom wins if set.
+function playChaChingFile() {
+  const custom = localStorage.getItem("customSound_profit");
+  if (custom) { try { new Audio(custom).play().catch(() => chaChing()); return; } catch(e) {} }
+  try {
+    const a = new Audio("/audio/chaching.mp3");
+    a.play().catch(() => chaChing());   // 404 / missing file -> synth fallback
+  } catch(e) { chaChing(); }
+}
+
+function announceBuy(count, priceCents, totalDollars) {
   const customBeep = localStorage.getItem("customSound_buy");
   if (customBeep) {
-    try {
-      const audio = new Audio(customBeep);
-      audio.play().catch(e => console.log("Play failed:", e));
-    } catch(e) {
-      playBeep(900, 0.15, 0.35);
-    }
+    try { new Audio(customBeep).play().catch(() => playBeep(900, 0.15, 0.35)); }
+    catch(e) { playBeep(900, 0.15, 0.35); }
   } else {
     playBeep(900, 0.15, 0.35);
   }
   setTimeout(() => {
-    const text = count > 1
-      ? `you just bought ${count} contracts`
-      : "you just bought a contract";
+    const c = `${count} contract${count > 1 ? "s" : ""}`;
+    let text = `you bought ${c}`;
+    if (priceCents != null) text += ` for ${Math.round(priceCents)} cent${Math.round(priceCents) === 1 ? "" : "s"} each`;
+    if (totalDollars != null) text += `, for a total of ${moneyWords(totalDollars)}`;
     speakText(text);
-  }, 200);
+  }, 250);
 }
 
 function playSadTrumpet() {
@@ -2942,43 +2986,30 @@ function playSadTrumpet() {
   } catch(e) {}
 }
 
-function announceSell(count, profit) {
-  if (profit > 0) {
-    // Profit - happy cha-ching
-    const customProfit = localStorage.getItem("customSound_profit");
-    if (customProfit) {
-      try {
-        const audio = new Audio(customProfit);
-        audio.play().catch(e => console.log("Play failed:", e));
-      } catch(e) {
-        chaChing();
-      }
-    } else {
-      chaChing();
-    }
+function announceSell(count, profit, sellPriceCents, totalReceived) {
+  const c = `${count} contract${count > 1 ? "s" : ""}`;
+  let detail = `you sold ${c}`;
+  if (sellPriceCents != null) detail += ` for ${Math.round(sellPriceCents)} cent${Math.round(sellPriceCents) === 1 ? "" : "s"} each`;
+  if (totalReceived != null) detail += `, for a total of ${moneyWords(totalReceived)}`;
+
+  if (profit >= 0) {
+    // Profit (or break-even) — cash register cha-ching, THEN the voice
+    playChaChingFile();
     setTimeout(() => {
-      const contractText = count > 1 ? `you sold ${count} contracts` : "you sold a contract";
-      const profitText = `and made +$${profit.toFixed(2)} profit`;
-      speakText(contractText + ", " + profitText);
-    }, 600);
-  } else if (profit < 0) {
-    // Loss - sad trumpet
+      speakText(`${detail}, and made ${moneyWords(profit)} profit`);
+    }, 700);
+  } else {
+    // Loss — sad trumpet, THEN the voice
     const customLoss = localStorage.getItem("customSound_loss");
     if (customLoss) {
-      try {
-        const audio = new Audio(customLoss);
-        audio.play().catch(e => console.log("Play failed:", e));
-      } catch(e) {
-        playSadTrumpet();
-      }
+      try { new Audio(customLoss).play().catch(() => playSadTrumpet()); }
+      catch(e) { playSadTrumpet(); }
     } else {
       playSadTrumpet();
     }
     setTimeout(() => {
-      const contractText = count > 1 ? `you sold ${count} contracts` : "you sold a contract";
-      const lossText = `you lost $${Math.abs(profit).toFixed(2)}`;
-      speakText(contractText + ", " + lossText);
-    }, 600);
+      speakText(`${detail}, and lost ${moneyWords(Math.abs(profit))}`);
+    }, 700);
   }
 }
 
