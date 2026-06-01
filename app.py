@@ -121,6 +121,7 @@ _lock = threading.Lock()
 
 TRACKED_FILE   = HERE / "bot_positions.json"
 STRATEGY_FILE  = HERE / "bot_strategy.json"
+SAVED_STRATS_FILE = HERE / "bot_saved_strategies.json"
 SCAN_LOG       = HERE / "scan_log.jsonl"      # append-only; one JSON line per scan run
 
 def _save_tracked():
@@ -828,6 +829,7 @@ def portfolio():
                 "strategy":       bot_info.get("strategy") if bot_info else None,
                 "target_pct":     bot_info.get("target_pct") if bot_info else None,
                 "bought_at":      bot_info.get("bought_at") if bot_info else None,
+                "status":         bot_info.get("status", "open") if bot_info else "open",
             })
     except Exception as e:
         print(f"[portfolio] positions error: {e}")
@@ -892,6 +894,7 @@ def portfolio():
             "strategy":       info.get("strategy"),
             "target_pct":     info.get("target_pct"),
             "bought_at":      info.get("bought_at"),
+            "status":         info.get("status", "open"),
         })
         pass  # suppress repeated fallback log spam
 
@@ -1919,6 +1922,28 @@ def set_strategy():
     try: STRATEGY_FILE.write_text(json.dumps(sell_strategy), encoding="utf-8")
     except Exception: pass
     return jsonify({"ok": True, "strategy": sell_strategy})
+
+
+@app.route("/api/saved-strategies", methods=["GET"])
+def get_saved_strategies():
+    try:
+        data = json.loads(SAVED_STRATS_FILE.read_text(encoding="utf-8")) if SAVED_STRATS_FILE.exists() else []
+    except Exception:
+        data = []
+    # Always return exactly 10 slots
+    slots = (data + [None] * 10)[:10]
+    return jsonify({"slots": slots})
+
+
+@app.route("/api/saved-strategies", methods=["POST"])
+def set_saved_strategies():
+    data = request.get_json(silent=True) or {}
+    slots = data.get("slots", [])
+    try:
+        SAVED_STRATS_FILE.write_text(json.dumps(slots), encoding="utf-8")
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    return jsonify({"ok": True})
 
 
 @app.route("/api/sell-settings", methods=["POST"])
