@@ -160,7 +160,6 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 /* ── Spinner ── */
 .spin{display:inline-block;width:13px;height:13px;border:2px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:5px}
 @keyframes spin{to{transform:rotate(360deg)}}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
 
 
 /* ── Filter selects ── */
@@ -401,17 +400,6 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   <div style="flex:1;min-width:80px"></div>
   <div id="botStatusCenter" style="font-size:13px;font-weight:700;color:#fff;white-space:nowrap">✗ BOT STOPPED — click Start Bot</div>
   <div id="botStatusRight" style="flex:1;min-width:80px;text-align:right;font-size:11px;color:#000"></div>
-</div>
-
-<!-- ── Bot Stopped Alert Bar ──────────────────────────────────── -->
-<div id="botStoppedAlertBar" style="display:none;align-items:center;justify-content:center;gap:10px;padding:6px 16px;background:#7a0000;border-bottom:2px solid #ff4d4d;flex-wrap:wrap;transition:opacity .25s">
-  <span style="font-size:13px;font-weight:700;color:#fff;animation:blink 1s step-start infinite" id="botStoppedReason">⚠ Bot stopped</span>
-  <span style="font-size:12px;color:#ffaaaa">Snooze:</span>
-  <button onclick="snoozeBotAlert(5)"  style="background:#ff4d4d;border:none;border-radius:4px;color:#fff;padding:3px 8px;font-size:12px;font-weight:700;cursor:pointer">5m</button>
-  <button onclick="snoozeBotAlert(30)" style="background:#ff4d4d;border:none;border-radius:4px;color:#fff;padding:3px 8px;font-size:12px;font-weight:700;cursor:pointer">30m</button>
-  <button onclick="snoozeBotAlert(60)" style="background:#ff4d4d;border:none;border-radius:4px;color:#fff;padding:3px 8px;font-size:12px;font-weight:700;cursor:pointer">1h</button>
-  <button onclick="snoozeBotAlert(1440)" style="background:#ff4d4d;border:none;border-radius:4px;color:#fff;padding:3px 8px;font-size:12px;font-weight:700;cursor:pointer">24h</button>
-  <button onclick="startAutoMode();_stopBotStoppedAlert()" style="background:var(--green);border:none;border-radius:4px;color:#000;padding:3px 10px;font-size:12px;font-weight:700;cursor:pointer">▶ Restart Bot</button>
 </div>
 
 <!-- ── Sale Ticker ─────────────────────────────────────────────── -->
@@ -1974,7 +1962,6 @@ function startAutoMode() {
   autoModeOn     = true;
   autoModeBought = 0;
   localStorage.setItem("kb_bot_was_running", "1");
-  _stopBotStoppedAlert();  // clear any down alert
   const note = document.getElementById("autoRefreshNote");
   if (note) note.style.display = "inline";
 
@@ -2027,48 +2014,6 @@ function stopAutoMode(reason) {
     window._toast = setTimeout(() => { el.className = ""; }, 5000); // 5s
   }
   console.warn("[bot stopped]", r, new Date().toLocaleTimeString());
-  _startBotStoppedAlert(r);
-}
-
-// ── Bot-stopped alert (beep + flashing banner + snooze) ───────────────────
-let _botStoppedBeepTimer = null;
-let _botStoppedSnoozedUntil = 0;
-
-function _startBotStoppedAlert(reason) {
-  if (reason === "Stopped manually") return;  // user chose to stop — no alert
-  _stopBotStoppedAlert();  // clear any prior
-  // Show snooze bar
-  const bar = document.getElementById("botStoppedAlertBar");
-  if (bar) {
-    document.getElementById("botStoppedReason").textContent = reason || "Bot stopped";
-    bar.style.display = "flex";
-  }
-  // Beep every 5 seconds until snoozed or bot restarts
-  _botStoppedBeepTimer = setInterval(() => {
-    if (autoModeOn) { _stopBotStoppedAlert(); return; }
-    if (Date.now() < _botStoppedSnoozedUntil) return;
-    playBeep(660, 0.15, 0.3);
-    setTimeout(() => playBeep(660, 0.15, 0.25), 200);
-    // Flash the banner
-    const bar = document.getElementById("botStoppedAlertBar");
-    if (bar) { bar.style.opacity="0.4"; setTimeout(()=>{ bar.style.opacity="1"; },250); }
-  }, 5000);
-}
-
-function _stopBotStoppedAlert() {
-  if (_botStoppedBeepTimer) { clearInterval(_botStoppedBeepTimer); _botStoppedBeepTimer = null; }
-  const bar = document.getElementById("botStoppedAlertBar");
-  if (bar) bar.style.display = "none";
-}
-
-function snoozeBotAlert(mins) {
-  _botStoppedSnoozedUntil = mins === -1 ? Infinity : Date.now() + mins * 60000;
-  const bar = document.getElementById("botStoppedAlertBar");
-  if (bar) {
-    const label = mins === -1 ? "Snoozed (24h)" : `Snoozed ${mins < 60 ? mins+"m" : (mins/60)+"h"}`;
-    document.getElementById("botStoppedReason").textContent = label;
-  }
-  toast(`🔕 Bot alert snoozed${mins===-1?" 24h":" "+mins+"m"}`, "");
 }
 
 function updateAutoStatus() {
@@ -3863,33 +3808,11 @@ function setMaxBuys(n) {
 
 // ── Strategy Memory Slots (10 saved strategies) ──────────────────────────
 
-// Saved strategies stored on Flask server (bot_saved_strategies.json) so they
-// survive browser cache clears and work from any device via Tailscale.
-let _stratSlots = Array(10).fill(null);
-
-async function loadStratSlotsFromServer() {
-  try {
-    const r = await fetch("/api/saved-strategies");
-    const d = await r.json();
-    _stratSlots = d.slots || Array(10).fill(null);
-    renderStratSlots();
-  } catch(e) { console.warn("Could not load saved strategies:", e); }
-}
-
-async function _saveStratSlotsToServer() {
-  try {
-    await fetch("/api/saved-strategies", {
-      method: "POST", headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({slots: _stratSlots})
-    });
-  } catch(e) { console.warn("Could not save strategies:", e); }
-}
-
 function renderStratSlots() {
   const grid = document.getElementById("stratSlotGrid");
   if (!grid) return;
   grid.innerHTML = Array.from({length:10},(_,i)=>{
-    const slot = _stratSlots[i];
+    const slot = JSON.parse(localStorage.getItem(`kb_strat_slot_${i}`) || "null");
     const name = slot?.name || `Strategy ${i+1}`;
     const hasData = !!slot;
     return `<div style="display:flex;gap:4px;align-items:center">
@@ -3901,21 +3824,18 @@ function renderStratSlots() {
   }).join("");
 }
 
-async function saveStratSlot(i) {
-  const cur = _stratSlots[i];
-  const name = prompt(`Name for Strategy ${i+1}:`, cur?.name || `Strategy ${i+1}`);
+function saveStratSlot(i) {
+  const name = prompt(`Name for Strategy ${i+1}:`, JSON.parse(localStorage.getItem(`kb_strat_slot_${i}`)||"null")?.name || `Strategy ${i+1}`);
   if (name === null) return;
-  saveSettings();
   const s = JSON.parse(localStorage.getItem("kb_settings_v2") || "{}");
   s.name = name || `Strategy ${i+1}`;
-  _stratSlots[i] = s;
-  await _saveStratSlotsToServer();
+  localStorage.setItem(`kb_strat_slot_${i}`, JSON.stringify(s));
   renderStratSlots();
   toast(`✓ Saved as "${s.name}"`, "ok");
 }
 
-async function loadStratSlot(i) {
-  const slot = _stratSlots[i];
+function loadStratSlot(i) {
+  const slot = JSON.parse(localStorage.getItem(`kb_strat_slot_${i}`) || "null");
   if (!slot) { toast("Empty slot — save settings here first", ""); return; }
   localStorage.setItem("kb_settings_v2", JSON.stringify(slot));
   loadSettings();
@@ -4070,7 +3990,7 @@ async function applyCoachSettings() {
 })();
 
 loadSettings();
-loadStratSlotsFromServer();  // loads from Flask server, not localStorage
+renderStratSlots();
 setProfit(parseFloat(document.getElementById("profitCustom")?.value) || 10);
 syncFabButtons();
 // Always push current sell strategy to Flask on page load (survives Flask restarts)
@@ -4095,84 +4015,6 @@ function _onFlaskConnectionLost() {
     } catch(e) {}
   }, 5000);
 }
-
-// ── Bot Down Alarm System ─────────────────────────────────────────────────
-let _botStoppedAlarmInterval = null;
-let _botAlertSnoozedUntil = 0;
-
-function _playAlarmBeep() {
-  // Only beep if snooze has expired
-  if (Date.now() < _botAlertSnoozedUntil) return;
-
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const now = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    // Double beep alarm: 800Hz for 150ms, pause, 800Hz for 150ms
-    osc.frequency.value = 800;
-    gain.gain.setValueAtTime(0.3, now);
-    osc.start(now);
-    osc.stop(now + 0.15);
-
-    gain.gain.setValueAtTime(0, now + 0.15);
-
-    osc.start(now + 0.25);
-    osc.stop(now + 0.4);
-    gain.gain.setValueAtTime(0.3, now + 0.25);
-  } catch(e) { console.error("[alarm]", e); }
-}
-
-function _startBotStoppedAlert() {
-  const bar = document.getElementById("botStoppedAlertBar");
-  if (!bar || bar.style.display === "flex") return;
-  bar.style.display = "flex";
-  console.warn("[alert] bot down — showing banner + alarm");
-
-  if (_botStoppedAlarmInterval) clearInterval(_botStoppedAlarmInterval);
-  _botStoppedAlarmInterval = setInterval(_playAlarmBeep, 5000);
-  _playAlarmBeep();  // beep immediately
-}
-
-function _stopBotStoppedAlert() {
-  const bar = document.getElementById("botStoppedAlertBar");
-  if (!bar) return;
-  bar.style.display = "none";
-  if (_botStoppedAlarmInterval) {
-    clearInterval(_botStoppedAlarmInterval);
-    _botStoppedAlarmInterval = null;
-  }
-  _botAlertSnoozedUntil = 0;
-  console.log("[alert] bot alert cleared");
-}
-
-function snoozeBotAlert(minutes) {
-  _botAlertSnoozedUntil = Date.now() + (minutes * 60 * 1000);
-  console.log(`[alert] snoozed for ${minutes}min`);
-  toast(`🔇 Alarm snoozed for ${minutes}min — flashing banner still visible`, "ok");
-}
-
-// Heartbeat: poll Flask every 5 seconds. If it's down and bot is running, show alarm.
-setInterval(async () => {
-  if (!autoModeOn) {
-    _stopBotStoppedAlert();
-    return;
-  }
-  try {
-    const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), 2000);
-    const r = await fetch("/api/stats", {signal: ctrl.signal});
-    clearTimeout(timeout);
-    if (!r.ok) throw new Error(r.status);
-    _stopBotStoppedAlert();
-  } catch(e) {
-    _startBotStoppedAlert();
-  }
-}, 5000);
 
 // ── Auto-restart bot if it was running before page reload / Flask crash ───
 if (localStorage.getItem("kb_bot_was_running")) {
