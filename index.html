@@ -2391,7 +2391,8 @@ function filterPos() {
   const hide95Loss = document.getElementById("hide95LossPositions")?.checked || false;
 
   let filtered = allPositions.filter(p => {
-    // Hide sold positions (quantity essentially = 0)
+    // Hide sold positions (marked as sold in backend OR quantity essentially = 0)
+    if (p.status === "sold") return false;
     const qty = p.quantity ?? 0;
     if (Math.abs(qty) < 0.001) return false;  // Hide positions with < 0.001 qty (essentially sold)
 
