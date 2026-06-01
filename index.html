@@ -1700,9 +1700,9 @@ async function scan() {
   const showEconomics = chk("showEconomics");
   const goodLiq       = chk("goodLiq");
   try {
-    // Always read time live so changes apply immediately
-    const timeCustomEl = document.getElementById("timeCustom");
-    if (timeCustomEl && timeCustomEl.style.display !== "none") selTime = parseInt(timeCustomEl.value) || selTime;
+    // Note: Don't read from timeCustom here. setTime() manages selTime correctly via button clicks,
+    // and loadSettings() restores it on page load. Reading from the field here causes it to override
+    // the user's button selection if the field is visible or has leftover values.
     const minAge       = document.getElementById("minAgeMins")?.value || "";
     const maxAge       = document.getElementById("maxAgeMins")?.value || "";
     const noBuyWithin  = document.getElementById("noBuyWithinMins")?.value || "";
