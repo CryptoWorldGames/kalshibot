@@ -1397,7 +1397,7 @@ document.addEventListener("visibilitychange", () => {
     // Page became visible again
     startBackgroundRefresh();
     // Resume scan if it was paused
-    if (_scanTimerWasPaused && autoModeOn) { scanTimer = setInterval(scan, 30000); _scanTimerWasPaused = false; }
+    if (_scanTimerWasPaused && autoModeOn) { scanTimer = setInterval(scan, 2000)  // Reduced from 30s to 2s (no rate limiting); _scanTimerWasPaused = false; }
     // Re-start active tab's refresh
     const activeBtn = document.querySelector(".tab-btn.active");
     if (activeBtn) {
@@ -1721,7 +1721,7 @@ async function scan() {
   if (scanInProgress) return;
   scanInProgress = true;
   // Safety: force-unlock after 30s so scan button never stays stuck
-  const _scanSafety = setTimeout(() => { scanInProgress = false; }, 30000);
+  const _scanSafety = setTimeout(() => { scanInProgress = false; }, 5000);  // Reduced from 30s to 5s
   const btn = document.getElementById("scanBtn");
   if (btn) {
     btn.disabled = true;
@@ -1820,7 +1820,7 @@ async function scan() {
                   clearInterval(_cashPauseTimer); _cashPauseTimer = null;
                   _waitingForCash = false;
                   toast(`💰 Cash available ($${cash.toFixed(2)}) — bot resuming!`, "ok");
-                  if (!scanTimer) scanTimer = setInterval(scan, 10000);
+                  if (!scanTimer) scanTimer = setInterval(scan, 2000)  // Reduced from 10s to 2s (no rate limiting);
                   scan();
                 } else if (pauseSecs <= 0) {
                   // Check balance and reset countdown
@@ -1901,7 +1901,7 @@ async function scan() {
 function toggleAutoRefresh() {
   const on = document.getElementById("autoRefresh").checked;
   if (on) {
-    if (!scanTimer) scanTimer = setInterval(scan, 10000);
+    if (!scanTimer) scanTimer = setInterval(scan, 2000)  // Reduced from 10s to 2s (no rate limiting);
   } else {
     if (autoModeOn) {
       // Auto Mode owns the scan timer — don't let the checkbox kill it
@@ -1981,7 +1981,7 @@ function startAutoMode() {
 
   const refreshChk = document.getElementById("autoRefresh");
   if (refreshChk) refreshChk.checked = true;
-  if (!scanTimer) scanTimer = setInterval(scan, 10000);
+  if (!scanTimer) scanTimer = setInterval(scan, 2000)  // Reduced from 10s to 2s (no rate limiting);
 
   autoModeCountdown = setInterval(updateAutoStatus, 1000);
   updateAutoStatus();
@@ -4106,7 +4106,7 @@ document.addEventListener("visibilitychange", () => {
     const overdue = Date.now() - _lastScanTime > 15000;
     // Restart interval to avoid throttled timers
     if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
-    scanTimer = setInterval(scan, 10000);
+    scanTimer = setInterval(scan, 2000)  // Reduced from 10s to 2s (no rate limiting);
     if (overdue && !scanInProgress) scan();
   }
 });
