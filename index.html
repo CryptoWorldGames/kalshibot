@@ -1192,8 +1192,13 @@ async function loadBalance(enrich=true) {
     }
   } catch(e) {
     console.error("[loadBalance error]", e);
-    // Detect Flask going down (connection refused = TypeError, not AbortError)
-    if (e.name !== "AbortError") _onFlaskConnectionLost();
+    // Only a genuine network/connection failure means Flask is down. A normal JS
+    // error thrown by the rendering code above must NEVER trigger a reload — that
+    // was causing an endless refresh loop. Match real fetch failures only.
+    const msg = (e && e.message) || "";
+    if ((e instanceof TypeError) && /fetch|network|load failed/i.test(msg)) {
+      _onFlaskConnectionLost();
+    }
   } finally {
     hideNavLoading();
   }
@@ -4009,6 +4014,13 @@ function _onFlaskConnectionLost() {
       if (r.ok) {
         clearInterval(_flaskDownTimer);
         _flaskDownTimer = null;
+        // Guard against reload storms: never auto-reload more than once per 20s.
+        const last = +(sessionStorage.getItem("kb_last_reload") || 0);
+        if (Date.now() - last < 20000) {
+          console.warn("[flask] back up, but skipping reload (reloaded <20s ago)");
+          return;
+        }
+        sessionStorage.setItem("kb_last_reload", String(Date.now()));
         console.warn("[flask] back up — reloading page");
         window.location.reload();
       }

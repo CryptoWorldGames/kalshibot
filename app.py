@@ -700,6 +700,17 @@ def auth_test():
     return jsonify(results)
 
 
+def _position_age_seconds(info):
+    """Seconds since a tracked position was bought, or None if unknown."""
+    ts = info.get("bought_at")
+    if not ts:
+        return None
+    try:
+        return (datetime.now(timezone.utc) - datetime.fromisoformat(ts)).total_seconds()
+    except Exception:
+        return None
+
+
 @app.route("/api/portfolio")
 def portfolio():
     # Check if we should skip expensive market enrichment (for fast initial load)
@@ -727,6 +738,7 @@ def portfolio():
     # ── Positions ──
     positions = []
     portfolio_value = 0.0
+    positions_ok = True  # did Kalshi's live positions fetch succeed this call?
     try:
         # Fetch ALL open positions with cursor pagination
         raw_positions = []
@@ -830,6 +842,7 @@ def portfolio():
                 "bought_at":      bot_info.get("bought_at") if bot_info else None,
             })
     except Exception as e:
+        positions_ok = False
         print(f"[portfolio] positions error: {e}")
 
     # ── Tracked fallback ──────────────────────────────────────────────────────
@@ -842,6 +855,22 @@ def portfolio():
     for ticker, info in tracked_snap.items():
         if ticker in live_tickers or info.get("status") != "open":
             continue
+        # Ghost reconciliation: if the live positions fetch SUCCEEDED but this
+        # tracked-"open" position isn't actually held on Kalshi, it has been
+        # sold/closed (e.g. sold manually on Kalshi, or a sell whose status never
+        # persisted). Mark it sold and drop it so it stops reappearing in the list
+        # — unless it was bought in the last 90s (Kalshi post-buy propagation delay).
+        if positions_ok:
+            age = _position_age_seconds(info)
+            if age is None or age > 90:
+                with _lock:
+                    if ticker in tracked and tracked[ticker].get("status") == "open":
+                        tracked[ticker]["status"] = "sold"
+                        tracked[ticker].setdefault("sold_by", "external")
+                        tracked[ticker].setdefault("sold_at",
+                                                   datetime.now(timezone.utc).isoformat())
+                _save_tracked()
+                continue
         event_ticker = ""
         market_title = info.get("title", ticker)
         category     = ""
