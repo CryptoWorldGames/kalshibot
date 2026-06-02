@@ -1481,17 +1481,33 @@ function setStrategy(mode) {
     rb.checked = (rb.value === mode);
   });
 
-  // Update CSS classes for visual highlighting
-  ["pillResolution","pillProfit","pillProfitDol","pillProfitPrice"].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.classList.remove("active");
-  });
-  const active = {
+  // Update CSS classes for visual highlighting & hide buttons for inactive strategies
+  const pillMap = {
     resolution: "pillResolution",
     profit: "pillProfit",
     profit_dollars: "pillProfitDol",
     target_price: "pillProfitPrice"
-  }[mode];
+  };
+
+  Object.entries(pillMap).forEach(([key, id]) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.classList.remove("active");
+      // Hide button sections for inactive strategies
+      const nextDiv = el.nextElementSibling;
+      if (nextDiv && nextDiv.style.display === "flex") {
+        if (key === mode) {
+          nextDiv.style.opacity = "1";
+          nextDiv.style.pointerEvents = "auto";
+        } else {
+          nextDiv.style.opacity = "0.35";
+          nextDiv.style.pointerEvents = "none";
+        }
+      }
+    }
+  });
+
+  const active = pillMap[mode];
   if (active) document.getElementById(active)?.classList.add("active");
 
   // Conflict warning: if target_price selected, check buy range vs buy-in price
