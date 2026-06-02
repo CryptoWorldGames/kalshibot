@@ -139,6 +139,27 @@ try:
 except Exception as e:
     print(f"[tracked] load error: {e}")
 
+# Recently-sold registry: { ticker: {"side": "yes"|"no", "at": epoch_seconds} }
+# Populated by /api/sell for ANY sold position (tracked or not). The portfolio
+# endpoint hides these for RECENTLY_SOLD_TTL seconds so a position you just sold
+# doesn't reappear from Kalshi's brief settlement-propagation delay — even across
+# a hard page refresh (which wipes the frontend's in-memory list). Self-expires,
+# so a position genuinely still held (e.g. an unfilled resting order) returns
+# after the window instead of being hidden forever.
+_recently_sold: dict = {}
+RECENTLY_SOLD_TTL = 120  # seconds
+
+def _is_recently_sold(ticker: str, side: str) -> bool:
+    """True if `ticker`/`side` was sold within the last RECENTLY_SOLD_TTL seconds.
+    Prunes expired entries as a side effect so the dict stays small."""
+    entry = _recently_sold.get(ticker)
+    if not entry:
+        return False
+    if time.time() - entry.get("at", 0) > RECENTLY_SOLD_TTL:
+        _recently_sold.pop(ticker, None)  # expired — clean up
+        return False
+    return entry.get("side") == side
+
 # Sell strategy settings (updated from frontend)
 sell_settings = {
     "skip_auto_sell_near_resolution": True,
@@ -782,6 +803,12 @@ def portfolio():
             if abs(qty) < 0.001:
                 continue
 
+            # Hide positions sold in the last RECENTLY_SOLD_TTL seconds — Kalshi's
+            # positions API lags a few seconds after a sale, so without this a
+            # just-sold position reappears (and can be sold again) on refresh.
+            if _is_recently_sold(ticker, "yes" if qty > 0 else "no"):
+                continue
+
             # Dollar-string fields → cents (legacy frontend expects cents/int)
             def _d2c(v):
                 try: return round(float(v) * 100, 2)
@@ -869,6 +896,9 @@ def portfolio():
 
     for ticker, info in tracked_snap.items():
         if ticker in live_tickers or info.get("status") != "open":
+            continue
+        # Also skip anything just sold via the UI (status may not have flushed yet)
+        if _is_recently_sold(ticker, info.get("side", "yes")):
             continue
         event_ticker = ""
         market_title = info.get("title", ticker)
@@ -1757,6 +1787,9 @@ def buy():
             "status":        "open",
             "bought_at":     datetime.now(timezone.utc).isoformat(),
         }
+        # Re-buying a ticker clears any recently-sold hide so the new position
+        # shows immediately instead of being suppressed by the 120s sold window.
+        _recently_sold.pop(ticker, None)
     _save_tracked()
 
     return jsonify({
@@ -1865,6 +1898,10 @@ def sell():
         if ticker in tracked:
             tracked[ticker]["status"]  = "sold"
             tracked[ticker]["sold_by"] = "human"  # manually sold via UI
+        # Record the sale for EVERY position (tracked or not) so the portfolio
+        # endpoint hides it during Kalshi's settlement-propagation delay. This is
+        # what stops non-bot positions from reappearing after a hard refresh.
+        _recently_sold[ticker] = {"side": side, "at": time.time()}
     _save_tracked()
 
     order = result.get("order", result)
