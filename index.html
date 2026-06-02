@@ -883,7 +883,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     </div>
     <div id="settlementsSummary" style="font-size:13px;color:var(--muted)"></div>
   </div>
-  <div id="settlementsWrap"><div style="text-align:center;color:var(--muted);padding:24px;font-size:13px">No settlements in the last 24 hours.</div></div>
+  <div id="settlementsWrap"><div style="text-align:center;color:var(--muted);padding:24px;font-size:13px" id="settlementsPlaceholder">⏳ Loading settlements... (can take up to 15 seconds)<br><span style="font-size:11px;color:#888;margin-top:8px;display:block">If nothing appears, do a hard refresh (Ctrl+Shift+R) and wait 30 seconds</span></div></div>
 
   <div id="recentSettlementsTickerWrap" style="margin-top:16px;margin-bottom:12px;padding:8px;background:var(--card);border-radius:8px;border:1px solid var(--border);overflow-x:auto;overflow-y:hidden;max-height:44px"></div>
 </div><!-- /tab-positions -->
@@ -1187,11 +1187,16 @@ async function loadBalance(enrich=true) {
 }
 
 let _settleSortBy = "recent";
+let _settlementsLoaded = false;
 
 function renderSettlements(rows) {
   const wrap = document.getElementById("settlementsWrap");
   const sum  = document.getElementById("settlementsSummary");
   if (!wrap) return;
+
+  // Mark settlements as loaded (even if empty)
+  _settlementsLoaded = true;
+
   if (!rows.length) {
     wrap.innerHTML = `<div style="text-align:center;color:var(--muted);padding:24px;font-size:13px">No settlements in this period.</div>`;
     if (sum) sum.textContent = "";
