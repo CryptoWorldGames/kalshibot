@@ -1397,6 +1397,7 @@ document.addEventListener("visibilitychange", () => {
       clearInterval(scanTimer);
       scanTimer = setInterval(scan, 30000);  // 30s when you're away
       _scanTimerWasPaused = true;
+      console.log("📵 Page hidden: Scan interval changed to 30 seconds (away from PC)");
     }
   } else {
     // Page visible: resume normal speed (15s)
@@ -1405,6 +1406,7 @@ document.addEventListener("visibilitychange", () => {
       clearInterval(scanTimer);
       scanTimer = setInterval(scan, 15000);  // 15s when you're watching
       _scanTimerWasPaused = false;
+      console.log("📱 Page visible: Scan interval changed to 15 seconds (active watching)");
     }
     // Re-start active tab's refresh
     const activeBtn = document.querySelector(".tab-btn.active");
