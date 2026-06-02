@@ -2453,8 +2453,12 @@ function filterPos() {
     if (Math.abs(qty) < 0.001) return false;  // Hide positions with < 0.001 qty (essentially sold)
 
     // Hide positions that were recently sold (even if API still shows them as open)
-    const wasSold = _recentlySold.some(s => s.ticker === p.ticker);
+    const wasSold = _recentlySold.some(s => s.ticker === p.ticker && s.side === side);
     if (wasSold) return false;
+
+    // Hide positions that are no longer in the current API response (already sold/closed)
+    const stillInAPI = (d.positions || []).some(ap => ap.ticker === p.ticker && ((ap.quantity || 0) > 0 ? "yes" : "no") === side);
+    if (!stillInAPI) return false;
 
     // Hide positions where market is closed/resolved (even if Kalshi API still returns them)
     if (p.close_time) {
