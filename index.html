@@ -1519,19 +1519,16 @@ function setStrategy(mode) {
     const el = document.getElementById(id);
     if (el) {
       el.classList.remove("active");
-      // Dim button sections for inactive strategies
+      // Dim button sections for inactive strategies (resolution has no buttons, skip it)
+      if (key === "resolution") return;
       const nextDiv = el.nextElementSibling;
-      if (nextDiv) {
-        // Check if this is a button container (has flex display, visible)
-        const isButtonContainer = nextDiv && getComputedStyle(nextDiv).display !== "none";
-        if (isButtonContainer) {
-          if (key === mode) {
-            nextDiv.style.opacity = "1";
-            nextDiv.style.pointerEvents = "auto";
-          } else {
-            nextDiv.style.opacity = "0.35";
-            nextDiv.style.pointerEvents = "none";
-          }
+      if (nextDiv && nextDiv.style.display !== "none") {
+        if (key === mode) {
+          nextDiv.style.opacity = "1";
+          nextDiv.style.pointerEvents = "auto";
+        } else {
+          nextDiv.style.opacity = "0.35";
+          nextDiv.style.pointerEvents = "none";
         }
       }
     }
