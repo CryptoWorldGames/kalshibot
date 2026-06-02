@@ -2198,6 +2198,12 @@ async function buyAll(overrideAmount, maxItems) {
 // Track in-flight sells to prevent duplicates
 const _inFlightSells = new Set();
 
+// Positions from /api/portfolio carry a SIGNED `quantity` and have NO `.side`
+// field — the side is derived from the sign (positive = yes, negative = no).
+// Matching on a non-existent `p.side` always failed and made every sell report
+// "Position already sold", so always derive side via this helper.
+function _posSide(p) { return (p.quantity ?? 0) > 0 ? "yes" : "no"; }
+
 async function sellPos(ticker, side, count, safeId) {
   const sellKey = `${ticker}:${side}`;
 
@@ -2208,11 +2214,11 @@ async function sellPos(ticker, side, count, safeId) {
   }
 
   // Check if position still exists
-  const prePos = allPositions.find(p => p.ticker === ticker && p.side === side);
+  const prePos = allPositions.find(p => p.ticker === ticker && _posSide(p) === side);
   if (!prePos) {
     toast("Position already sold", "");
     // Remove from allPositions and refresh table
-    allPositions = allPositions.filter(p => !(p.ticker === ticker && p.side === side));
+    allPositions = allPositions.filter(p => !(p.ticker === ticker && _posSide(p) === side));
     filterPos();
     return;
   }
@@ -2237,7 +2243,7 @@ async function sellPos(ticker, side, count, safeId) {
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "Sell failed");
 
-    const soldPos = allPositions.find(p => p.ticker === ticker && p.side === side);
+    const soldPos = allPositions.find(p => p.ticker === ticker && _posSide(p) === side);
     const marketTitle = soldPos?.title || ticker;
 
     // Use EXECUTED price from response, not stale current_yes/current_no
@@ -2255,7 +2261,7 @@ async function sellPos(ticker, side, count, safeId) {
     selectedPosTickers.delete(ticker);
 
     // Immediately remove from allPositions so it doesn't reappear (remove specific ticker+side, not all with same ticker)
-    allPositions = allPositions.filter(p => !(p.ticker === ticker && p.side === side));
+    allPositions = allPositions.filter(p => !(p.ticker === ticker && _posSide(p) === side));
     filterPos();
     setTimeout(() => loadBalanceThrottled(true), 8000);
   } catch(e) {
