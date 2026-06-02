@@ -1120,6 +1120,7 @@ async function loadBalance(enrich=true) {
     // Detect auto-sells: bot-bought positions that disappeared and were in profit
     const prev = allPositions;
     const nextTickers = new Set((d.positions || []).map(p => p.ticker));
+    let announceDelay = 0;
     prev.forEach(p => {
       if (p.bot_bought && !nextTickers.has(p.ticker)) {
         if (p.buy_price != null) {
@@ -1129,7 +1130,8 @@ async function loadBalance(enrich=true) {
           const profit = cur != null ? qty * (cur - p.buy_price) / 100 : null;
           if (profit != null) {
             const totalReceived = cur != null ? qty * cur / 100 : null;
-            announceSell(qty, profit, cur, totalReceived, p.category);  // cha-ching/trumpet + voice
+            setTimeout(() => announceSell(qty, profit, cur, totalReceived, p.category), announceDelay);
+            announceDelay += 4000;  // 4 seconds between announcements to prevent overlapping voices
           }
           // Determine if this was a bot auto-sell or market resolution
           const wasResolution = cur != null && (cur <= 1 || cur >= 99);
@@ -2218,15 +2220,17 @@ async function sellPos(ticker, side, count, safeId) {
 
     const soldPos = allPositions.find(p => p.ticker === ticker && p.side === side);
     const marketTitle = soldPos?.title || ticker;
-    const soldProfit = (soldPos?.buy_price != null && soldPos?.current_yes != null)
-      ? Math.abs(soldPos.quantity||0) * ((side==="yes"?soldPos.current_yes:soldPos.current_no) - soldPos.buy_price) / 100 : null;
+
+    // Use EXECUTED price from response, not stale current_yes/current_no
+    const executedPriceCents = d.executed_price_cents;
+    const soldProfit = (soldPos?.buy_price != null && executedPriceCents != null)
+      ? count * (executedPriceCents - soldPos.buy_price) / 100 : null;
 
     toast(`✓ Sold ${count} ${side.toUpperCase()} · ${marketTitle}`, "ok");
     // Announce sell with audio feedback (happy for profit, sad for loss)
     if (soldProfit != null) {
-      const sellPriceCents = side === "yes" ? soldPos?.current_yes : soldPos?.current_no;
-      const totalReceived = (sellPriceCents != null) ? count * sellPriceCents / 100 : null;
-      announceSell(count, soldProfit, sellPriceCents, totalReceived, soldPos?.category);
+      const totalReceived = executedPriceCents != null ? count * executedPriceCents / 100 : null;
+      announceSell(count, soldProfit, executedPriceCents, totalReceived, soldPos?.category);
     }
     addToSaleTicker(marketTitle, soldProfit, side);
     selectedPosTickers.delete(ticker);
@@ -3034,26 +3038,46 @@ function announceSell(count, profit, sellPriceCents, totalReceived, category) {
 
   if (count === 1 && sellPriceCents != null && profit != null) {
     // Single contract: detailed breakdown
-    detail += ` for ${Math.round(sellPriceCents)} cents, and made ${moneyWords(profitPerContract)} profit`;
+    detail += ` for ${Math.round(sellPriceCents)} cents`;
+    if (profit > 0) {
+      detail += `, and made ${moneyWords(profitPerContract)} profit`;
+    } else if (profit < 0) {
+      detail += `, and lost ${moneyWords(Math.abs(profitPerContract))}`;
+    } else {
+      detail += `, break even`;
+    }
   } else if (count > 1 && sellPriceCents != null && profit != null) {
-    // Multiple contracts: show price per contract and total profit
+    // Multiple contracts: show price per contract and total profit/loss
     detail += ` for ${Math.round(sellPriceCents)} cents each`;
-    const profitStr = count === 1 ? moneyWords(profit) : moneyWords(profit);
-    detail += `, and made ${profitStr} total profit`;
+    if (profit > 0) {
+      detail += `, and made ${moneyWords(profit)} profit`;
+    } else if (profit < 0) {
+      detail += `, and lost ${moneyWords(Math.abs(profit))}`;
+    } else {
+      detail += `, break even`;
+    }
   } else {
     // Fallback
     if (sellPriceCents != null) detail += ` for ${Math.round(sellPriceCents)} cents each`;
     if (totalReceived != null) detail += `, for a total of ${moneyWords(totalReceived)}`;
-    if (profit != null) detail += `, and made ${moneyWords(profit)} profit`;
+    if (profit != null) {
+      if (profit > 0) {
+        detail += `, and made ${moneyWords(profit)} profit`;
+      } else if (profit < 0) {
+        detail += `, and lost ${moneyWords(Math.abs(profit))}`;
+      } else {
+        detail += `, break even`;
+      }
+    }
   }
 
-  if (profit >= 0) {
-    // Profit (or break-even) — cash register cha-ching FIRST, THEN voice
+  if (profit > 0) {
+    // Profit — cash register cha-ching FIRST, THEN voice
     playChaChingFile();
     setTimeout(() => {
       speakText(detail);
     }, 700);
-  } else {
+  } else if (profit < 0) {
     // Loss — sad trumpet FIRST, THEN voice
     const customLoss = localStorage.getItem("customSound_loss");
     if (customLoss) {
@@ -3063,9 +3087,13 @@ function announceSell(count, profit, sellPriceCents, totalReceived, category) {
       playSadTrumpet();
     }
     setTimeout(() => {
-      const lossDetail = detail.replace("made", "lost").replace("profit", "loss");
-      speakText(lossDetail);
+      speakText(detail);  // detail already says "lost" instead of "made"
     }, 700);
+  } else {
+    // Break-even (profit === 0) — neutral sound, then announce
+    setTimeout(() => {
+      speakText(detail);  // detail already says "break even"
+    }, 500);
   }
 }
 

@@ -1862,7 +1862,15 @@ def sell():
     _save_tracked()
 
     order = result.get("order", result)
-    return jsonify({"ok": True, "order_id": order.get("order_id")})
+    # Return executed price (if available) so frontend can calculate accurate profit
+    executed_price = order.get("price")  # Kalshi returns executed price in order response
+    return jsonify({
+        "ok": True,
+        "order_id": order.get("order_id"),
+        "executed_price_cents": executed_price if executed_price else bid_cents,  # Use bid as fallback if not filled immediately
+        "bid_price_cents": bid_cents,
+        "count": count_int
+    })
 
 
 @app.route("/api/positions")
