@@ -1148,7 +1148,7 @@ async function loadBalance(enrich=true) {
         const cur = side === "yes" ? p.current_yes : p.current_no;
         const qty = Math.abs(p.quantity ?? 0);
         const profit = cur != null ? qty * (cur - p.buy_price) / 100 : null;
-        _recentlySold.unshift({ title: p.title||p.ticker, ticker: p.ticker, side, profit, soldAt: now, kalshi_url: p.kalshi_url||"", qty, buy_price: p.buy_price });
+        _recentlySold.unshift({ title: p.title||p.ticker, ticker: p.ticker, side, profit, soldAt: now, kalshi_url: p.kalshi_url||"", qty, buy_price: p.buy_price, sell_price: cur });
         if (_recentlySold.length > 20) _recentlySold = _recentlySold.slice(0,20);
       }
     });
