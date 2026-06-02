@@ -528,9 +528,6 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
           <label class="check-row" title="Requires ≥10 open interest. Skips thin markets.">
             <input type="checkbox" id="goodLiq" checked onchange="saveSettings()"> Active only (skip thin) <span style="color:var(--green);font-size:11px;margin-left:4px">✓</span>
           </label>
-          <label class="check-row">
-            <input type="checkbox" id="yesOnly" checked onchange="saveSettings()"> YES side only <span style="color:var(--green);font-size:11px;margin-left:4px">✓</span>
-          </label>
         </div>
       </div>
 
@@ -3834,7 +3831,7 @@ function loadStratSlot(i) {
 const SETTINGS_KEY = "kb_settings_v2";
 const SETTINGS_CHECKBOXES = ["showCrypto","showSports","showPolitics","showEconomics","enableBuyUp","enableBuyDown","hideMultiOutcome",
   "showEntertainment","showWeather","showNFL","showNBA","showMLB","showNHL",
-  "showSoccer","showGolf","showTennis","showMMA","showCombo","goodLiq","yesOnly",
+  "showSoccer","showGolf","showTennis","showMMA","showCombo","goodLiq",
   "stopProfitDolChk","stopProfitPctChk","stopLossDolChk","stopLossPctChk",
   "skipAutoSellNearResolution","hideSmallPositions","hide95LossPositions"];
 const SETTINGS_INPUTS = ["buyAmount","maxBuysPerMarket","autoMaxPerScan","autoMaxConcurrent","posSort",
@@ -3843,6 +3840,15 @@ const SETTINGS_INPUTS = ["buyAmount","maxBuysPerMarket","autoMaxPerScan","autoMa
   "minAgeMins","maxAgeMins","noBuyWithinMins","minProbDown","maxProbDown","spreadUp","spreadDown"];
 
 function saveSettings() {
+  // Validation: Must have at least one buy direction enabled
+  const buyUp = document.getElementById("enableBuyUp")?.checked;
+  const buyDown = document.getElementById("enableBuyDown")?.checked;
+
+  if (!buyUp && !buyDown) {
+    alert("⚠️ Must enable at least one:\n• Buy up (YES contracts)\n• Buy down (NO contracts)");
+    return;
+  }
+
   const s = { stratMode, stratPct, selMin, selMax, selTime, autoRunMode };
   SETTINGS_CHECKBOXES.forEach(id => { const el = document.getElementById(id); if (el) s[id] = el.checked; });
   SETTINGS_INPUTS.forEach(id => { const el = document.getElementById(id); if (el) s[id] = el.value; });
@@ -3920,14 +3926,6 @@ async function applyCoachSettings() {
     } else {
       // Default safe range
       setRange(85, 96);
-    }
-
-    // Best side
-    const sides = (d.by_side || []).sort((a,b) => b.win_rate - a.win_rate);
-    if (sides.length && sides[0].key === "no") {
-      document.getElementById("yesOnly").checked = false;
-    } else {
-      document.getElementById("yesOnly").checked = true;
     }
 
     // 24h window to capture most opportunities
