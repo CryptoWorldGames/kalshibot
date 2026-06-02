@@ -2426,6 +2426,13 @@ function filterPos() {
     const wasSold = _recentlySold.some(s => s.ticker === p.ticker);
     if (wasSold) return false;
 
+    // Hide positions where market is closed/resolved (even if Kalshi API still returns them)
+    if (p.close_time) {
+      const closeTime = new Date(p.close_time);
+      const now = new Date();
+      if (closeTime < now) return false;  // Market closed/resolved, hide it
+    }
+
     if (src === "bot"    && !p.bot_bought) return false;
     if (src === "kalshi" &&  p.bot_bought) return false;
     if (cat && p.category !== cat)         return false;
