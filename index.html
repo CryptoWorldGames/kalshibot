@@ -4109,24 +4109,23 @@ syncFabButtons();
 // Always push current sell strategy to Flask on page load (survives Flask restarts)
 setTimeout(() => { pushStrategy(); pushSellSettings(); }, 1000);
 
-// ── Flask crash recovery ───────────────────────────────────────────────────
-// When Flask crashes the manager restarts it within ~5s. The browser detects
-// repeated connection failures and polls until Flask is back, then reloads.
-let _flaskDownTimer = null;
-function _onFlaskConnectionLost() {
-  if (_flaskDownTimer) return;  // already polling
-  console.warn("[flask] connection lost — polling for recovery...");
-  _flaskDownTimer = setInterval(async () => {
-    try {
-      const r = await fetch("/", {method:"HEAD", cache:"no-store", signal: AbortSignal.timeout(3000)});
-      if (r.ok) {
-        clearInterval(_flaskDownTimer);
-        _flaskDownTimer = null;
-        console.warn("[flask] back up — reloading page");
-        window.location.reload();
-      }
-    } catch(e) {}
-  }, 5000);
+// ── Flask crash recovery (disabled) ───────────────────────────────────────
+// Removed aggressive page reload on Flask recovery to prevent infinite refresh loops
+// let _flaskDownTimer = null;
+// function _onFlaskConnectionLost() {
+//   if (_flaskDownTimer) return;
+//   console.warn("[flask] connection lost — polling for recovery...");
+//   _flaskDownTimer = setInterval(async () => {
+//     try {
+//       const r = await fetch("/", {method:"HEAD", cache:"no-store", signal: AbortSignal.timeout(3000)});
+//       if (r.ok) {
+//         clearInterval(_flaskDownTimer);
+//         _flaskDownTimer = null;
+//         console.warn("[flask] back up — reloading page");
+//         window.location.reload();
+//       }
+//     } catch(e) {}
+//   }, 5000);
 }
 
 // ── Auto-restart bot if it was running before page reload / Flask crash ───
