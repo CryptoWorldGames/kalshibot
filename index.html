@@ -4015,6 +4015,11 @@ function loadSettings() {
   if (s.autoRunMode) setRunMode(s.autoRunMode);
 }
 
+// Ensure visual state matches actual state on page load (prevent both buttons appearing selected)
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(() => setRunMode(autoRunMode), 100);
+});
+
 // ── Coach → Apply Settings ───────────────────────────────────────────────
 
 async function applyCoachSettings() {
