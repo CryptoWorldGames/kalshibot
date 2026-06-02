@@ -1954,6 +1954,12 @@ function setRunMode(mode) {
   const buysWrap = document.getElementById("buysPickerWrap");
   if (minsWrap) minsWrap.style.display = mode === "time" ? "flex" : "none";
   if (buysWrap) buysWrap.style.display = mode === "buys" ? "flex" : "none";
+  // Save autoRunMode immediately (even if full saveSettings fails)
+  try {
+    const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+    s.autoRunMode = mode;
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+  } catch(e) {}
   saveSettings();
 }
 
