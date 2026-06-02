@@ -2914,7 +2914,8 @@ function chaChing() {
 function speakText(text) {
   try {
     if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel(); // Cancel any ongoing speech
+      // DON'T cancel ongoing speech — queue announcements instead (allows multiple sells to be announced)
+      // window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 1.0;
       utterance.pitch = 1.2;
@@ -3017,18 +3018,33 @@ function playSadTrumpet() {
 }
 
 function announceSell(count, profit, sellPriceCents, totalReceived, category) {
+  // Smart announcement: show price and profit per contract (more detailed)
+  const profitPerContract = profit / count;
   let detail = `you sold ${contractPhrase(count, category)}`;
-  if (sellPriceCents != null) detail += ` for ${Math.round(sellPriceCents)} cent${Math.round(sellPriceCents) === 1 ? "" : "s"} each`;
-  if (totalReceived != null) detail += `, for a total of ${moneyWords(totalReceived)}`;
+
+  if (count === 1 && sellPriceCents != null && profit != null) {
+    // Single contract: detailed breakdown
+    detail += ` for ${Math.round(sellPriceCents)} cents, and made ${moneyWords(profitPerContract)} profit`;
+  } else if (count > 1 && sellPriceCents != null && profit != null) {
+    // Multiple contracts: show price per contract and total profit
+    detail += ` for ${Math.round(sellPriceCents)} cents each`;
+    const profitStr = count === 1 ? moneyWords(profit) : moneyWords(profit);
+    detail += `, and made ${profitStr} total profit`;
+  } else {
+    // Fallback
+    if (sellPriceCents != null) detail += ` for ${Math.round(sellPriceCents)} cents each`;
+    if (totalReceived != null) detail += `, for a total of ${moneyWords(totalReceived)}`;
+    if (profit != null) detail += `, and made ${moneyWords(profit)} profit`;
+  }
 
   if (profit >= 0) {
-    // Profit (or break-even) — cash register cha-ching, THEN the voice
+    // Profit (or break-even) — cash register cha-ching FIRST, THEN voice
     playChaChingFile();
     setTimeout(() => {
-      speakText(`${detail}, and made ${moneyWords(profit)} profit`);
+      speakText(detail);
     }, 700);
   } else {
-    // Loss — sad trumpet, THEN the voice
+    // Loss — sad trumpet FIRST, THEN voice
     const customLoss = localStorage.getItem("customSound_loss");
     if (customLoss) {
       try { new Audio(customLoss).play().catch(() => playSadTrumpet()); }
@@ -3037,7 +3053,8 @@ function announceSell(count, profit, sellPriceCents, totalReceived, category) {
       playSadTrumpet();
     }
     setTimeout(() => {
-      speakText(`${detail}, and lost ${moneyWords(Math.abs(profit))}`);
+      const lossDetail = detail.replace("made", "lost").replace("profit", "loss");
+      speakText(lossDetail);
     }, 700);
   }
 }
