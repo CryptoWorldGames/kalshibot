@@ -1152,6 +1152,10 @@ async function loadBalance(enrich=true) {
         if (_recentlySold.length > 20) _recentlySold = _recentlySold.slice(0,20);
       }
     });
+    // Record the latest API positions so filterPos() can hide stale cached
+    // entries that are no longer returned by the API (already sold/closed).
+    window._lastApiPositions = d.positions || [];
+    window._haveApiPositions = true;
     renderBotPositions(d.positions || []);
     renderRecentlySold();
     window._lastSettlements = d.recent_settlements || [];
@@ -2451,14 +2455,20 @@ function filterPos() {
     if (p.status === "sold") return false;
     const qty = p.quantity ?? 0;
     if (Math.abs(qty) < 0.001) return false;  // Hide positions with < 0.001 qty (essentially sold)
+    const side = qty > 0 ? "yes" : "no";  // contract side for this position
 
     // Hide positions that were recently sold (even if API still shows them as open)
     const wasSold = _recentlySold.some(s => s.ticker === p.ticker && s.side === side);
     if (wasSold) return false;
 
-    // Hide positions that are no longer in the current API response (already sold/closed)
-    const stillInAPI = (d.positions || []).some(ap => ap.ticker === p.ticker && ((ap.quantity || 0) > 0 ? "yes" : "no") === side);
-    if (!stillInAPI) return false;
+    // Hide stale cached positions no longer in the latest API response (already sold/closed).
+    // Only applies once we actually have an API response — otherwise cached positions shown
+    // on first paint would all be hidden before the first API call returns.
+    if (window._haveApiPositions) {
+      const stillInAPI = (window._lastApiPositions || []).some(ap =>
+        ap.ticker === p.ticker && ((ap.quantity || 0) > 0 ? "yes" : "no") === side);
+      if (!stillInAPI) return false;
+    }
 
     // Hide positions where market is closed/resolved (even if Kalshi API still returns them)
     if (p.close_time) {
@@ -2473,7 +2483,6 @@ function filterPos() {
     if (hideSmall && Math.abs(qty) < 1.0) return false;
     // Hide positions with 95%+ loss
     if (hide95Loss && p.buy_price != null) {
-      const side = qty > 0 ? "yes" : "no";
       const cur = side === "yes" ? p.current_yes : p.current_no;
       if (cur != null) {
         const lossPercent = ((p.buy_price - cur) / p.buy_price) * 100;
@@ -4109,23 +4118,12 @@ syncFabButtons();
 // Always push current sell strategy to Flask on page load (survives Flask restarts)
 setTimeout(() => { pushStrategy(); pushSellSettings(); }, 1000);
 
-// ── Flask crash recovery (disabled) ───────────────────────────────────────
-// Removed aggressive page reload on Flask recovery to prevent infinite refresh loops
-// let _flaskDownTimer = null;
-// function _onFlaskConnectionLost() {
-//   if (_flaskDownTimer) return;
-//   console.warn("[flask] connection lost — polling for recovery...");
-//   _flaskDownTimer = setInterval(async () => {
-//     try {
-//       const r = await fetch("/", {method:"HEAD", cache:"no-store", signal: AbortSignal.timeout(3000)});
-//       if (r.ok) {
-//         clearInterval(_flaskDownTimer);
-//         _flaskDownTimer = null;
-//         console.warn("[flask] back up — reloading page");
-//         window.location.reload();
-//       }
-//     } catch(e) {}
-//   }, 5000);
+// ── Flask crash recovery (page reload DISABLED) ───────────────────────────
+// Previously this polled every 5s and reloaded the page when Flask recovered,
+// which caused an infinite refresh loop and reset UI state. Now it just logs —
+// no automatic page reload. (Kept as a function so the call site still works.)
+function _onFlaskConnectionLost() {
+  console.warn("[flask] connection lost — NOT auto-reloading (manual refresh if needed)");
 }
 
 // ── Auto-restart bot if it was running before page reload / Flask crash ───
