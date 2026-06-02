@@ -133,9 +133,26 @@ git push
 - No comments in code unless truly non-obvious
 - Concise responses
 - Max $1 per bet default
-- Bot scans every 10 seconds when running
+- **Bot scans every 15 seconds when you're watching, 30 seconds when away** (adaptive)
 - Portfolio refreshes every 60s (throttled)
 - Monitor runs every 45s (backend, always on while Flask running)
+- GitHub primary source of truth; OneDrive backup only
+
+---
+
+## 2026-06-01 Session 3 — Adaptive scan interval
+
+- **Adaptive scan interval deployed** (index.html): 
+  - 15s when you're actively watching (page visible)
+  - 30s when you step away (page hidden/tabbed out)
+  - Keeps scanning in both cases (doesn't pause)
+  - Balances market detection latency vs API load
+- **Console logging added** to verify interval changes (📵 and 📱 emoji markers)
+- **All updates pushed to GitHub** (commits: 7fe5608, 3fc998e)
+- Bot is live and responsive with 9 open positions
+
+*Last updated: 2026-06-01*
+*GitHub: https://github.com/CryptoWorldGames/kalshibot*
 
 ---
 
@@ -156,7 +173,3 @@ git push
   Affordable 15-min crypto is usually the "no" side (2–5¢); with **Buy Down OFF** those are
   skipped, so it only bought the rare cheap "yes" market (e.g. politics @2¢). To buy 15-min
   crypto at $0.05, enable **Buy Down** or raise Max spend. ← user decision.
-- Changes are LOCAL only (not committed/pushed yet).
-
-*Last updated: 2026-05-31*
-*GitHub: https://github.com/CryptoWorldGames/kalshibot*
