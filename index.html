@@ -1097,7 +1097,9 @@ async function loadBalance(enrich=true) {
   try {
     const enrichParam = enrich ? "true" : "false";
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    // Increase timeout for enriched requests (settlements can be slow from Kalshi API)
+    const timeoutMs = enrich ? 30000 : 8000;  // 30s for enrich, 8s for fast
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     const r = await fetch(`/api/portfolio?enrich=${enrichParam}&settlement_hours=${_settleHours}`, {signal: controller.signal});
     clearTimeout(timeoutId);
     const d = await r.json();
@@ -1144,6 +1146,25 @@ async function loadBalance(enrich=true) {
     window._lastSettlements = d.recent_settlements || [];
     renderSettlements(window._lastSettlements);
     renderSettlementsTickerTicker();
+
+    // If settlements came back empty, try fetching them separately with longer timeout
+    if (enrich && (!window._lastSettlements || window._lastSettlements.length === 0)) {
+      (async () => {
+        try {
+          const ctrl = new AbortController();
+          const tid = setTimeout(() => ctrl.abort(), 20000);
+          const settleResp = await fetch(`/api/portfolio?enrich=true&settlement_hours=${_settleHours}`, {signal: ctrl.signal});
+          clearTimeout(tid);
+          const settleData = await settleResp.json();
+          if (settleData.recent_settlements && settleData.recent_settlements.length > 0) {
+            window._lastSettlements = settleData.recent_settlements;
+            renderSettlements(window._lastSettlements);
+          }
+        } catch(e) {
+          // Settlements fetch failed silently — not critical
+        }
+      })();
+    }
     checkAutoStopConditions();
     refreshPnlDisplay();
     hideNavLoading();
