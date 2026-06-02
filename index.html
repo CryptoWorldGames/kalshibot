@@ -1098,7 +1098,7 @@ async function loadBalance(enrich=true) {
     const enrichParam = enrich ? "true" : "false";
     const controller = new AbortController();
     // Increase timeout for enriched requests (settlements can be slow from Kalshi API)
-    const timeoutMs = enrich ? 30000 : 8000;  // 30s for enrich, 8s for fast
+    const timeoutMs = enrich ? 60000 : 15000;  // 60s for enrich, 15s for fast
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     const r = await fetch(`/api/portfolio?enrich=${enrichParam}&settlement_hours=${_settleHours}`, {signal: controller.signal});
     clearTimeout(timeoutId);
