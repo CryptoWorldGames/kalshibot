@@ -2112,8 +2112,8 @@ async function buyOne(idx, override=false) {
       row.style.outline = "2px solid var(--green)";
       setTimeout(() => { row.style.background = "#0a1a10"; row.style.outline = ""; }, 3000);
     }
-    // Throttled refresh — max once per 5s to avoid flooding API with 20+ position calls
-    loadBalanceThrottled();
+    // FORCE immediate refresh to show new position instantly (don't throttle buys)
+    loadBalanceThrottled(true);
     addRecentBuy({
       ticker: m.ticker, title: m.title, market_q: m.market_q, category: m.category,
       side: m.side, price: m.price, contracts: d.contracts, spent: d.spent,

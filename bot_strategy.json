@@ -1,1 +1,1 @@
-{"mode": "resolution", "target_pct": 10.0, "target_dollars": 0.1, "target_price_cents": 40.0, "buy_in_price_cents": 15.0}
+{"mode": "profit", "target_pct": 10.0, "target_dollars": 0.1, "target_price_cents": 40.0, "buy_in_price_cents": 15.0}
