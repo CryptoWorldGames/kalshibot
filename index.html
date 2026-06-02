@@ -1121,9 +1121,14 @@ async function loadBalance(enrich=true) {
     const prev = allPositions;
     const nextTickers = new Set((d.positions || []).map(p => p.ticker));
     let announceDelay = 0;
+    const now = Date.now();
     prev.forEach(p => {
       if (p.bot_bought && !nextTickers.has(p.ticker)) {
-        if (p.buy_price != null) {
+        // Check if this position was already announced very recently (within last 10 seconds)
+        // to prevent duplicate announcements from rapid portfolio refreshes
+        const alreadyAnnounced = _recentlySold.some(rs => rs.ticker === p.ticker && rs.side === ((p.quantity ?? 0) > 0 ? "yes" : "no") && (now - rs.soldAt) < 10000);
+
+        if (!alreadyAnnounced && p.buy_price != null) {
           const side   = (p.quantity ?? 0) > 0 ? "yes" : "no";
           const cur    = side === "yes" ? p.current_yes : p.current_no;
           const qty    = Math.abs(p.quantity ?? 0);
@@ -1137,10 +1142,14 @@ async function loadBalance(enrich=true) {
           const wasResolution = cur != null && (cur <= 1 || cur >= 99);
           showSellPopup(p.title || p.ticker, profit, wasResolution ? "resolved" : "sold");
           addToSaleTicker(p.title || p.ticker, profit, side);
-          // Keep in recently-sold list for 2 min
-          _recentlySold.unshift({ title: p.title||p.ticker, ticker: p.ticker, side, profit, soldAt: Date.now(), kalshi_url: p.kalshi_url||"", qty, buy_price: p.buy_price });
-          if (_recentlySold.length > 20) _recentlySold = _recentlySold.slice(0,20);
         }
+        // Keep in recently-sold list for 2 min (always update, even if already announced)
+        const side = (p.quantity ?? 0) > 0 ? "yes" : "no";
+        const cur = side === "yes" ? p.current_yes : p.current_no;
+        const qty = Math.abs(p.quantity ?? 0);
+        const profit = cur != null ? qty * (cur - p.buy_price) / 100 : null;
+        _recentlySold.unshift({ title: p.title||p.ticker, ticker: p.ticker, side, profit, soldAt: now, kalshi_url: p.kalshi_url||"", qty, buy_price: p.buy_price });
+        if (_recentlySold.length > 20) _recentlySold = _recentlySold.slice(0,20);
       }
     });
     renderBotPositions(d.positions || []);
