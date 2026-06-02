@@ -28,7 +28,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding as asym_padding, ec
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, make_response
 
 app = Flask(__name__)
 HERE = Path(__file__).resolve().parent
@@ -648,7 +648,13 @@ threading.Thread(target=_snapshot_runner, daemon=True).start()
 
 @app.route("/")
 def index():
-    return send_from_directory(HERE, "index.html")
+    # Never cache index.html — it changes frequently and a stale cached copy
+    # can run old/broken JavaScript even after the file on disk is fixed.
+    resp = make_response(send_from_directory(HERE, "index.html"))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 
 @app.route("/audio/<path:filename>")
