@@ -4013,12 +4013,10 @@ function loadSettings() {
 
   if (s.selTime) { selTime = parseInt(s.selTime); activatePills("timeGroup", selTime < 60 ? selTime + " min" : (selTime/60)+"h"); }
   if (s.autoRunMode) setRunMode(s.autoRunMode);
-}
 
-// Ensure visual state matches actual state on page load (prevent both buttons appearing selected)
-document.addEventListener("DOMContentLoaded", () => {
-  setTimeout(() => setRunMode(autoRunMode), 100);
-});
+  // Ensure visual state matches actual state (prevent both buttons appearing selected)
+  setTimeout(() => setRunMode(autoRunMode), 50);
+}
 
 // ── Coach → Apply Settings ───────────────────────────────────────────────
 
