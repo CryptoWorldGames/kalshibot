@@ -1,1 +1,1 @@
-{"mode": "profit_dollars", "target_pct": 5.0, "target_dollars": 0.05, "target_price_cents": 35.0, "buy_in_price_cents": 15.0}
+{"mode": "profit", "target_pct": 5.0, "target_dollars": 0.05, "target_price_cents": 35.0, "buy_in_price_cents": 15.0, "stop_loss_pct": 25.0}

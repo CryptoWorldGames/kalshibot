@@ -95,42 +95,73 @@ def _headers(method: str, path: str, body: str = "") -> dict:
         "Content-Type": "application/json",
     }
 
-# Rate limiting to PREVENT 429 errors - AGGRESSIVE
+# Rate limiting. The old code used a flat 2s/call with NO retry, which starved the
+# balance/cash fetch behind the scan loop's ~30+ serialized calls (cash showed "—")
+# and let a single 429 fail outright. Now: a smaller base gap between calls PLUS real
+# 429 backoff+retry — faster in the common case and actually robust when throttled.
 _last_api_call = {"time": 0}
-_rate_limit_delay = 2.0  # 2 SECONDS between EVERY API call (no backoff, just slow)
+_rate_limit_delay = 0.5   # base seconds between API calls (was 2.0)
+_max_retries = 4
 _api_lock = threading.Lock()
 
 def _rate_limit_wait():
-    """Enforce 2-second delay between ALL API calls. This prevents rate limiting completely."""
+    """Space out API calls. Holds the lock only briefly — NOT during 429 backoff."""
     with _api_lock:
         now = time.time()
         elapsed = now - _last_api_call["time"]
         if elapsed < _rate_limit_delay:
-            sleep_time = _rate_limit_delay - elapsed
-            if sleep_time > 0:
-                time.sleep(sleep_time)
+            time.sleep(_rate_limit_delay - elapsed)
         _last_api_call["time"] = time.time()
 
-def kalshi_get(endpoint: str, params: dict = None) -> dict:
-    _rate_limit_wait()
+def _kalshi_request(method: str, endpoint: str, params: dict = None,
+                    body: dict = None, retry_on_timeout: bool = True) -> dict:
     path = API_PREFIX + endpoint
-    r = req.get(BASE_URL + path, headers=_headers("GET", path),
-                 params=params or {}, timeout=20)  # 20s timeout
-    if not r.ok:
-        print(f"[API {r.status_code}] GET {endpoint} -> {r.text[:500]}")
-    r.raise_for_status()
-    return r.json()
+    last_exc = None
+    for attempt in range(_max_retries):
+        _rate_limit_wait()
+        try:
+            if method == "GET":
+                r = req.get(BASE_URL + path, headers=_headers("GET", path),
+                            params=params or {}, timeout=20)
+            else:
+                body_str = json.dumps(body, separators=(',', ':'))
+                r = req.post(BASE_URL + path, headers=_headers("POST", path),
+                             data=body_str, timeout=15)
+            if r.status_code == 429:
+                ra = r.headers.get("Retry-After")
+                try: wait = float(ra) if ra else 0
+                except ValueError: wait = 0
+                if wait <= 0:
+                    wait = min(8.0, 1.0 * (2 ** attempt))  # 1s, 2s, 4s, 8s
+                print(f"[API 429] {method} {endpoint} — backoff {wait:.1f}s ({attempt+1}/{_max_retries})")
+                time.sleep(wait)
+                continue
+            if not r.ok:
+                print(f"[API {r.status_code}] {method} {endpoint} -> {r.text[:500]}")
+            r.raise_for_status()
+            return r.json()
+        except req.HTTPError:
+            raise  # non-429 HTTP error — surface it, don't retry
+        except (req.Timeout, req.ConnectionError) as e:
+            last_exc = e
+            if not retry_on_timeout:
+                raise  # POST: unknown state, don't risk a duplicate order
+            wait = min(8.0, 1.0 * (2 ** attempt))
+            print(f"[API timeout] {method} {endpoint} — retry in {wait:.1f}s ({attempt+1}/{_max_retries})")
+            time.sleep(wait)
+            continue
+    if last_exc:
+        raise last_exc
+    raise RuntimeError(f"Kalshi {method} {endpoint}: still rate-limited after {_max_retries} tries")
+
+def kalshi_get(endpoint: str, params: dict = None) -> dict:
+    return _kalshi_request("GET", endpoint, params=params)
 
 def kalshi_post(endpoint: str, body: dict) -> dict:
-    _rate_limit_wait()
-    path = API_PREFIX + endpoint
-    body_str = json.dumps(body, separators=(',', ':'))
-    r = req.post(BASE_URL + path, headers=_headers("POST", path),
-                  data=body_str, timeout=15)
-    if not r.ok:
-        print(f"[API {r.status_code}] POST {endpoint} -> {r.text[:500]}")
-    r.raise_for_status()
-    return r.json()
+    # POST = order placement. Retry 429 (rejected before processing, and the
+    # client_order_id makes a resend idempotent) but NOT timeouts — a timed-out
+    # order may have actually executed, so a blind retry could double-fill.
+    return _kalshi_request("POST", endpoint, body=body, retry_on_timeout=False)
 
 # ---------------------------------------------------------------------------
 # Position tracking & sell strategy
@@ -783,29 +814,69 @@ def auth_test():
     return jsonify(results)
 
 
+# ── Balance cache ──────────────────────────────────────────────────────────
+# Cash is fetched by both /api/portfolio and /api/balance, cached briefly so a
+# burst of refreshes (or a scan hogging the API lock) doesn't re-hit Kalshi each
+# time. On a failed refresh we serve the LAST KNOWN value instead of None, so the
+# cash figure never blanks back to "—" once it has loaded.
+_balance_cache = {"data": None, "ts": 0.0}
+_BALANCE_TTL = 12.0  # seconds
+
+def _get_balance(force: bool = False):
+    """Return {cash, positions_value, total, raw} or None (only if never fetched)."""
+    now = time.time()
+    cached = _balance_cache["data"]
+    if not force and cached is not None and (now - _balance_cache["ts"]) < _BALANCE_TTL:
+        return cached
+    try:
+        bal_data = kalshi_get("/portfolio/balance")
+        cash_dollars = float(bal_data.get("balance_dollars") or 0)
+        if not cash_dollars:
+            cash_dollars = float(bal_data.get("balance") or 0) / 100
+        pos_dollars = round(float(bal_data.get("portfolio_value") or 0) / 100, 2)
+        data = {
+            "cash":            round(cash_dollars, 2),
+            "positions_value": pos_dollars,
+            "total":           round(cash_dollars + pos_dollars, 2),
+            "raw":             bal_data,
+        }
+        _balance_cache["data"] = data
+        _balance_cache["ts"]   = now
+        return data
+    except Exception as e:
+        print(f"[balance] fetch error: {e} (serving cached={cached is not None})")
+        return cached  # last-known on failure; None only if we never succeeded
+
+
+@app.route("/api/balance")
+def balance_only():
+    """Lightweight cash + positions value — one (cached) Kalshi call. The frontend
+    hits this so the top cash figure shows immediately, decoupled from the slow
+    positions/enrichment load that can get stuck behind a scan."""
+    b = _get_balance()
+    if not b:
+        return jsonify({"balance": None})
+    return jsonify({
+        "balance":         b["cash"],
+        "positions_value": b["positions_value"],
+        "portfolio_value": b["total"],
+    })
+
+
 @app.route("/api/portfolio")
 def portfolio():
     # Check if we should skip expensive market enrichment (for fast initial load)
     enrich = request.args.get("enrich", "true").lower() != "false"
 
-    # ── Balance ──
+    # ── Balance ── (shared cache so cash shows fast even mid-scan; see _get_balance)
     balance = None
     total_account = None  # total account value (what Kalshi shows as Portfolio)
-    try:
-        bal_data = kalshi_get("/portfolio/balance")
-        # balance_dollars = available CASH only (not total account)
-        # portfolio_value = open positions value in CENTS
-        cash_dollars = float(bal_data.get("balance_dollars") or 0)
-        if not cash_dollars:
-            raw = float(bal_data.get("balance") or 0)
-            cash_dollars = raw / 100
-        pos_cents   = float(bal_data.get("portfolio_value") or 0)
-        pos_dollars = round(pos_cents / 100, 2)  # always /100
-        balance       = round(cash_dollars, 2)                    # cash = balance_dollars directly
-        total_account = round(cash_dollars + pos_dollars, 2)      # total = cash + positions
-        print(f"[portfolio] cash=${cash_dollars:.2f} positions=${pos_dollars:.2f} → total=${total_account:.2f}")
-    except Exception as e:
-        print(f"[portfolio] balance error: {e}")
+    bal_data = {}         # kept for the portfolio_value fallback below
+    _b = _get_balance()
+    if _b:
+        balance       = _b["cash"]    # spendable cash (balance_dollars)
+        total_account = _b["total"]   # cash + open positions
+        bal_data      = _b["raw"]
 
     # ── Positions ──
     positions = []
@@ -1842,6 +1913,7 @@ def buy():
         # shows immediately instead of being suppressed by the 120s sold window.
         _recently_sold.pop(ticker, None)
     _save_tracked()
+    _balance_cache["ts"] = 0  # cash changed — force a fresh balance on next read
 
     return jsonify({
         "ok":        True,
@@ -1893,53 +1965,36 @@ def sell():
             print(f"[sell] {ticker}: {count} contracts (fractional < 1, error)")
             return jsonify({"error": f"Can't sell {count} contracts — less than 1. Position will resolve at expiry."}), 400
 
-        # Try LIMIT order first (better price)
+        # MARKET sell with a protective price floor = current bid.
+        # Market orders execute immediately against the best available bid and
+        # never "rest" on the book. A resting (unfilled) limit order was the cause
+        # of the "it shows sold then comes back a minute later" bug: the old code
+        # marked the position sold and hid it for ~2 min while the limit just sat
+        # unfilled, so it reappeared when the hide expired. The price field below
+        # guarantees we won't accept worse than the bid the user saw; if the bid
+        # moved away, Kalshi cancels the order (handled below) instead of filling
+        # at a bad price.
         order_payload = {
             "ticker": ticker,
             "client_order_id": str(uuid.uuid4()),  # Required by Kalshi API
             "action": "sell",
             "side":   side,
-            "type":   "limit",
+            "type":   "market",
             "count":  count_int,
         }
-        # Use cents for price field (same as buy endpoint)
         price_key = "yes_price" if side == "yes" else "no_price"
-        order_payload[price_key] = bid_cents  # Use cents as integer (same as buy endpoint)
+        order_payload[price_key] = bid_cents  # protective floor (cents, integer)
 
-        print(f"[sell] {ticker} {side} × {count_int} LIMIT @ {bid_d} (${bid_cents}¢)")
+        print(f"[sell] {ticker} {side} × {count_int} MARKET (floor {bid_cents}¢)")
         result = kalshi_post("/portfolio/orders", order_payload)
         order_status = result.get("order", {}).get("status", "")
 
-        # If LIMIT order was canceled, check profit and retry with MARKET if profitable
+        # "canceled" = nothing matched at/above the floor (bid moved or no buyers).
+        # Don't fake a sale — return honestly so the position isn't hidden and then
+        # reappears later. The user can retry, or it resolves at expiry.
         if order_status == "canceled":
-            print(f"[sell] LIMIT canceled, checking profit before retry")
-            # Calculate current profit
-            bot_info = tracked.get(ticker)
-            buy_price = bot_info.get("buy_price") if bot_info else None
-
-            if buy_price is not None:
-                current_price = _dollars_to_cents(mkt_data.get("yes_bid_dollars") if side == "yes" else mkt_data.get("no_bid_dollars"))
-                if current_price is not None:
-                    profit_cents = count_int * (current_price - buy_price)
-                    profit_dollars = profit_cents / 100
-
-                    if profit_dollars > 0:
-                        # In profit - retry with MARKET order
-                        print(f"[sell] Profit ${profit_dollars:.2f} > 0, retrying with MARKET order")
-                        market_payload = {
-                            "ticker": ticker,
-                            "client_order_id": str(uuid.uuid4()),  # Required by Kalshi API
-                            "action": "sell",
-                            "side": side,
-                            "type": "market",
-                            "count": count_int,
-                        }
-                        result = kalshi_post("/portfolio/orders", market_payload)
-                        print(f"[sell] MARKET order response: {result.get('order', {}).get('status', 'unknown')}")
-                    else:
-                        print(f"[sell] Not profitable (${profit_dollars:.2f}), keeping LIMIT result")
-                        # Return with note that limit failed and we didn't retry (not profitable)
-                        return jsonify({"ok": False, "note": f"LIMIT order canceled and position not in profit (${profit_dollars:.2f}), use manual market order if desired"}), 400
+            print(f"[sell] {ticker} MARKET canceled — no fill at {bid_cents}¢")
+            return jsonify({"error": f"Couldn't sell — no buyers at {bid_cents}¢ right now. Try again, or it'll resolve at expiry."}), 400
     except req.HTTPError as e:
         err_text = e.response.text[:500]
         print(f"[sell] HTTPError {e.response.status_code}: {err_text}")
@@ -1963,6 +2018,7 @@ def sell():
         # what stops non-bot positions from reappearing after a hard refresh.
         _recently_sold[ticker] = {"side": side, "at": time.time()}
     _save_tracked()
+    _balance_cache["ts"] = 0  # cash changed — force a fresh balance on next read
 
     order = result.get("order", result)
     # Return executed price (if available) so frontend can calculate accurate profit
@@ -2047,6 +2103,7 @@ def set_strategy():
         dol  = float(data.get("target_dollars")) if data.get("target_dollars") is not None else None
         tp   = float(data.get("target_price_cents")) if data.get("target_price_cents") is not None else None
         bip  = float(data.get("buy_in_price_cents")) if data.get("buy_in_price_cents") is not None else None
+        slp  = float(data.get("stop_loss_pct")) if data.get("stop_loss_pct") is not None else None
 
         # Validate numeric ranges to prevent nonsensical values
         if pct is not None and (pct < 1 or pct > 999):
@@ -2057,6 +2114,8 @@ def set_strategy():
             return jsonify({"error": "target_price_cents must be 1-99"}), 400
         if bip is not None and (bip < 1 or bip > 99):
             return jsonify({"error": "buy_in_price_cents must be 1-99"}), 400
+        if slp is not None and (slp < 1 or slp > 99):
+            return jsonify({"error": "stop_loss_pct must be 1-99"}), 400
     except (ValueError, TypeError):
         return jsonify({"error": "Invalid numeric values"}), 400
 
@@ -2065,6 +2124,10 @@ def set_strategy():
     if dol is not None: sell_strategy["target_dollars"] = dol
     if tp is not None: sell_strategy["target_price_cents"] = tp
     if bip is not None: sell_strategy["buy_in_price_cents"] = bip
+    # Stop-loss lives here (persisted) so the monitor — which reads it from
+    # sell_strategy — actually fires it. Sending null clears it (checkbox off).
+    if "stop_loss_pct" in data:
+        sell_strategy["stop_loss_pct"] = slp
     try: STRATEGY_FILE.write_text(json.dumps(sell_strategy), encoding="utf-8")
     except Exception: pass
     return jsonify({"ok": True, "strategy": sell_strategy})
@@ -2100,14 +2163,9 @@ def set_sell_settings():
         sell_settings["skip_auto_sell_near_resolution"] = bool(data["skip_auto_sell_near_resolution"])
     if "skip_auto_sell_minutes" in data:
         sell_settings["skip_auto_sell_minutes"] = max(1, int(data["skip_auto_sell_minutes"]))
-    if "stop_loss_pct" in data and data["stop_loss_pct"] is not None:
-        sell_settings["stop_loss_pct"] = float(data["stop_loss_pct"])
-    elif "stop_loss_pct" in data:
-        sell_settings["stop_loss_pct"] = None
-    if "stop_loss_dol" in data and data["stop_loss_dol"] is not None:
-        sell_settings["stop_loss_dol"] = float(data["stop_loss_dol"])
-    elif "stop_loss_dol" in data:
-        sell_settings["stop_loss_dol"] = None
+    # NOTE: stop-loss is NOT handled here. It lives in sell_strategy (set via
+    # /api/strategy) because that's the dict the monitor reads. Writing it here
+    # was the original bug — it silently never fired.
     return jsonify({"ok": True, "settings": sell_settings})
 
 

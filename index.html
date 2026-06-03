@@ -692,32 +692,9 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
         </div>
       </div>
 
-      <!-- Stop if / Stop Loss -->
-      <div>
-        <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Stop Loss — Auto-sell if you lose X</div>
-        <div style="display:flex;flex-direction:column;gap:7px">
-          <div style="display:flex;align-items:center;gap:8px">
-            <label class="check-row" style="font-size:13px;width:80px"><input type="checkbox" id="stopProfitDolChk" style="accent-color:var(--green)"> Profit ≥</label>
-            <span style="color:#aaa;font-size:13px">$</span>
-            <input type="number" id="stopProfitDol" value="100" min="0.01" step="0.01" style="width:100px">
-          </div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <label class="check-row" style="font-size:13px;width:80px"><input type="checkbox" id="stopProfitPctChk" style="accent-color:var(--green)"> Profit ≥</label>
-            <input type="number" id="stopProfitPct" value="20" min="0.1" step="0.1" style="width:100px">
-            <span style="color:#aaa;font-size:13px">%</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-            <label class="check-row" style="font-size:13px;width:80px"><input type="checkbox" id="stopLossDolChk" style="accent-color:var(--red)" onchange="pushSellSettings();checkStrategyConflicts()"> Loss ≥</label>
-            <span style="color:#aaa;font-size:13px">$</span>
-            <input type="number" id="stopLossDol" value="10" min="0.01" step="0.01" style="width:100px" oninput="pushSellSettings();checkStrategyConflicts()">
-          </div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <label class="check-row" style="font-size:13px;width:80px"><input type="checkbox" id="stopLossPctChk" style="accent-color:var(--red)" onchange="pushSellSettings();checkStrategyConflicts()"> Loss ≥</label>
-            <input type="number" id="stopLossPct" value="20" min="0.1" step="0.1" style="width:100px" oninput="pushSellSettings();checkStrategyConflicts()">
-            <span style="color:#aaa;font-size:13px">%</span>
-          </div>
-        </div>
-      </div>
+      <!-- Stop-loss moved to the Sell Strategy card (one place, and it actually
+           fires). The old portfolio-level profit/loss auto-stop lived here but was
+           mislabeled "auto-sell" and overlapped with RUN UNTIL above — removed. -->
 
     </div>
     </div>
@@ -810,6 +787,17 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 
   </div>
     <div id="stratConflictWarn" style="display:none;background:#3a1a00;border:1px solid var(--yellow);color:var(--yellow);border-radius:6px;padding:8px 12px;font-size:12px;margin:8px 0"></div>
+
+    <!-- Stop loss — applies on top of whichever profit exit is selected above -->
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+      <label class="check-row" style="font-size:14px">
+        <input type="checkbox" id="stopLossChk" style="accent-color:var(--red)" onchange="saveSettings();pushStrategy()">
+        <span style="margin:0 4px">🛑 Cut losses if a position drops</span>
+        <input type="number" id="stopLossPct" value="50" min="1" max="99" step="1" style="width:70px;margin:0 6px;border-color:var(--red);color:var(--red)" oninput="saveSettings();pushStrategy()">
+        <span style="color:#fff">% — auto-sells it to stop further loss</span>
+      </label>
+    </div>
+
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
       <label class="check-row">
         <input type="checkbox" id="skipAutoSellNearResolution" checked onchange="pushSellSettings()"> Don't auto-sell if resolves in
@@ -1125,6 +1113,24 @@ function setSettleFilter(hours, label) {
   loadBalanceThrottled(true); // force refresh when changing settlement period
 }
 
+// Fast, standalone cash fetch. Hits the lightweight cached /api/balance so the top
+// cash + portfolio figures show immediately, even while the heavy positions load (or
+// an in-progress scan) is tying up the API. Cheap + backend-cached, so safe to poll.
+async function loadCash() {
+  try {
+    const r = await fetch("/api/balance");
+    const d = await r.json();
+    if (d.balance != null) {
+      const el = document.getElementById("navCash");
+      if (el) { el.textContent = "$" + d.balance.toFixed(2); el.className = "fund-amount cash-val"; }
+    }
+    if (d.portfolio_value != null) {
+      const el = document.getElementById("navPortfolio");
+      if (el) { el.textContent = "$" + d.portfolio_value.toFixed(2); el.className = "fund-amount port-val"; }
+    }
+  } catch(e) { /* transient — next tick retries */ }
+}
+
 let _loadBalanceInFlight = false;
 async function loadBalance(enrich=true) {
   // Skip if a balance request is already running. The positions tab forces a
@@ -1218,7 +1224,6 @@ async function loadBalance(enrich=true) {
         }
       })();
     }
-    checkAutoStopConditions();
     refreshPnlDisplay();
     hideNavLoading();
     // Auto-restart if we were waiting for cash and now have enough
@@ -1412,6 +1417,9 @@ async function enrichPositionMarkets() {
 }
 
 window.addEventListener("load", () => {
+  // Cash first — fast cached /api/balance shows the top figures immediately, even
+  // if the heavy positions load is slow or stuck behind a scan.
+  loadCash();
   // Phase 1 (0-2s): Load positions + balance WITHOUT market enrichment
   loadBalance(false);
 
@@ -1425,6 +1433,9 @@ window.addEventListener("load", () => {
     loadBalance(true);
     loadPnl();
   }, 5000);
+
+  // Keep cash current independently of the 60s heavy refresh (cheap + cached).
+  setInterval(() => { if (!document.hidden) loadCash(); }, 15000);
 }, {once: true});
 // Global background intervals (paused when page is hidden)
 let _bgBalanceInterval = null, _bgPnlInterval = null;
@@ -1627,28 +1638,6 @@ function checkStrategyConflicts() {
     if (buyIn > 0 && upMax > buyIn) {
       msg = `⚠ Conflict: Filter buys up to ${upMax}¢ but "Buy at" max is ${buyIn}¢ — raise Buy Up "to" to match, or lower it.`;
     }
-
-    // Check stop-loss conflict
-    const sellAt = parseFloat(document.getElementById("targetPriceCustom")?.value) || 0;
-    const stopLossPctChk = document.getElementById("stopLossPctChk")?.checked;
-    const stopLossPct = parseFloat(document.getElementById("stopLossPct")?.value) || 0;
-
-    if (buyIn > 0 && sellAt > 0 && stopLossPctChk && stopLossPct > 0) {
-      // Calculate stop-loss trigger price
-      const isLong = sellAt > buyIn;  // buying low, selling high
-      const stopPrice = isLong
-        ? buyIn * (1 - stopLossPct / 100)  // stop below buy
-        : buyIn * (1 + stopLossPct / 100);  // stop above buy (shorting)
-
-      // Check if sell price conflicts with stop-loss
-      const conflict = isLong
-        ? (sellAt < stopPrice)  // selling below stop-loss trigger
-        : (sellAt > stopPrice);  // selling above stop-loss trigger (shorting)
-
-      if (conflict) {
-        msg = `⚠️ CONFLICT: "Sell at ${sellAt}¢" will trigger before Stop-Loss ${stopLossPct}% (${stopPrice.toFixed(1)}¢). Adjust one or turn off.`;
-      }
-    }
   }
   warn.textContent = msg;
   warn.style.display = msg ? "block" : "none";
@@ -1710,14 +1699,17 @@ async function pushStrategy() {
   const dol      = (stratMode === "profit_dollars") ? dolVal   : null;
   const tpCents  = (stratMode === "target_price")   ? tpVal    : null;
   const buyInCents = (stratMode === "target_price") ? buyInVal : null;
+  // Stop-loss applies regardless of which profit exit is selected. null = off.
+  const slChk    = document.getElementById("stopLossChk")?.checked;
+  const slPct    = slChk ? (parseFloat(document.getElementById("stopLossPct")?.value) || null) : null;
 
-  console.log(`[pushStrategy] Sending mode=${stratMode}, pct=${pct}, dol=${dol}, tp=${tpCents}`);
+  console.log(`[pushStrategy] Sending mode=${stratMode}, pct=${pct}, dol=${dol}, tp=${tpCents}, stopLoss=${slPct}`);
 
   try {
     // Send the ACTUAL frontend stratMode (not converted) so backend knows exactly which strategy was selected
     const resp = await fetch("/api/strategy", {
       method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({mode: stratMode, target_pct: pct, target_dollars: dol, target_price_cents: tpCents, buy_in_price_cents: buyInCents}),
+      body: JSON.stringify({mode: stratMode, target_pct: pct, target_dollars: dol, target_price_cents: tpCents, buy_in_price_cents: buyInCents, stop_loss_pct: slPct}),
     });
 
     if (!resp.ok) {
@@ -1739,17 +1731,11 @@ async function pushSellSettings() {
   try {
     const skip = document.getElementById("skipAutoSellNearResolution").checked;
     const mins = parseInt(document.getElementById("skipAutoSellMinutes").value) || 1;
-    const stopLossPctChk = document.getElementById("stopLossPctChk").checked;
-    const stopLossPct = stopLossPctChk ? parseFloat(document.getElementById("stopLossPct").value) : null;
-    const stopLossDolChk = document.getElementById("stopLossDolChk").checked;
-    const stopLossDol = stopLossDolChk ? parseFloat(document.getElementById("stopLossDol").value) : null;
     await fetch("/api/sell-settings", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
         skip_auto_sell_near_resolution: skip,
         skip_auto_sell_minutes: mins,
-        stop_loss_pct: stopLossPct,
-        stop_loss_dol: stopLossDol,
       }),
     });
   } catch(e){}
@@ -2143,33 +2129,9 @@ function updateAutoStatus() {
     `${timeStr} · ${autoModeBought} bought`;
 }
 
-function checkAutoStopConditions() {
-  if (!autoModeOn || autoModeStartVal == null) return;
-  const portEl = document.getElementById("navPortfolio");
-  const cur    = parseFloat((portEl.textContent || "0").replace("$",""));
-  if (isNaN(cur) || cur <= 0) return;  // skip if value looks wrong/loading
-  // Skip if value changed too dramatically (likely a calculation glitch)
-  if (autoModeStartVal > 0 && Math.abs(cur - autoModeStartVal) / autoModeStartVal > 0.95) return;
-  const pnl    = cur - autoModeStartVal;
-  const pnlPct = autoModeStartVal > 0 ? (pnl / autoModeStartVal * 100) : 0;
-
-  if (document.getElementById("stopProfitDolChk").checked && pnl > 0) {
-    const dolT = parseFloat(document.getElementById("stopProfitDol").value) || Infinity;
-    if (pnl >= dolT) return stopAutoMode(`Profit target hit (+$${pnl.toFixed(2)})`);
-  }
-  if (document.getElementById("stopProfitPctChk").checked && pnl > 0) {
-    const pctT = parseFloat(document.getElementById("stopProfitPct").value) || Infinity;
-    if (pnlPct >= pctT) return stopAutoMode(`Profit target hit (+${pnlPct.toFixed(1)}%)`);
-  }
-  if (document.getElementById("stopLossDolChk").checked && pnl < 0) {
-    const dolL = parseFloat(document.getElementById("stopLossDol").value) || Infinity;
-    if (Math.abs(pnl) >= dolL) return stopAutoMode(`Loss limit hit (-$${Math.abs(pnl).toFixed(2)})`);
-  }
-  if (document.getElementById("stopLossPctChk").checked && pnl < 0) {
-    const pctL = parseFloat(document.getElementById("stopLossPct").value) || Infinity;
-    if (Math.abs(pnlPct) >= pctL) return stopAutoMode(`Loss limit hit (-${Math.abs(pnlPct).toFixed(1)}%)`);
-  }
-}
+// checkAutoStopConditions() removed — the portfolio-level profit/loss auto-stop it
+// drove was deleted (mislabeled "auto-sell", overlapped RUN UNTIL). Per-position
+// stop-loss now lives in the Sell Strategy card and is enforced by the backend monitor.
 
 // ── Buy ───────────────────────────────────────────────────────────────────
 
@@ -2697,7 +2659,12 @@ function renderPositionsTable(positions) {
 
     // Sell button: shows sell value + profit/loss
     let sellBtnHtml;
-    if (valNow != null) {
+    if (abs < 1) {
+      // Kalshi orders are whole-number only, so a sub-1-contract leftover can't be
+      // sold — a "Sell" always fails and the fragment keeps reappearing. Say why
+      // instead of offering a button that can't work. It resolves on its own at expiry.
+      sellBtnHtml = `<span style="font-size:11px;color:#888;line-height:1.4;display:inline-block" title="Less than 1 contract — Kalshi can't place a sell order for it. It settles automatically at expiry.">&lt;1 contract<br>resolves @ expiry</span>`;
+    } else if (valNow != null) {
       const inProfit = pnlDol != null && pnlDol > 0.001;
       const inLoss   = pnlDol != null && pnlDol < -0.001;
       const bg       = inProfit ? 'var(--green)' : inLoss ? 'var(--red)' : '#555';
@@ -4119,11 +4086,11 @@ const SETTINGS_KEY = "kb_settings_v2";
 const SETTINGS_CHECKBOXES = ["showCrypto","showSports","showPolitics","showEconomics","enableBuyUp","enableBuyDown","hideMultiOutcome",
   "showEntertainment","showWeather","showNFL","showNBA","showMLB","showNHL",
   "showSoccer","showGolf","showTennis","showMMA","showCombo","goodLiq",
-  "stopProfitDolChk","stopProfitPctChk","stopLossDolChk","stopLossPctChk",
+  "stopLossChk",
   "skipAutoSellNearResolution","hideSmallPositions","hide95LossPositions"];
 const SETTINGS_INPUTS = ["buyAmount","maxBuysPerMarket","autoMaxPerScan","autoMaxConcurrent","posSort",
   "autoMins","autoBuysMax","profitCustom","profitDolCustom","minProb","maxProb","timeCustom",
-  "stopProfitDol","stopProfitPct","stopLossDol","stopLossPct","skipAutoSellMinutes",
+  "stopLossPct","skipAutoSellMinutes",
   "minAgeMins","maxAgeMins","noBuyWithinMins","minProbDown","maxProbDown","spreadUp","spreadDown","snoozeDuration"];
 
 function saveSettings() {
@@ -4148,14 +4115,23 @@ function loadSettings() {
   if (!s) return;
   SETTINGS_CHECKBOXES.forEach(id => { const el = document.getElementById(id); if (el && s[id] != null) el.checked = s[id]; });
   SETTINGS_INPUTS.forEach(id => { const el = document.getElementById(id); if (el && s[id] != null) el.value = s[id]; });
-  if (s.stratMode) setStrategy(s.stratMode);
-  if (s.stratPct)  setProfit(parseFloat(s.stratPct));
-  // Restore $ profit target pill highlight
+  // Restore the % profit value + pill WITHOUT changing the mode (setProfit() would
+  // force mode='profit' and clobber a saved 'resolution'/'$ profit'/'price' choice —
+  // that was the "strategy reverts on refresh" bug).
+  if (s.stratPct) {
+    stratPct = parseFloat(s.stratPct);
+    const pe = document.getElementById("profitCustom");
+    if (pe) pe.value = stratPct;
+    activatePills("profitGroup", stratPct + "%");
+  }
+  // Restore the $ profit pill highlight, also without changing the mode.
   const dolEl = document.getElementById("profitDolCustom");
   if (dolEl && dolEl.value && parseFloat(dolEl.value) > 0) {
     activatePills("profitDolGroup", "$" + parseFloat(dolEl.value).toFixed(2));
-    pushStrategy();
   }
+  // Apply the SAVED mode LAST so it wins (single source of truth). This also
+  // pushes the full strategy (incl. stop-loss) to the backend once.
+  setStrategy(s.stratMode || "resolution");
   // Restore selMin/selMax from saved settings first
   if (s && s.selMin != null && s.selMax != null) {
     selMin = parseFloat(s.selMin);
@@ -4263,7 +4239,6 @@ async function applyCoachSettings() {
 
 loadSettings();
 renderStratSlots();
-setProfit(parseFloat(document.getElementById("profitCustom")?.value) || 10);
 syncFabButtons();
 // Always push current sell strategy to Flask on page load (survives Flask restarts)
 setTimeout(() => { pushStrategy(); pushSellSettings(); }, 1000);

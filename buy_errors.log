@@ -9,3 +9,12 @@
 2026-06-03T03:46:42.926664+00:00 400 KXBTC15M-26JUN030000-00 yes count=1 price=61 body={"error":{"code":"insufficient_balance","message":"insufficient balance","service":"exchange"}}
 2026-06-03T03:47:10.608232+00:00 400 KXBTC15M-26JUN030000-00 yes count=2 price=47 body={"error":{"code":"insufficient_balance","message":"insufficient balance","service":"exchange"}}
 2026-06-03T03:47:28.704608+00:00 400 KXBTC15M-26JUN030000-00 yes count=2 price=50 body={"error":{"code":"insufficient_balance","message":"insufficient balance","service":"exchange"}}
+2026-06-03T05:15:11.191997+00:00 429 KXBTC15M-26JUN030130-30 yes count=2 price=52 body={"error":{"code":"too_many_requests","message":"too many requests"}}
+2026-06-03T05:15:11.212935+00:00 429 KXBTC15M-26JUN030130-30 yes count=2 price=52 body={"error":{"code":"too_many_requests","message":"too many requests"}}
+2026-06-03T05:31:12.137425+00:00 400 KXDOGE15M-26JUN030145-45 no count=1 price=74 body={"error":{"code":"insufficient_balance","message":"insufficient balance","service":"exchange"}}
+2026-06-03T05:31:12.152778+00:00 400 KXDOGE15M-26JUN030145-45 no count=1 price=74 body={"error":{"code":"insufficient_balance","message":"insufficient balance","service":"exchange"}}
+2026-06-03T05:45:26.990754+00:00 400 KXXRP15M-26JUN030200-00 yes count=1 price=56 body={"error":{"code":"insufficient_balance","message":"insufficient balance","service":"exchange"}}
+2026-06-03T05:45:43.060226+00:00 400 KXBTC15M-26JUN030200-00 yes count=2 price=50 body={"error":{"code":"insufficient_balance","message":"insufficient balance","service":"exchange"}}
+2026-06-03T05:45:51.964088+00:00 400 KXBTC15M-26JUN030200-00 yes count=2 price=50 body={"error":{"code":"insufficient_balance","message":"insufficient balance","service":"exchange"}}
+2026-06-03T05:46:17.196804+00:00 400 KXSOL15M-26JUN030200-00 yes count=1 price=54 body={"error":{"code":"insufficient_balance","message":"insufficient balance","service":"exchange"}}
+2026-06-03T05:46:41.756496+00:00 400 KXSOL15M-26JUN030200-00 yes count=2 price=48 body={"error":{"code":"insufficient_balance","message":"insufficient balance","service":"exchange"}}

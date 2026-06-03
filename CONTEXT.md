@@ -67,6 +67,12 @@ Flask + single-page HTML trading bot for [Kalshi](https://kalshi.com) prediction
 3. 💵 **Sell at $ profit** — sell when TOTAL profit reaches $X
 4. 🎯 **Sell when price hits X¢** — buy at 25¢, set 35¢, sells when bid reaches 35¢
 
+➕ **Stop loss (independent toggle, lives in the Sell Strategy card):** "Cut losses if a
+position drops X%". Applies ON TOP of whichever exit above is selected (even "Wait for
+resolution"). Stored in `sell_strategy["stop_loss_pct"]` (persisted to `bot_strategy.json`)
+because that's the dict the monitor reads. The monitor still won't sell when bid ≤3¢ YES or
+the book is empty (can't sell into no buyers).
+
 **Monitor checks ALL open tracked positions every 45s regardless of browser bot state.**
 Strategy pushed to Flask on every page load (1 second after load).
 
@@ -98,7 +104,9 @@ Market | QTY | Bought@ | Spent | Value Now | Profit Now | Max Profit | Captured 
 
 ## Auto Mode
 - Run for minutes / buys / Until stopped
-- Stop if: profit $ or %, loss $ or %
+- (Removed 2026-06-02) The old "Stop Loss — Auto-sell if you lose X" portfolio-level
+  profit/loss auto-stop was deleted — it was mislabeled, overlapped RUN UNTIL, and its
+  loss-sell path was broken. Stop-loss is now per-position in the Sell Strategy card.
 - When "Until stopped" and cash runs out: pauses 1 min, countdown shown, auto-resumes
 - Bot saved state in `kb_bot_was_running` localStorage — auto-restarts on page reload
 
@@ -140,6 +148,74 @@ git push
 
 ---
 
+## 2026-06-03 Session — Cash "—" fix (rate-limit overhaul)
+
+**Symptom:** cash not showing at top (navCash stuck on "—"). **Root cause:** the
+"AGGRESSIVE" rate limiter (`_rate_limit_delay = 2.0`, flat 2s between EVERY Kalshi call,
+**no 429 retry**). `/api/portfolio` carries the cash (`balance`), but it makes many serialized
+calls (balance + positions pages + 1 per open position) and competes for the same global
+`_api_lock` with the scan loop (`_rate_get` → `kalshi_get`, ~30+ series probes). While a scan
+runs, the balance call sits in the 2s-gapped queue past the frontend timeout, so `balance`
+came back null/late → cash blanked. A single 429 also nulled it (no retry).
+
+**Fixes (app.py + index.html):**
+1. **Rate limiter rewrite** (`_kalshi_request`): base delay 2.0s → **0.5s**, plus real
+   **429 backoff+retry** (1/2/4/8s, honors `Retry-After`). GET also retries timeouts; POST
+   does NOT (a timed-out order may have filled — avoid double-orders; 429 retry on POST is
+   safe via `client_order_id` idempotency). `kalshi_get`/`kalshi_post` signatures unchanged.
+   ⚠️ This intentionally reverses the prior "2s flat" commits (bf7f2f2/f27d706/c0db9a8) —
+   the 429 retry is the new safety net. If 429 spam returns, bump `_rate_limit_delay`.
+2. **Decoupled cash:** `_get_balance()` (12s cache, serves last-known on failure so cash
+   never re-blanks) + new lightweight **`/api/balance`** endpoint. `/api/portfolio` now uses
+   the cache. Frontend `loadCash()` hits `/api/balance` on load + every 15s (visible only),
+   so cash shows immediately, independent of the slow positions load. Cache invalidated on
+   buy/sell (`_balance_cache["ts"] = 0`).
+
+**BIGGEST real-world cause — duplicate processes:** found **4 concurrent `app.py` instances**
+running at once, spawned by TWO different launchers both alive: `kalshi-manager.py` (Popen) AND
+a `python -c "while True: subprocess.run(['python','app.py'])"` supervisor loop. Each instance
+runs its own monitor thread + scan, all hitting the SAME Kalshi account; the rate-limit lock is
+per-process so they don't coordinate → ~4× API load → 429s + cash starvation. Killed all of them
++ both spawners, started ONE clean `app.py`. Verified: `/api/balance` → cash $0.32, portfolio
+$25.72, 35 open positions. **RULE: run only ONE launcher. Never run kalshi-manager.py AND the
+supervisor AND a manual `python app.py` together.**
+
+Both files pass syntax checks. NOT yet committed/pushed. **Was NOT caused by the 06-02 changes.**
+
+---
+
+## 2026-06-02 Session — Stop-loss fix + sell reliability + UI cleanup
+
+Four fixes (restart `python app.py` + hard-refresh browser to apply):
+
+1. **Stop-loss now actually fires.** Root cause: the monitor read stop-loss from
+   `sell_strategy`, but the frontend saved it to a *different* dict, `sell_settings`
+   (via `/api/sell-settings`) — they never synced, so `stop_loss_pct` was always `None`
+   and the stop-loss branch never ran. Fixed: stop-loss is now stored in `sell_strategy`
+   via `/api/strategy` (persisted to `bot_strategy.json`), which is what the monitor reads.
+   New per-position control "🛑 Cut losses if a position drops X%" added to the Sell
+   Strategy card (`stopLossChk` + `stopLossPct`). Works for any %, applies on top of the
+   profit exit. Removed the dead stop-loss handling from `/api/sell-settings`.
+2. **Deleted the auto-mode "Stop Loss — Auto-sell if you lose X" section** (stopProfitDol/Pct,
+   stopLossDol/Pct) and its driver `checkAutoStopConditions()` — mislabeled, overlapped
+   RUN UNTIL, loss-sell path broken. Also removed the stale stop-loss conflict check.
+3. **Sell-strategy now persists on refresh.** `loadSettings()` + a boot-time line both
+   called `setProfit()`, which force-set mode=`profit` every load and clobbered the saved
+   choice. Now the saved mode is applied LAST and wins. (Removed the forced `setProfit` at boot.)
+4. **"Sold then comes back a minute later" fixed.** Manual `/api/sell` was a LIMIT order;
+   when it rested unfilled the code still marked it sold + hid it ~2 min, so it reappeared.
+   Now it's a MARKET order with a protective floor = current bid (won't accept worse; never
+   rests). If the bid moved/no buyers → honest "couldn't sell, try again" instead of a fake
+   sale. Sub-1-contract leftovers (Kalshi can't sell <1) now show "resolves @ expiry" instead
+   of a dud Sell button.
+
+Files: `app.py` (`/api/strategy`, `/api/sell-settings`, `/api/sell`), `index.html`
+(Sell Strategy card, Auto Mode card, `pushStrategy`, `pushSellSettings`, `loadSettings`,
+`checkStrategyConflicts`, positions renderer, settings lists). Both pass syntax checks.
+NOT yet committed/pushed to GitHub — do that after the user confirms behavior.
+
+---
+
 ## 2026-06-01 Session 3 — Adaptive scan interval
 
 - **Adaptive scan interval deployed** (index.html): 
@@ -151,7 +227,7 @@ git push
 - **All updates pushed to GitHub** (commits: 7fe5608, 3fc998e)
 - Bot is live and responsive with 9 open positions
 
-*Last updated: 2026-06-01*
+*Last updated: 2026-06-03*
 *GitHub: https://github.com/CryptoWorldGames/kalshibot*
 
 ---
