@@ -1565,13 +1565,6 @@ def scan():
         cutoff = now + timedelta(minutes=minutes)
     except OverflowError:
         cutoff = now + timedelta(days=365)  # fallback cap
-
-    # IMPORTANT: Crypto-only restriction for 15-minute markets
-    is_crypto_scan = show_crypto and (not show_sports and not show_politics and not show_economics and not show_combo)
-    print(f"[scan] Time window: {minutes}min ({now.strftime('%H:%M:%S')} → {cutoff.strftime('%H:%M:%S')} UTC)")
-    if is_crypto_scan:
-        print(f"[scan] CRYPTO ONLY - buying {minutes}-minute expiry markets (expires before {cutoff.strftime('%H:%M:%S')})")
-
     results = []
 
     # NOTE: Sell strategy should NOT interfere with buy scan range.
@@ -1581,15 +1574,6 @@ def scan():
 
     def _scan_batch(markets_iter):
         for m in markets_iter:
-            # ENFORCE 15-minute crypto only: ticker must contain "15M" or "15MIN"
-            ticker = m.get("ticker", "").upper()
-            if show_crypto and (not show_sports and not show_politics and not show_economics and not show_combo):
-                # This is a crypto-only scan, enforce 15-minute markets
-                if not ("15M" in ticker or "15MIN" in ticker):
-                    if DEBUG_LOGGING:
-                        print(f"[scan] skipped (not 15min crypto): {ticker}")
-                    continue  # Skip non-15-minute markets
-
             hit = _apply_market_filters(m, now, cutoff, min_thr, max_thr,
                                         no_crypto, no_combo, no_sports, no_politics, no_economics, good_liq, min_open_int,
                                         min_age_mins=min_age_mins, max_age_mins=max_age_mins,
@@ -1778,14 +1762,6 @@ def buy():
     if price_c <= 0 or price_c > 99:
         return jsonify({"error": f"Invalid market price {price_c}¢ — market may be closed or corrupted"}), 400
 
-    # IMPORTANT: Enforce 15-minute crypto only
-    # Check if ticker contains "15M" or "15MIN"
-    ticker_upper = ticker.upper()
-    if not ("15M" in ticker_upper or "15MIN" in ticker_upper):
-        print(f"[buy] REJECTED {ticker}: not a 15-minute market (only buying 15M crypto)")
-        return jsonify({"error": f"Only buying 15-minute crypto (e.g., KXBTC15M). Use separate bot for 1-hour markets."}), 400
-
-    print(f"[buy] {ticker}: 15-minute market — OK to buy")
 
     contracts = math.floor(dollars / (price_c / 100))
     if contracts < 1:
