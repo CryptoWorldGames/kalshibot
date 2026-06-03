@@ -3763,7 +3763,7 @@ async function saveBtnClick(btn) {
   const origWeight = btn.style.fontWeight;
 
   // Show "Saved!" only AFTER the server confirms it's saved (3 second feedback)
-  btn.style.color = "#fff";
+  btn.style.color = "#000";  // Black text on green is more readable than white
   btn.style.fontWeight = "700";
   btn.style.background = "var(--green)";
   if (pcText) pcText.textContent = "✓ Saved!";
