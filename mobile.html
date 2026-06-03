@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0b0e14">
+<title>KalshiBot Mobile</title>
+<style>
+  :root{
+    --bg:#0b0e14; --card:#151a23; --card2:#1c222e; --border:#262d3a;
+    --txt:#e6e9ef; --muted:#8b94a6; --green:#27c498; --red:#ff5a6a;
+    --yellow:#ffcb45; --blue:#4f9eff; --accent:#27c498;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    font-size:16px;overscroll-behavior-y:contain}
+  body{padding-bottom:78px}
+
+  /* Header */
+  header{position:sticky;top:0;z-index:20;background:rgba(11,14,20,.92);
+    backdrop-filter:blur(8px);border-bottom:1px solid var(--border);padding:10px 14px}
+  .brand{font-weight:800;font-size:17px;letter-spacing:.2px}
+  .brand span{color:var(--accent)}
+  .funds{display:flex;gap:10px;margin-top:8px}
+  .fund{flex:1;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:8px 12px}
+  .fund .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .fund .amt{font-size:19px;font-weight:700;margin-top:2px}
+  .fund .amt.blue{color:var(--blue)}
+
+  main{padding:14px}
+  .view{display:none}
+  .view.active{display:block}
+
+  /* Controls */
+  .controls{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;margin-bottom:14px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .row+.row{margin-top:10px}
+  .seg{display:flex;gap:6px;flex-wrap:wrap;flex:1}
+  .chip{flex:1;min-width:60px;text-align:center;padding:9px 6px;border-radius:10px;
+    background:var(--card2);border:1px solid var(--border);color:var(--muted);
+    font-size:13px;font-weight:600;cursor:pointer;user-select:none}
+  .chip.on{background:var(--accent);border-color:var(--accent);color:#04130d}
+  .lab{font-size:12px;color:var(--muted);width:100%;margin-bottom:-2px}
+  button.go{width:100%;padding:14px;border:none;border-radius:12px;background:var(--accent);
+    color:#04130d;font-size:16px;font-weight:800;cursor:pointer;margin-top:12px}
+  button.go:active{opacity:.8}
+  button:disabled{opacity:.5}
+  button.save{flex:0 0 auto;padding:0 16px;border:1px solid var(--border);border-radius:10px;
+    background:var(--card2);color:var(--txt);font-size:14px;font-weight:700;cursor:pointer}
+  button.save.ok{background:var(--green);color:#04130d;border-color:var(--green)}
+
+  /* Cards */
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;margin-bottom:12px}
+  .card .t{font-weight:700;font-size:15px;line-height:1.3}
+  .card .q{font-size:13px;color:var(--muted);margin-top:3px}
+  .meta{display:flex;gap:8px;align-items:center;margin-top:9px;flex-wrap:wrap}
+  .badge{font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px}
+  .badge.yes{background:rgba(39,196,152,.16);color:var(--green)}
+  .badge.no{background:rgba(255,90,106,.16);color:var(--red)}
+  .badge.gray{background:var(--card2);color:var(--muted)}
+  .price{font-size:18px;font-weight:800;margin-left:auto}
+
+  .buyrow{display:flex;gap:8px;margin-top:11px;align-items:center}
+  .buyrow .dollar{display:flex;align-items:center;background:var(--card2);
+    border:1px solid var(--border);border-radius:10px;padding:0 10px;flex:0 0 110px}
+  .buyrow .dollar span{color:var(--muted);font-weight:700}
+  .buyrow input{width:100%;background:transparent;border:none;color:var(--txt);
+    font-size:16px;font-weight:700;padding:11px 4px;outline:none;text-align:right}
+  .buyrow button{flex:1;padding:12px;border:none;border-radius:10px;background:var(--green);
+    color:#04130d;font-weight:800;font-size:15px;cursor:pointer}
+  .sellbtn{width:100%;padding:12px;border:none;border-radius:10px;background:var(--red);
+    color:#fff;font-weight:800;font-size:15px;cursor:pointer;margin-top:11px}
+
+  .pl{font-weight:800}
+  .pl.up{color:var(--green)} .pl.down{color:var(--red)}
+  .empty{text-align:center;color:var(--muted);padding:40px 20px;font-size:14px}
+  .spin{display:inline-block;width:16px;height:16px;border:2px solid var(--border);
+    border-top-color:var(--accent);border-radius:50%;animation:s .7s linear infinite;vertical-align:-3px}
+  @keyframes s{to{transform:rotate(360deg)}}
+
+  /* Bottom nav */
+  nav{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
+    background:rgba(11,14,20,.96);backdrop-filter:blur(8px);border-top:1px solid var(--border);
+    padding:8px 8px calc(8px + env(safe-area-inset-bottom))}
+  nav button{flex:1;background:none;border:none;color:var(--muted);font-size:12px;
+    font-weight:600;padding:6px;cursor:pointer}
+  nav button .ic{font-size:22px;display:block;margin-bottom:2px}
+  nav button.on{color:var(--accent)}
+
+  /* Toast */
+  #toast{position:fixed;left:50%;bottom:92px;transform:translateX(-50%);z-index:50;
+    background:var(--card2);border:1px solid var(--border);color:var(--txt);
+    padding:11px 16px;border-radius:12px;font-size:14px;font-weight:600;max-width:88%;
+    text-align:center;opacity:0;transition:opacity .2s;pointer-events:none;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+  #toast.show{opacity:1}
+  #toast.err{border-color:var(--red);color:#ffd2d6}
+  #toast.ok{border-color:var(--green)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">Kalshi<span>Bot</span> · Mobile</div>
+  <div class="funds">
+    <div class="fund"><div class="lbl">Cash</div><div class="amt" id="cash">—</div></div>
+    <div class="fund"><div class="lbl">Total</div><div class="amt blue" id="total">—</div></div>
+  </div>
+</header>
+
+<main>
+  <!-- SCAN VIEW -->
+  <section id="scanView" class="view active">
+    <div class="controls">
+      <div class="lab">Win probability</div>
+      <div class="row"><div class="seg" id="probSeg">
+        <div class="chip on" data-min="85" data-max="96">85–96%</div>
+        <div class="chip" data-min="90" data-max="98">90–98%</div>
+        <div class="chip" data-min="95" data-max="98">95–98%</div>
+      </div></div>
+      <div class="lab">Ends within</div>
+      <div class="row"><div class="seg" id="timeSeg">
+        <div class="chip" data-min="5">5m</div>
+        <div class="chip on" data-min="15">15m</div>
+        <div class="chip" data-min="60">1h</div>
+        <div class="chip" data-min="240">4h</div>
+      </div></div>
+
+      <div class="lab">Bet amount — used for buys (type anything, or tap a preset)</div>
+      <div class="row"><div class="seg" id="betSeg">
+        <div class="chip" data-amt="0.25">25¢</div>
+        <div class="chip" data-amt="0.50">50¢</div>
+        <div class="chip" data-amt="1">$1</div>
+        <div class="chip" data-amt="2">$2</div>
+        <div class="chip" data-amt="3">$3</div>
+        <div class="chip" data-amt="4">$4</div>
+        <div class="chip" data-amt="5">$5</div>
+      </div></div>
+      <div class="row">
+        <div class="dollar" style="flex:1">
+          <span>$</span>
+          <input type="number" inputmode="decimal" step="0.01" min="0.01" id="betAmt" placeholder="type any amount" oninput="onBetType()">
+        </div>
+        <button class="save" id="saveBtn" onclick="saveSettings(true)">💾 Save</button>
+      </div>
+      <div id="capNote" style="font-size:11px;color:var(--muted);margin-top:6px">Server caps each buy at $5.</div>
+
+      <button class="go" id="scanBtn" onclick="doScan()">🔍 Scan Markets</button>
+    </div>
+    <div id="scanResults"><div class="empty">Tap “Scan Markets” to find high-probability contracts ending soon.</div></div>
+  </section>
+
+  <!-- POSITIONS VIEW -->
+  <section id="posView" class="view">
+    <div id="posResults"><div class="empty">Loading positions…</div></div>
+  </section>
+</main>
+
+<nav>
+  <button id="navScan" class="on" onclick="switchView('scan')"><span class="ic">🔍</span>Scan</button>
+  <button id="navPos" onclick="switchView('pos')"><span class="ic">📈</span>Positions</button>
+</nav>
+
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let SCAN = [], POS = [];
+
+// ── Toast ──────────────────────────────────────────────
+let toastT;
+function toast(msg, kind){
+  const t = $("toast");
+  t.textContent = msg;
+  t.className = "show " + (kind||"");
+  clearTimeout(toastT);
+  toastT = setTimeout(()=>{ t.className = t.className.replace("show","").trim(); }, 3200);
+}
+
+// ── Helpers ────────────────────────────────────────────
+const money = n => (n==null||isNaN(n)) ? "—" : "$"+Number(n).toFixed(2);
+function timeLeft(secs){
+  if(secs==null) return "";
+  if(secs<0) secs=0;
+  const m = Math.floor(secs/60), h = Math.floor(m/60);
+  if(h>0) return h+"h "+(m%60)+"m";
+  if(m>0) return m+"m";
+  return secs+"s";
+}
+
+// ── Nav ────────────────────────────────────────────────
+function switchView(v){
+  $("scanView").classList.toggle("active", v==="scan");
+  $("posView").classList.toggle("active", v==="pos");
+  $("navScan").classList.toggle("on", v==="scan");
+  $("navPos").classList.toggle("on", v==="pos");
+  if(v==="pos") loadPositions();
+}
+
+// ── Segmented controls (single-select) ─────────────────
+function wireSeg(id, cb){
+  $(id).querySelectorAll(".chip").forEach(c=>{
+    c.onclick = ()=>{ $(id).querySelectorAll(".chip").forEach(x=>x.classList.remove("on")); c.classList.add("on"); cb && cb(c); };
+  });
+}
+wireSeg("probSeg", ()=>saveSettings());
+wireSeg("timeSeg", ()=>saveSettings());
+wireSeg("betSeg", c=>{ $("betAmt").value = c.dataset.amt; refreshBuyLabels(); saveSettings(); });
+function segVal(id, attr){ const c = $(id).querySelector(".chip.on"); return c ? c.dataset[attr] : null; }
+
+// ── Bet amount — NO forced default; presets + free type-in, persisted ──
+function currentBet(){ return parseFloat($("betAmt").value || "0"); }
+function fmtBet(){ const v = currentBet(); return v>0 ? "$"+(v).toFixed(2).replace(/\.00$/,"") : ""; }
+function onBetType(){
+  // typing a custom amount de-selects any preset chip
+  $("betSeg").querySelectorAll(".chip").forEach(x=>x.classList.remove("on"));
+  refreshBuyLabels(); saveSettings();
+}
+const BUY_CAP = 5;  // mirrors server KALSHI_MAX_PER_MARKET default ("5.00")
+function refreshBuyLabels(){
+  const a = fmtBet();
+  document.querySelectorAll(".amtlabel").forEach(e=> e.textContent = a ? "· "+a : "");
+  const note = $("capNote");
+  if(note){
+    if(currentBet() > BUY_CAP){
+      note.textContent = `⚠ Over the $${BUY_CAP} cap — this buy will only spend ~$${BUY_CAP}.`;
+      note.style.color = "var(--yellow)";
+    }else{
+      note.textContent = `Server caps each buy at $${BUY_CAP}.`;
+      note.style.color = "var(--muted)";
+    }
+  }
+}
+
+// ── Persistence (the "save settings" the user asked for) ──
+const SKEY = "kb_mobile_v1";
+function saveSettings(flash){
+  try{
+    localStorage.setItem(SKEY, JSON.stringify({
+      pmin: segVal("probSeg","min"), pmax: segVal("probSeg","max"),
+      mins: segVal("timeSeg","min"), bet: $("betAmt").value
+    }));
+  }catch(e){}
+  if(flash){
+    const b = $("saveBtn"), t = b.textContent;
+    b.textContent = "✓ Saved"; b.classList.add("ok");
+    setTimeout(()=>{ b.textContent = t; b.classList.remove("ok"); }, 1400);
+  }
+}
+function selectChip(id, match){
+  const chips = $(id).querySelectorAll(".chip"); let found = false;
+  chips.forEach(c=>{ if(!found && match(c)){ chips.forEach(x=>x.classList.remove("on")); c.classList.add("on"); found = true; } });
+}
+function loadSettings(){
+  let s = {}; try{ s = JSON.parse(localStorage.getItem(SKEY) || "{}"); }catch(e){}
+  if(s.bet != null) $("betAmt").value = s.bet;          // restore exact amount (blank if never set)
+  if(s.pmin && s.pmax) selectChip("probSeg", c=> c.dataset.min===String(s.pmin) && c.dataset.max===String(s.pmax));
+  if(s.mins) selectChip("timeSeg", c=> c.dataset.min===String(s.mins));
+  if(s.bet) selectChip("betSeg", c=> c.dataset.amt===String(parseFloat(s.bet)));  // highlight preset if it matches
+  refreshBuyLabels();
+}
+
+// ── Balance ────────────────────────────────────────────
+async function loadBalance(){
+  try{
+    const r = await fetch("/api/portfolio", {cache:"no-store"});
+    const d = await r.json();
+    $("cash").textContent  = money(d.balance);
+    $("total").textContent = money(d.portfolio_value);
+    return d;
+  }catch(e){ return null; }
+}
+
+// ── Scan ───────────────────────────────────────────────
+async function doScan(){
+  const btn = $("scanBtn");
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Scanning…';
+  const min = segVal("probSeg","min")||85, max = segVal("probSeg","max")||96;
+  const mins = segVal("timeSeg","min")||15;
+  const q = `/api/scan?min_thr=${min}&max_thr=${max}&minutes=${mins}`
+    + `&show_crypto=true&show_combo=true&show_sports=true&show_politics=true&show_economics=true&good_liq=false`;
+  try{
+    const r = await fetch(q, {cache:"no-store"});
+    const data = await r.json();
+    renderScan(Array.isArray(data) ? data : []);
+  }catch(e){
+    $("scanResults").innerHTML = `<div class="empty">Scan failed — is the bot running?</div>`;
+  }finally{
+    btn.disabled = false; btn.innerHTML = "🔍 Scan Markets";
+  }
+}
+
+function renderScan(rows){
+  SCAN = rows || [];
+  if(!SCAN.length){
+    $("scanResults").innerHTML = `<div class="empty">No markets found in that range right now. Try a wider probability range or a longer window.</div>`;
+    return;
+  }
+  $("scanResults").innerHTML = SCAN.map((m,i)=>{
+    const side = (m.side||"yes").toLowerCase();
+    const tl = timeLeft(m.secs_left);
+    return `<div class="card" id="scard${i}">
+      <div class="t">${esc(m.title||m.ticker)}</div>
+      ${m.market_q ? `<div class="q">${esc(m.market_q)}</div>`:""}
+      <div class="meta">
+        <span class="badge ${side}">${side.toUpperCase()}</span>
+        ${tl?`<span class="badge gray">⏱ ${tl}</span>`:""}
+        <span class="price">${m.price}¢</span>
+      </div>
+      <div class="buyrow">
+        <button style="flex:1" onclick="buy(${i}, this)">Buy ${side.toUpperCase()} <span class="amtlabel"></span></button>
+      </div>
+    </div>`;
+  }).join("");
+  refreshBuyLabels();
+}
+
+// ── Buy (uses the global bet amount; no forced default) ─
+async function buy(i, btn, override){
+  const m = SCAN[i];
+  if(!m) return;
+  const amt = currentBet();
+  if(!(amt>0)){ toast("Pick or type a bet amount first", "err"); $("betAmt").focus(); return; }
+  const label = btn ? btn.innerHTML : null;
+  if(btn){ btn.disabled = true; btn.innerHTML = '<span class="spin"></span>'; }
+  try{
+    const r = await fetch("/api/buy", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ticker:m.ticker, side:(m.side||"yes").toLowerCase(),
+        amount:amt, price:m.price, title:m.title, category:m.category,
+        override:!!override, max_per_market:1})
+    });
+    const d = await r.json();
+    if(r.ok && d.ok){
+      toast(`✓ Bought ${d.contracts} ${d.side} · ${money(d.spent)}`, "ok");
+      loadBalance();
+    }else if(r.status===409 && d.can_override){
+      if(btn){ btn.disabled = false; btn.innerHTML = label; }
+      if(confirm((d.error||"Already holding this")+"\n\nBuy anyway?")) return buy(i, btn, true);
+      return;
+    }else{
+      toast(d.error || "Buy failed", "err");
+    }
+  }catch(e){
+    toast("Buy failed — network/bot down", "err");
+  }finally{
+    if(btn){ btn.disabled = false; if(label!=null) btn.innerHTML = label; }
+  }
+}
+
+// ── Positions ──────────────────────────────────────────
+async function loadPositions(){
+  $("posResults").innerHTML = `<div class="empty"><span class="spin"></span> Loading…</div>`;
+  const d = await loadBalance();
+  POS = (d && d.positions ? d.positions : []).filter(p => Math.abs(p.quantity||0) > 0.001);
+  if(!POS.length){ $("posResults").innerHTML = `<div class="empty">No open positions.</div>`; return; }
+  $("posResults").innerHTML = POS.map((p,i)=>{
+    const qty = p.quantity;
+    const side = qty>0 ? "yes":"no";
+    const bid = side==="yes" ? p.current_yes : p.current_no;
+    const buyP = p.buy_price;
+    const valNow = (bid!=null) ? Math.abs(qty)*bid/100 : null;
+    let profit=null, pct=null;
+    if(bid!=null && buyP){ profit = Math.abs(qty)*(bid-buyP)/100; pct = (bid-buyP)/buyP*100; }
+    const up = profit!=null && profit>=0;
+    return `<div class="card" id="pcard${i}">
+      <div class="t">${esc(p.title||p.ticker)}</div>
+      <div class="meta">
+        <span class="badge ${side}">${side.toUpperCase()} ×${Math.abs(Math.round(qty))}</span>
+        ${buyP?`<span class="badge gray">in ${buyP}¢</span>`:""}
+        ${bid!=null?`<span class="badge gray">now ${bid}¢</span>`:""}
+        <span class="price">${valNow!=null?money(valNow):"—"}</span>
+      </div>
+      ${profit!=null?`<div class="meta"><span class="pl ${up?'up':'down'}">${up?'▲':'▼'} ${money(Math.abs(profit))} (${pct>=0?'+':''}${pct.toFixed(0)}%)</span></div>`:""}
+      <button class="sellbtn" onclick="sell(${i}, this)">
+        Sell All${valNow!=null?` · ${money(valNow)}`:""}
+      </button>
+    </div>`;
+  }).join("");
+}
+
+async function sell(i, btn){
+  const p = POS[i];
+  if(!p) return;
+  const qty = p.quantity, side = qty>0 ? "yes":"no", count = Math.abs(Math.round(qty));
+  if(!confirm(`Sell all ${count} of this position?`)) return;
+  const label = btn ? btn.innerHTML : null;
+  if(btn){ btn.disabled=true; btn.innerHTML='<span class="spin"></span>'; }
+  try{
+    const r = await fetch("/api/sell", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ticker:p.ticker, side:side, count:count})
+    });
+    const d = await r.json();
+    if(r.ok && d.ok){ toast("✓ Sold", "ok"); setTimeout(loadPositions, 800); }
+    else{ toast(d.error || "Sell failed", "err"); if(btn){btn.disabled=false; if(label!=null) btn.innerHTML=label;} }
+  }catch(e){
+    toast("Sell failed — network/bot down", "err");
+    if(btn){btn.disabled=false; if(label!=null) btn.innerHTML=label;}
+  }
+}
+
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// ── Init ───────────────────────────────────────────────
+loadSettings();
+loadBalance();
+setInterval(()=>{ if($("scanView").classList.contains("active")) loadBalance(); }, 60000);
+</script>
+</body>
+</html>

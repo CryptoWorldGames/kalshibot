@@ -713,6 +713,17 @@ def index():
     return resp
 
 
+@app.route("/mobile")
+def mobile():
+    # Phone-optimized UI (separate page, same backend/API). Never cache so
+    # design tweaks show up immediately on the phone.
+    resp = make_response(send_from_directory(HERE, "mobile.html"))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
+
+
 @app.route("/audio/<path:filename>")
 def serve_audio(filename):
     # Serves user-supplied sounds (e.g. audio/chaching.mp3) committed to the repo.

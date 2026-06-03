@@ -173,3 +173,24 @@ git push
   Affordable 15-min crypto is usually the "no" side (2–5¢); with **Buy Down OFF** those are
   skipped, so it only bought the rare cheap "yes" market (e.g. politics @2¢). To buy 15-min
   crypto at $0.05, enable **Buy Down** or raise Max spend. ← user decision.
+
+---
+
+## 2026-06-03 — Phone-optimized mobile page (`/mobile`)
+
+- **New file `mobile.html` + route `/mobile`** (app.py, next to `index()`, same no-cache
+  headers). Phone-first UI on the SAME backend/account — open
+  `http://<PC-tailscale-ip>:5000/mobile`. Built on a separate "mobile" branch and rebased
+  onto latest main, so **desktop `index.html` is untouched** (byte-identical to main).
+- Two bottom-nav tabs: **Scan** (presets for win-prob + ends-within, tap **Buy**) and
+  **Positions** (tap **Sell All**). Uses `/api/scan`, `/api/buy`, `/api/sell`,
+  `/api/portfolio`. Buy/sell reference markets by array index (apostrophe-safe).
+- **MANUAL buy/sell only — NO auto-buy loop** (deliberate: avoids two "Start Bot" loops
+  fighting over the one Kalshi account). Backend 45s sell-monitor still runs as always.
+- **Bet amount:** NO forced default. Preset chips 25¢–$5 + free type-in, persisted to
+  localStorage (`kb_mobile_v1`) with a 💾 Save button. Warns when amount > $5 (server
+  `KALSHI_MAX_PER_MARKET` cap clamps buys to $5).
+- Remote access: user reaches PC over **Tailscale** (`100.110.168.114`), works off home WiFi
+  too (cellular). Goes live only after the PC does `git pull` + restart of Flask.
+
+*Last updated: 2026-06-03*
