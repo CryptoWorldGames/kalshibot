@@ -1581,6 +1581,15 @@ def scan():
 
     def _scan_batch(markets_iter):
         for m in markets_iter:
+            # ENFORCE 15-minute crypto only: ticker must contain "15M" or "15MIN"
+            ticker = m.get("ticker", "").upper()
+            if show_crypto and (not show_sports and not show_politics and not show_economics and not show_combo):
+                # This is a crypto-only scan, enforce 15-minute markets
+                if not ("15M" in ticker or "15MIN" in ticker):
+                    if DEBUG_LOGGING:
+                        print(f"[scan] skipped (not 15min crypto): {ticker}")
+                    continue  # Skip non-15-minute markets
+
             hit = _apply_market_filters(m, now, cutoff, min_thr, max_thr,
                                         no_crypto, no_combo, no_sports, no_politics, no_economics, good_liq, min_open_int,
                                         min_age_mins=min_age_mins, max_age_mins=max_age_mins,
@@ -1769,29 +1778,14 @@ def buy():
     if price_c <= 0 or price_c > 99:
         return jsonify({"error": f"Invalid market price {price_c}¢ — market may be closed or corrupted"}), 400
 
-    # IMPORTANT: Enforce 15-minute expiry window for crypto
-    # Fetch market data to verify it expires within 15 minutes
-    try:
-        mkt_data = _get_market(ticker)
-        ct_str = mkt_data.get("close_time") or mkt_data.get("expiration_time", "")
-        if ct_str:
-            ct = datetime.fromisoformat(ct_str.replace("Z", "+00:00"))
-            now = datetime.now(timezone.utc)
-            mins_left = (ct - now).total_seconds() / 60
+    # IMPORTANT: Enforce 15-minute crypto only
+    # Check if ticker contains "15M" or "15MIN"
+    ticker_upper = ticker.upper()
+    if not ("15M" in ticker_upper or "15MIN" in ticker_upper):
+        print(f"[buy] REJECTED {ticker}: not a 15-minute market (only buying 15M crypto)")
+        return jsonify({"error": f"Only buying 15-minute crypto (e.g., KXBTC15M). Use separate bot for 1-hour markets."}), 400
 
-            # Reject if market expires more than 15 minutes from now (with 1-minute grace for clock skew)
-            if mins_left > 16:
-                print(f"[buy] REJECTED {ticker}: expires in {mins_left:.1f} min (> 15 min limit)")
-                return jsonify({"error": f"Market expires in {mins_left:.0f} minutes — only buying 15-minute crypto"}), 400
-            elif mins_left < 0:
-                print(f"[buy] REJECTED {ticker}: market already closed ({mins_left:.1f} min)")
-                return jsonify({"error": f"Market closed or expired"}), 400
-            else:
-                print(f"[buy] {ticker}: expiring in {mins_left:.1f} min — OK to buy")
-        else:
-            print(f"[buy] WARNING {ticker}: no expiration time found in market data")
-    except Exception as e:
-        print(f"[buy] WARNING: couldn't check expiry for {ticker}: {e}")
+    print(f"[buy] {ticker}: 15-minute market — OK to buy")
 
     contracts = math.floor(dollars / (price_c / 100))
     if contracts < 1:
