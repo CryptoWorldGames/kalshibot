@@ -1612,10 +1612,8 @@ function setStrategy(mode) {
   saveSettings();
   // pushStrategy() is async, fire-and-forget (don't show toast on radio click)
   pushStrategy().catch(e => {
-    console.error("pushStrategy failed:", e);
+    console.error("setStrategy: pushStrategy failed:", e);
   });
-  pushStrategy();
-  saveSettings();
 }
 
 function checkStrategyConflicts() {
@@ -3771,7 +3769,7 @@ async function saveBtnClick(btn) {
     btn.style.fontWeight = origWeight;
     btn.style.background = origBg;
     if (pcText) pcText.textContent = oldPc;
-    if (mobileText) pcText.textContent = oldMobile;
+    if (mobileText) mobileText.textContent = oldMobile;
   }, 3000);
 }
 

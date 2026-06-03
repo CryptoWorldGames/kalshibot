@@ -560,13 +560,13 @@ def _monitor():
                     target_pct = pos.get("target_pct") or sell_strategy.get("target_pct")
                     hit_pct = target_pct is not None and profit_pct >= target_pct
 
-                # Only check profit $ if mode is "profit"
-                if strat_mode == "profit":
+                # Only check profit $ if mode is "profit_dollars"
+                if strat_mode == "profit_dollars":
                     target_dollars = pos.get("target_dollars") or sell_strategy.get("target_dollars")
                     hit_dol = target_dollars is not None and profit_dollars is not None and profit_dollars >= target_dollars
 
-                # Only check target price if mode is "profit" (used for price targets)
-                if strat_mode == "profit":
+                # Only check target price if mode is "target_price"
+                if strat_mode == "target_price":
                     target_price_c = pos.get("target_price_cents") or sell_strategy.get("target_price_cents")
                     hit_price = target_price_c is not None and bid >= target_price_c
 
