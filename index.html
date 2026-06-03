@@ -1705,18 +1705,17 @@ document.getElementById("profitDolCustom").oninput = function() {
 async function pushStrategy() {
   const dolEl = document.getElementById("profitDolCustom");
   const dolVal = dolEl ? parseFloat(dolEl.value) || null : null;
-  // Map mode to backend: profit_dollars → profit with only dollar target
   const tpVal    = parseFloat(document.getElementById("targetPriceCustom")?.value) || null;
   const buyInVal = parseFloat(document.getElementById("buyInPriceCustom")?.value) || null;
-  const backendMode = (stratMode === "profit_dollars" || stratMode === "target_price") ? "profit" : stratMode;
   const pct      = (stratMode === "profit")         ? stratPct : null;
   const dol      = (stratMode === "profit_dollars") ? dolVal   : null;
   const tpCents  = (stratMode === "target_price")   ? tpVal    : null;
   const buyInCents = (stratMode === "target_price") ? buyInVal : null;
   try {
+    // Send the ACTUAL frontend stratMode (not converted) so backend knows exactly which strategy was selected
     await fetch("/api/strategy", {
       method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({mode: backendMode, target_pct: pct, target_dollars: dol, target_price_cents: tpCents, buy_in_price_cents: buyInCents}),
+      body: JSON.stringify({mode: stratMode, target_pct: pct, target_dollars: dol, target_price_cents: tpCents, buy_in_price_cents: buyInCents}),
     });
   } catch(e){}
 }

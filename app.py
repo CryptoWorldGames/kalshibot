@@ -1989,8 +1989,9 @@ def set_strategy():
     data = request.get_json(silent=True) or {}
     mode = data.get("mode", "resolution")
 
-    if mode not in ("resolution", "profit"):
-        return jsonify({"error": "mode must be resolution or profit"}), 400
+    # Frontend sends actual mode: "resolution", "profit", "profit_dollars", "target_price"
+    if mode not in ("resolution", "profit", "profit_dollars", "target_price"):
+        return jsonify({"error": "mode must be resolution, profit, profit_dollars, or target_price"}), 400
 
     try:
         pct  = float(data.get("target_pct", 10)) if data.get("target_pct") is not None else None
