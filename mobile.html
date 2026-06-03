@@ -261,13 +261,24 @@ function loadSettings(){
 }
 
 // ── Balance ────────────────────────────────────────────
+// Uses the lightweight /api/debug/balance (ONE Kalshi call, ~2s) instead of
+// /api/portfolio (which loops every position at 2s each and times out the
+// desktop). Frontend-only — no backend change. Shows last-known instantly.
+function setFunds(cash, total){
+  if(cash != null && !isNaN(cash))  $("cash").textContent  = money(cash);
+  if(total != null && !isNaN(total)) $("total").textContent = money(total);
+}
 async function loadBalance(){
+  try{ const c = JSON.parse(localStorage.getItem("kb_m_funds")||"null"); if(c) setFunds(c.cash, c.total); }catch(e){}
   try{
-    const r = await fetch("/api/portfolio", {cache:"no-store"});
-    const d = await r.json();
-    $("cash").textContent  = money(d.balance);
-    $("total").textContent = money(d.portfolio_value);
-    return d;
+    const r = await fetch("/api/debug/balance", {cache:"no-store"});
+    const b = await r.json();
+    const cash  = parseFloat(b.balance_dollars) || ((parseFloat(b.balance)||0)/100);  // cash dollars
+    const posC  = parseFloat(b.portfolio_value) || 0;                                  // open positions, cents
+    const total = cash + posC/100;
+    setFunds(cash, total);
+    try{ localStorage.setItem("kb_m_funds", JSON.stringify({cash, total})); }catch(e){}
+    return {cash, total};
   }catch(e){ return null; }
 }
 
@@ -349,9 +360,19 @@ async function buy(i, btn, override){
 }
 
 // ── Positions ──────────────────────────────────────────
+// /api/portfolio is slow (loops every position at ~2s each). Unlike the
+// desktop we DON'T abort early — we wait it out and show a heads-up.
 async function loadPositions(){
-  $("posResults").innerHTML = `<div class="empty"><span class="spin"></span> Loading…</div>`;
-  const d = await loadBalance();
+  $("posResults").innerHTML = `<div class="empty"><span class="spin"></span> Loading positions…<br><span style="font-size:12px">can take ~30s while the bot rate-limits</span></div>`;
+  let d = null;
+  try{
+    const r = await fetch("/api/portfolio", {cache:"no-store"});
+    d = await r.json();
+  }catch(e){
+    $("posResults").innerHTML = `<div class="empty">Couldn't load positions — bot busy or down. Tap Positions again to retry.</div>`;
+    return;
+  }
+  if(d){ setFunds(d.balance, d.portfolio_value); try{ localStorage.setItem("kb_m_funds", JSON.stringify({cash:d.balance, total:d.portfolio_value})); }catch(e){} }
   POS = (d && d.positions ? d.positions : []).filter(p => Math.abs(p.quantity||0) > 0.001);
   if(!POS.length){ $("posResults").innerHTML = `<div class="empty">No open positions.</div>`; return; }
   $("posResults").innerHTML = POS.map((p,i)=>{
