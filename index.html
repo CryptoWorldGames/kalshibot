@@ -1982,6 +1982,11 @@ function setRunMode(mode) {
   autoRunMode = mode;
   ["rpTime","rpBuys","rpForever"].forEach(id => document.getElementById(id).classList.remove("active"));
   document.getElementById({time:"rpTime",buys:"rpBuys",forever:"rpForever"}[mode]).classList.add("active");
+  // Also move the native radio `checked` state, otherwise the green :checked dot
+  // stays on the old pill while the purple .active highlight moves to the new one,
+  // making TWO pills look selected (especially after restoring a saved mode on load).
+  const radio = document.querySelector(`input[name="runMode"][value="${mode}"]`);
+  if (radio) radio.checked = true;
   const minsWrap = document.getElementById("minsPickerWrap");
   const buysWrap = document.getElementById("buysPickerWrap");
   if (minsWrap) minsWrap.style.display = mode === "time" ? "flex" : "none";
