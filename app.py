@@ -12,6 +12,7 @@ import sys
 import threading
 import time
 import uuid
+from collections import defaultdict
 
 # Force UTF-8 stdout/stderr — Windows cp1252 default chokes on arrows, emoji, etc.
 try:
@@ -94,24 +95,65 @@ def _headers(method: str, path: str, body: str = "") -> dict:
         "Content-Type": "application/json",
     }
 
+# Rate limiting to prevent 429 errors
+_last_api_call = {"time": 0}
+_rate_limit_delay = 0.5  # 500ms between API calls
+_api_lock = threading.Lock()
+
+def _rate_limit_wait():
+    """Enforce minimum delay between API calls to avoid rate limiting."""
+    with _api_lock:
+        now = time.time()
+        elapsed = now - _last_api_call["time"]
+        if elapsed < _rate_limit_delay:
+            sleep_time = _rate_limit_delay - elapsed
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+        _last_api_call["time"] = time.time()
+
 def kalshi_get(endpoint: str, params: dict = None) -> dict:
+    _rate_limit_wait()
     path = API_PREFIX + endpoint
-    r = req.get(BASE_URL + path, headers=_headers("GET", path),
-                 params=params or {}, timeout=20)  # 20s timeout
-    if not r.ok:
-        print(f"[API {r.status_code}] GET {endpoint} -> {r.text[:500]}")
-    r.raise_for_status()
-    return r.json()
+    try:
+        r = req.get(BASE_URL + path, headers=_headers("GET", path),
+                     params=params or {}, timeout=20)  # 20s timeout
+        if not r.ok:
+            print(f"[API {r.status_code}] GET {endpoint} -> {r.text[:500]}")
+            # On rate limit, increase delay and retry
+            if r.status_code == 429:
+                global _rate_limit_delay
+                _rate_limit_delay = min(_rate_limit_delay * 1.5, 5.0)  # Cap at 5s
+                print(f"[API] Rate limited! Increased delay to {_rate_limit_delay:.2f}s")
+        r.raise_for_status()
+        return r.json()
+    except req.exceptions.RequestException as e:
+        # On error, back off
+        if "429" in str(e) or "too_many_requests" in str(e).lower():
+            global _rate_limit_delay
+            _rate_limit_delay = min(_rate_limit_delay * 1.5, 5.0)
+        raise
 
 def kalshi_post(endpoint: str, body: dict) -> dict:
+    _rate_limit_wait()
     path = API_PREFIX + endpoint
     body_str = json.dumps(body, separators=(',', ':'))
-    r = req.post(BASE_URL + path, headers=_headers("POST", path),
-                  data=body_str, timeout=15)
-    if not r.ok:
-        print(f"[API {r.status_code}] POST {endpoint} -> {r.text[:500]}")
-    r.raise_for_status()
-    return r.json()
+    try:
+        r = req.post(BASE_URL + path, headers=_headers("POST", path),
+                      data=body_str, timeout=15)
+        if not r.ok:
+            print(f"[API {r.status_code}] POST {endpoint} -> {r.text[:500]}")
+            # On rate limit, increase delay
+            if r.status_code == 429:
+                global _rate_limit_delay
+                _rate_limit_delay = min(_rate_limit_delay * 1.5, 5.0)
+                print(f"[API] Rate limited! Increased delay to {_rate_limit_delay:.2f}s")
+        r.raise_for_status()
+        return r.json()
+    except req.exceptions.RequestException as e:
+        if "429" in str(e) or "too_many_requests" in str(e).lower():
+            global _rate_limit_delay
+            _rate_limit_delay = min(_rate_limit_delay * 1.5, 5.0)
+        raise
 
 # ---------------------------------------------------------------------------
 # Position tracking & sell strategy
