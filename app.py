@@ -1565,6 +1565,13 @@ def scan():
         cutoff = now + timedelta(minutes=minutes)
     except OverflowError:
         cutoff = now + timedelta(days=365)  # fallback cap
+
+    # IMPORTANT: Crypto-only restriction for 15-minute markets
+    is_crypto_scan = show_crypto and (not show_sports and not show_politics and not show_economics and not show_combo)
+    print(f"[scan] Time window: {minutes}min ({now.strftime('%H:%M:%S')} → {cutoff.strftime('%H:%M:%S')} UTC)")
+    if is_crypto_scan:
+        print(f"[scan] CRYPTO ONLY - buying {minutes}-minute expiry markets (expires before {cutoff.strftime('%H:%M:%S')})")
+
     results = []
 
     # NOTE: Sell strategy should NOT interfere with buy scan range.
@@ -1761,6 +1768,30 @@ def buy():
     # Guard against division by zero (corrupted market data)
     if price_c <= 0 or price_c > 99:
         return jsonify({"error": f"Invalid market price {price_c}¢ — market may be closed or corrupted"}), 400
+
+    # IMPORTANT: Enforce 15-minute expiry window for crypto
+    # Fetch market data to verify it expires within 15 minutes
+    try:
+        mkt_data = _get_market(ticker)
+        ct_str = mkt_data.get("close_time") or mkt_data.get("expiration_time", "")
+        if ct_str:
+            ct = datetime.fromisoformat(ct_str.replace("Z", "+00:00"))
+            now = datetime.now(timezone.utc)
+            mins_left = (ct - now).total_seconds() / 60
+
+            # Reject if market expires more than 15 minutes from now (with 1-minute grace for clock skew)
+            if mins_left > 16:
+                print(f"[buy] REJECTED {ticker}: expires in {mins_left:.1f} min (> 15 min limit)")
+                return jsonify({"error": f"Market expires in {mins_left:.0f} minutes — only buying 15-minute crypto"}), 400
+            elif mins_left < 0:
+                print(f"[buy] REJECTED {ticker}: market already closed ({mins_left:.1f} min)")
+                return jsonify({"error": f"Market closed or expired"}), 400
+            else:
+                print(f"[buy] {ticker}: expiring in {mins_left:.1f} min — OK to buy")
+        else:
+            print(f"[buy] WARNING {ticker}: no expiration time found in market data")
+    except Exception as e:
+        print(f"[buy] WARNING: couldn't check expiry for {ticker}: {e}")
 
     contracts = math.floor(dollars / (price_c / 100))
     if contracts < 1:
