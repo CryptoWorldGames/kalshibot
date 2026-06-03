@@ -1709,13 +1709,29 @@ async function pushStrategy() {
   const dol      = (stratMode === "profit_dollars") ? dolVal   : null;
   const tpCents  = (stratMode === "target_price")   ? tpVal    : null;
   const buyInCents = (stratMode === "target_price") ? buyInVal : null;
+
+  console.log(`[pushStrategy] Sending mode=${stratMode}, pct=${pct}, dol=${dol}, tp=${tpCents}`);
+
   try {
     // Send the ACTUAL frontend stratMode (not converted) so backend knows exactly which strategy was selected
-    await fetch("/api/strategy", {
+    const resp = await fetch("/api/strategy", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({mode: stratMode, target_pct: pct, target_dollars: dol, target_price_cents: tpCents, buy_in_price_cents: buyInCents}),
     });
-  } catch(e){}
+
+    if (!resp.ok) {
+      const errData = await resp.json().catch(() => ({}));
+      console.error(`[pushStrategy] Server error: ${resp.status} ${errData.error || resp.statusText}`);
+      throw new Error(`Strategy save failed: ${resp.status}`);
+    }
+
+    const respData = await resp.json();
+    console.log(`[pushStrategy] Success! Server saved:`, respData.strategy);
+    return respData;
+  } catch(e) {
+    console.error(`[pushStrategy] FAILED:`, e.message);
+    throw e;  // Re-throw so caller can handle
+  }
 }
 
 async function pushSellSettings() {

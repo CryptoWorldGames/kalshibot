@@ -552,9 +552,10 @@ def _monitor():
                             mins_left = (ct - now).total_seconds() / 60
                             threshold = sell_settings.get("skip_auto_sell_minutes", 1)
                             if mins_left <= threshold:
-                                print(f"[monitor] {ticker} expires in {mins_left:.1f} min (< {threshold}) — holding to resolution")
+                                print(f"[monitor] {ticker} expires in {mins_left:.1f} min (<= {threshold}m threshold) — SKIPPING AUTO-SELL (holding to resolution)")
                                 continue
-                        except Exception:
+                        except Exception as e:
+                            print(f"[monitor] Error checking expiration time for {ticker}: {e}")
                             pass
 
                 # Use per-position target if set, otherwise fall back to current global settings
