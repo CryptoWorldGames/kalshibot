@@ -95,13 +95,13 @@ def _headers(method: str, path: str, body: str = "") -> dict:
         "Content-Type": "application/json",
     }
 
-# Rate limiting to prevent 429 errors
+# Rate limiting to PREVENT 429 errors - AGGRESSIVE
 _last_api_call = {"time": 0}
-_rate_limit_delay = 0.5  # 500ms between API calls
+_rate_limit_delay = 2.0  # 2 SECONDS between EVERY API call (no backoff, just slow)
 _api_lock = threading.Lock()
 
 def _rate_limit_wait():
-    """Enforce minimum delay between API calls to avoid rate limiting."""
+    """Enforce 2-second delay between ALL API calls. This prevents rate limiting completely."""
     with _api_lock:
         now = time.time()
         elapsed = now - _last_api_call["time"]
@@ -114,46 +114,23 @@ def _rate_limit_wait():
 def kalshi_get(endpoint: str, params: dict = None) -> dict:
     _rate_limit_wait()
     path = API_PREFIX + endpoint
-    try:
-        r = req.get(BASE_URL + path, headers=_headers("GET", path),
-                     params=params or {}, timeout=20)  # 20s timeout
-        if not r.ok:
-            print(f"[API {r.status_code}] GET {endpoint} -> {r.text[:500]}")
-            # On rate limit, increase delay and retry
-            if r.status_code == 429:
-                global _rate_limit_delay
-                _rate_limit_delay = min(_rate_limit_delay * 1.5, 5.0)  # Cap at 5s
-                print(f"[API] Rate limited! Increased delay to {_rate_limit_delay:.2f}s")
-        r.raise_for_status()
-        return r.json()
-    except req.exceptions.RequestException as e:
-        # On error, back off
-        if "429" in str(e) or "too_many_requests" in str(e).lower():
-            global _rate_limit_delay
-            _rate_limit_delay = min(_rate_limit_delay * 1.5, 5.0)
-        raise
+    r = req.get(BASE_URL + path, headers=_headers("GET", path),
+                 params=params or {}, timeout=20)  # 20s timeout
+    if not r.ok:
+        print(f"[API {r.status_code}] GET {endpoint} -> {r.text[:500]}")
+    r.raise_for_status()
+    return r.json()
 
 def kalshi_post(endpoint: str, body: dict) -> dict:
     _rate_limit_wait()
     path = API_PREFIX + endpoint
     body_str = json.dumps(body, separators=(',', ':'))
-    try:
-        r = req.post(BASE_URL + path, headers=_headers("POST", path),
-                      data=body_str, timeout=15)
-        if not r.ok:
-            print(f"[API {r.status_code}] POST {endpoint} -> {r.text[:500]}")
-            # On rate limit, increase delay
-            if r.status_code == 429:
-                global _rate_limit_delay
-                _rate_limit_delay = min(_rate_limit_delay * 1.5, 5.0)
-                print(f"[API] Rate limited! Increased delay to {_rate_limit_delay:.2f}s")
-        r.raise_for_status()
-        return r.json()
-    except req.exceptions.RequestException as e:
-        if "429" in str(e) or "too_many_requests" in str(e).lower():
-            global _rate_limit_delay
-            _rate_limit_delay = min(_rate_limit_delay * 1.5, 5.0)
-        raise
+    r = req.post(BASE_URL + path, headers=_headers("POST", path),
+                  data=body_str, timeout=15)
+    if not r.ok:
+        print(f"[API {r.status_code}] POST {endpoint} -> {r.text[:500]}")
+    r.raise_for_status()
+    return r.json()
 
 # ---------------------------------------------------------------------------
 # Position tracking & sell strategy
