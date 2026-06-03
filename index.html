@@ -1608,8 +1608,18 @@ function setStrategy(mode) {
   checkStrategyConflicts();
 
   // IMPORTANT: Save the strategy choice immediately (both locally and to server/API)
+  // saveSettings() writes to localStorage synchronously
   saveSettings();
-  pushStrategy();
+  // pushStrategy() is async, so we need to await it and show feedback
+  (async () => {
+    try {
+      await pushStrategy();
+      toast(`✓ Strategy saved: ${mode}`, "ok");
+    } catch (e) {
+      toast(`Failed to save strategy`, "err");
+      console.error("pushStrategy failed:", e);
+    }
+  })();
   pushStrategy();
   saveSettings();
 }
@@ -3729,8 +3739,19 @@ function updateBotControlBar() {
     });
 }
 
-function saveBtnClick(btn) {
+async function saveBtnClick(btn) {
+  // Save to localStorage first (synchronous)
   saveSettings();
+
+  // Also push strategy to server (async)
+  try {
+    await pushStrategy();
+  } catch (e) {
+    toast("Failed to save strategy to server", "err");
+    console.error("saveBtnClick: pushStrategy failed", e);
+    return; // Don't show "Saved!" if server save failed
+  }
+
   const pcText = btn.querySelector(".save-text-pc");
   const mobileText = btn.querySelector(".save-text-mobile");
   const oldPc = pcText?.textContent;
@@ -3741,7 +3762,7 @@ function saveBtnClick(btn) {
   const origBg = btn.style.background;
   const origWeight = btn.style.fontWeight;
 
-  // Bright white feedback for 3 seconds
+  // Show "Saved!" only AFTER the server confirms it's saved (3 second feedback)
   btn.style.color = "#fff";
   btn.style.fontWeight = "700";
   btn.style.background = "var(--green)";
@@ -3753,7 +3774,7 @@ function saveBtnClick(btn) {
     btn.style.fontWeight = origWeight;
     btn.style.background = origBg;
     if (pcText) pcText.textContent = oldPc;
-    if (mobileText) mobileText.textContent = oldMobile;
+    if (mobileText) pcText.textContent = oldMobile;
   }, 3000);
 }
 
