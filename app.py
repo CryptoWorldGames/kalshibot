@@ -1825,6 +1825,14 @@ def buy():
                 f.write(f"{datetime.now(timezone.utc).isoformat()} {e.response.status_code} {ticker} {side} count={contracts} price={price_c} body={err_text}\n")
         except Exception:
             pass
+        # Market closed/expired between scan and order — normal for short-expiry
+        # markets, and nothing was bought. Return a clean, non-alarming message
+        # (and a flag) instead of the raw 404 JSON so the UI can skip it quietly.
+        if e.response.status_code == 404 or "market_not_found" in err_text:
+            return jsonify({
+                "error": f"{ticker} closed before the order went through — skipped (normal for fast-expiring markets, nothing was bought)",
+                "market_closed": True,
+            }), 409
         return jsonify({"error": f"Order failed ({e.response.status_code}): {e.response.text[:200]}"}), 502
     except Exception as e:
         print(f"[buy] EXCEPTION {ticker}: {type(e).__name__}: {e}")
@@ -1960,6 +1968,13 @@ def sell():
                 f.write(f"{datetime.now(timezone.utc).isoformat()} SELL {e.response.status_code} {ticker} {side} count={count_int} body={err_text}\n")
         except Exception:
             pass
+        # Market already resolved/closed — common on sells of expiring positions.
+        # Clean message + flag instead of the raw 404 JSON.
+        if e.response.status_code == 404 or "market_not_found" in err_text:
+            return jsonify({
+                "error": f"{ticker} already resolved/closed — can't sell (it will settle on its own)",
+                "market_closed": True,
+            }), 409
         return jsonify({"error": f"Sell failed ({e.response.status_code}): {e.response.text[:200]}"}), 502
     except Exception as e:
         print(f"[sell] Exception: {type(e).__name__}: {e}")
