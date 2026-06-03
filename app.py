@@ -117,7 +117,7 @@ def kalshi_post(endpoint: str, body: dict) -> dict:
 # Position tracking & sell strategy
 # ---------------------------------------------------------------------------
 
-_lock = threading.Lock()
+_lock = threading.RLock()  # Reentrant lock to allow nested acquisitions (e.g., _save_tracked())
 
 TRACKED_FILE   = HERE / "bot_positions.json"
 STRATEGY_FILE  = HERE / "bot_strategy.json"
@@ -125,8 +125,12 @@ SAVED_STRATS_FILE = HERE / "bot_saved_strategies.json"
 SCAN_LOG       = HERE / "scan_log.jsonl"      # append-only; one JSON line per scan run
 
 def _save_tracked():
+    """Save tracked positions to disk. Must be called with _lock held, or acquires lock internally."""
+    # If called from within a lock, this is safe. If called outside, we acquire the lock.
+    # This is a bit of defensive coding — ideally all calls should be inside locks already.
     try:
-        TRACKED_FILE.write_text(json.dumps(tracked, default=str), encoding="utf-8")
+        with _lock:
+            TRACKED_FILE.write_text(json.dumps(tracked, default=str), encoding="utf-8")
     except Exception as e:
         print(f"[tracked] save error: {e}")
 
@@ -468,11 +472,17 @@ def _monitor():
                     continue
                 with _lock:
                     if ticker not in tracked:
+                        # Validate qty is positive and non-zero before division
+                        if abs(qty) == 0:
+                            print(f"[monitor] skipping {ticker}: qty is 0")
+                            continue
                         ttd = float(p.get("total_traded_dollars") or 0)
                         raw_price = round(ttd / abs(qty) * 100) if ttd > 0 else None
-                        buy_price = raw_price if raw_price and raw_price <= 99 else None
+                        # Ensure buy_price is valid (1-99 cents), not 0
+                        buy_price = raw_price if (raw_price and 1 <= raw_price <= 99) else None
                         if buy_price is None:
-                            continue  # can't auto-sell without a cost basis
+                            print(f"[monitor] skipping {ticker}: computed buy_price is invalid (raw={raw_price})")
+                            continue  # can't auto-sell without a valid cost basis
                         side = "yes" if qty > 0 else "no"
                         tracked[ticker] = {
                             "side":       side,
@@ -510,6 +520,11 @@ def _monitor():
                 bid_d = m.get("yes_bid_dollars") if pos["side"] == "yes" else m.get("no_bid_dollars")
                 bid = _dollars_to_cents(bid_d)
                 if bid is None:
+                    continue
+
+                # Guard against division by zero if buy_price is 0 or None
+                if not pos.get("buy_price") or pos["buy_price"] <= 0:
+                    print(f"[monitor] {ticker}: invalid buy_price {pos.get('buy_price')} — skipping")
                     continue
 
                 profit_pct = (bid - pos["buy_price"]) / pos["buy_price"] * 100
@@ -624,7 +639,7 @@ threading.Thread(target=_monitor, daemon=True).start()
 # ---------------------------------------------------------------------------
 
 SNAPSHOTS_FILE = HERE / "portfolio_snapshots.json"
-_snap_lock = threading.Lock()
+_snap_lock = threading.RLock()  # Reentrant lock to allow nested acquisitions (e.g., _save_tracked())
 snapshots: list = []   # [{ts: float, v: float}]  v = total dollars
 
 try:
@@ -1742,6 +1757,10 @@ def buy():
         else:
             return jsonify({"error": f"Already have {open_count}/{max_per} of {ticker}", "can_override": True}), 409
 
+    # Guard against division by zero (corrupted market data)
+    if price_c <= 0 or price_c > 99:
+        return jsonify({"error": f"Invalid market price {price_c}¢ — market may be closed or corrupted"}), 400
+
     contracts = math.floor(dollars / (price_c / 100))
     if contracts < 1:
         return jsonify({"error": f"${dollars:.2f} can't buy 1 contract at {price_c}¢"}), 400
@@ -1830,8 +1849,8 @@ def sell():
         return jsonify({"error": "Missing ticker"}), 400
     if side not in ("yes", "no"):
         return jsonify({"error": f"Invalid side '{side}' (must be 'yes' or 'no')"}), 400
-    if count < 0.001:
-        return jsonify({"error": f"Invalid count {count} (must be > 0)"}), 400
+    if count < 0.001 or count > 1e6:
+        return jsonify({"error": f"Invalid count {count} (must be 0.001-1,000,000)"}), 400
 
     try:
         # Fetch current bid to include as price (Kalshi requires it)
@@ -1849,9 +1868,9 @@ def sell():
         count_int = int(count)  # Floor: 1.53 → 1, 0.53 → 0
 
         if count_int < 1:
-            # Less than 1 contract - can't sell, but don't error
-            print(f"[sell] {ticker}: {count} contracts (fractional, skipping)")
-            return jsonify({"ok": True, "note": f"Skipped {ticker}: only {count} contracts (fractional, will resolve at expiry)"}), 200
+            # Less than 1 contract - can't sell through Kalshi API
+            print(f"[sell] {ticker}: {count} contracts (fractional < 1, error)")
+            return jsonify({"error": f"Can't sell {count} contracts — less than 1. Position will resolve at expiry."}), 400
 
         # Try LIMIT order first (better price)
         order_payload = {
@@ -1949,7 +1968,7 @@ def positions():
             m     = _get_market(ticker)
             bid_d = m.get("yes_bid_dollars") if pos["side"] == "yes" else m.get("no_bid_dollars")
             bid   = _dollars_to_cents(bid_d)
-            if bid is not None:
+            if bid is not None and pos.get("buy_price") and pos["buy_price"] > 0:
                 pct = (bid - pos["buy_price"]) / pos["buy_price"] * 100
                 with _lock:
                     if ticker in tracked:
