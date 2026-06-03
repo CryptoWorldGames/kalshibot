@@ -1856,6 +1856,7 @@ def sell():
         # Try LIMIT order first (better price)
         order_payload = {
             "ticker": ticker,
+            "client_order_id": str(uuid.uuid4()),  # Required by Kalshi API
             "action": "sell",
             "side":   side,
             "type":   "limit",
@@ -1887,6 +1888,7 @@ def sell():
                         print(f"[sell] Profit ${profit_dollars:.2f} > 0, retrying with MARKET order")
                         market_payload = {
                             "ticker": ticker,
+                            "client_order_id": str(uuid.uuid4()),  # Required by Kalshi API
                             "action": "sell",
                             "side": side,
                             "type": "market",
@@ -1899,7 +1901,14 @@ def sell():
                         # Return with note that limit failed and we didn't retry (not profitable)
                         return jsonify({"ok": False, "note": f"LIMIT order canceled and position not in profit (${profit_dollars:.2f}), use manual market order if desired"}), 400
     except req.HTTPError as e:
-        print(f"[sell] HTTPError {e.response.status_code}: {e.response.text[:300]}")
+        err_text = e.response.text[:500]
+        print(f"[sell] HTTPError {e.response.status_code}: {err_text}")
+        # Log sell errors to file for debugging
+        try:
+            with open(HERE / "buy_errors.log", "a", encoding="utf-8") as f:
+                f.write(f"{datetime.now(timezone.utc).isoformat()} SELL {e.response.status_code} {ticker} {side} count={count_int} body={err_text}\n")
+        except Exception:
+            pass
         return jsonify({"error": f"Sell failed ({e.response.status_code}): {e.response.text[:200]}"}), 502
     except Exception as e:
         print(f"[sell] Exception: {type(e).__name__}: {e}")
