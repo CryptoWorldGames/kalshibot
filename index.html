@@ -1110,7 +1110,13 @@ function setSettleFilter(hours, label) {
   loadBalanceThrottled(true); // force refresh when changing settlement period
 }
 
+let _loadBalanceInFlight = false;
 async function loadBalance(enrich=true) {
+  // Skip if a balance request is already running. The positions tab forces a
+  // refresh every 10s, but each enriched request can take much longer, so without
+  // this guard concurrent calls pile up and time out (the AbortError console spam).
+  if (_loadBalanceInFlight) return;
+  _loadBalanceInFlight = true;
   try {
     const enrichParam = enrich ? "true" : "false";
     const controller = new AbortController();
@@ -1210,10 +1216,15 @@ async function loadBalance(enrich=true) {
       }
     }
   } catch(e) {
-    console.error("[loadBalance error]", e);
-    // Detect Flask going down (connection refused = TypeError, not AbortError)
-    if (e.name !== "AbortError") _onFlaskConnectionLost();
+    // AbortError = request timed out or was superseded; it's expected and already
+    // handled, so don't spam the console. Only real failures get logged and trigger
+    // the Flask-down check (connection refused = TypeError, not AbortError).
+    if (e.name !== "AbortError") {
+      console.error("[loadBalance error]", e);
+      _onFlaskConnectionLost();
+    }
   } finally {
+    _loadBalanceInFlight = false;
     hideNavLoading();
   }
 }
