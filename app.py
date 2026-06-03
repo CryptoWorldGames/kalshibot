@@ -34,7 +34,7 @@ app = Flask(__name__)
 HERE = Path(__file__).resolve().parent
 BASE_URL = "https://api.elections.kalshi.com"
 API_PREFIX = "/trade-api/v2"
-DEBUG_LOGGING = False  # Set to True for verbose logs, False for production
+DEBUG_LOGGING = True  # Set to True for verbose logs, False for production — ENABLED TO DIAGNOSE SCAN FILTERING
 
 # Category detection cache — avoid re-detecting same market
 _category_cache = {}

@@ -440,7 +440,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
     <span onclick="document.getElementById('filterBody').style.display = document.getElementById('filterBody').style.display === 'none' ? 'block' : 'none'" style="cursor:pointer;user-select:none">Filters <span style="font-size:11px;color:#666;margin-left:10px">◀ click to collapse</span></span>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <button id="saveSettingsBtn" onclick="saveSettings();this.textContent='✓ Saved!';this.style.background='var(--green)';this.style.color='#000';setTimeout(()=>{this.textContent='Save Settings';this.style.background='';this.style.color='';},2000)" class="sm ghost" style="font-size:13px;padding:6px 18px;font-weight:700">Save Settings</button>
+      <button id="saveSettingsBtn" onclick="saveBtnClick(this)" class="sm ghost" style="font-size:13px;padding:6px 18px;font-weight:700"><span class="save-text-pc">Save Settings</span><span class="save-text-mobile">Save</span></button>
       <button class="sm ghost" style="font-size:12px;padding:6px 14px" onclick="document.getElementById('strategySlots').style.display=document.getElementById('strategySlots').style.display==='none'?'block':'none'">⭐ Saved Strategies</button>
     </div>
   </div>
@@ -3732,6 +3732,11 @@ function saveBtnClick(btn) {
   const oldPc = pcText?.textContent;
   const oldMobile = mobileText?.textContent;
 
+  // Save original styles to restore them after feedback
+  const origColor = btn.style.color;
+  const origBg = btn.style.background;
+  const origWeight = btn.style.fontWeight;
+
   // Bright white feedback for 3 seconds
   btn.style.color = "#fff";
   btn.style.fontWeight = "700";
@@ -3740,9 +3745,9 @@ function saveBtnClick(btn) {
   if (mobileText) mobileText.textContent = "✓";
 
   setTimeout(() => {
-    btn.style.color = "#000";
-    btn.style.fontWeight = "700";
-    btn.style.background = "var(--green)";
+    btn.style.color = origColor;
+    btn.style.fontWeight = origWeight;
+    btn.style.background = origBg;
     if (pcText) pcText.textContent = oldPc;
     if (mobileText) mobileText.textContent = oldMobile;
   }, 3000);
