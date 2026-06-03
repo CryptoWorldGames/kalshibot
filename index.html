@@ -370,7 +370,8 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     </div>
     <div id="navPnlAll" style="display:flex;align-items:stretch;gap:0"></div>
   </div>
-  <button onclick="document.getElementById('settingsModal').classList.toggle('open')" style="background:transparent;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:8px 12px;margin-left:auto;transition:color .2s" title="Settings">⚙️</button>
+  <button id="snoozeBtn" onclick="toggleVoiceSnooze()" style="background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;padding:6px 12px;margin-left:auto;transition:all .2s;white-space:nowrap" title="Mute the voice announcements for the snooze period (set the duration in Settings)">🔔 Snooze</button>
+  <button onclick="document.getElementById('settingsModal').classList.toggle('open')" style="background:transparent;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:8px 12px;margin-left:6px;transition:color .2s" title="Settings">⚙️</button>
 </nav>
 
 <!-- ── Settings Modal ────────────────────────────────────────────── -->
@@ -379,6 +380,16 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <div class="settings-header">
       <span>⚙️ Settings</span>
       <button class="settings-close" onclick="document.getElementById('settingsModal').classList.remove('open')">×</button>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">🔕 Voice Snooze</div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);flex-wrap:wrap">
+        <span>When you click <b style="color:#fff">🔔 Snooze</b>, mute the voice for</span>
+        <input type="number" id="snoozeDuration" value="1" min="0.5" step="0.5" onchange="saveSettings()"
+          style="width:64px;background:#111;border:1px solid var(--border);border-radius:6px;color:#fff;padding:6px 8px;font-size:14px;text-align:center;font-weight:700">
+        <span>minute(s)</span>
+      </div>
     </div>
 
     <div class="settings-section">
@@ -2993,7 +3004,48 @@ function chaChing() {
 }
 
 // Web Speech API for voice announcements
+// ── Voice snooze (mute announcements for a set period) ───────────────────
+let _voiceSnoozeUntil = 0;     // epoch ms; voice is muted while Date.now() < this
+let _snoozeTickTimer  = null;
+
+function _snoozeMins() {
+  const v = parseFloat(document.getElementById("snoozeDuration")?.value);
+  return (v && v > 0) ? v : 1;
+}
+
+function toggleVoiceSnooze() {
+  if (Date.now() < _voiceSnoozeUntil) {
+    _voiceSnoozeUntil = 0;                       // tap again to un-mute early
+    toast("🔔 Voice un-muted", "ok");
+  } else {
+    _voiceSnoozeUntil = Date.now() + _snoozeMins() * 60 * 1000;
+    try { window.speechSynthesis.cancel(); } catch(e) {}  // cut off anything mid-sentence
+    toast(`🔕 Voice muted for ${_snoozeMins()} min`, "");
+  }
+  updateSnoozeBtn();
+}
+
+function updateSnoozeBtn() {
+  const btn = document.getElementById("snoozeBtn");
+  if (!btn) return;
+  const remaining = _voiceSnoozeUntil - Date.now();
+  if (remaining > 0) {
+    const s = Math.ceil(remaining / 1000), mm = Math.floor(s / 60), ss = s % 60;
+    btn.textContent = `🔕 Muted ${mm}:${String(ss).padStart(2,"0")}`;
+    btn.style.color = "var(--red)";
+    btn.style.borderColor = "var(--red)";
+    if (!_snoozeTickTimer) _snoozeTickTimer = setInterval(updateSnoozeBtn, 1000);
+  } else {
+    _voiceSnoozeUntil = 0;
+    btn.textContent = "🔔 Snooze";
+    btn.style.color = "var(--muted)";
+    btn.style.borderColor = "var(--border)";
+    if (_snoozeTickTimer) { clearInterval(_snoozeTickTimer); _snoozeTickTimer = null; }
+  }
+}
+
 function speakText(text) {
+  if (Date.now() < _voiceSnoozeUntil) return;   // snoozed — stay silent
   try {
     if ('speechSynthesis' in window) {
       // DON'T cancel ongoing speech — queue announcements instead (allows multiple sells to be announced)
@@ -4018,7 +4070,7 @@ const SETTINGS_CHECKBOXES = ["showCrypto","showSports","showPolitics","showEcono
 const SETTINGS_INPUTS = ["buyAmount","maxBuysPerMarket","autoMaxPerScan","autoMaxConcurrent","posSort",
   "autoMins","autoBuysMax","profitCustom","profitDolCustom","minProb","maxProb","timeCustom",
   "stopProfitDol","stopProfitPct","stopLossDol","stopLossPct","skipAutoSellMinutes",
-  "minAgeMins","maxAgeMins","noBuyWithinMins","minProbDown","maxProbDown","spreadUp","spreadDown"];
+  "minAgeMins","maxAgeMins","noBuyWithinMins","minProbDown","maxProbDown","spreadUp","spreadDown","snoozeDuration"];
 
 function saveSettings() {
   // Validation: Must have at least one buy direction enabled
@@ -4169,6 +4221,26 @@ setTimeout(() => { pushStrategy(); pushSellSettings(); }, 1000);
 function _onFlaskConnectionLost() {
   console.warn("[flask] connection lost — NOT auto-reloading (manual refresh if needed)");
 }
+
+// ── Float the tab-nav while scrolling, but release it at the settlements section ──
+// The tab-nav and #settlementsHeader are BOTH sticky at top:64px, so without this the
+// nav floats on top of the settlements header. Once settlements reaches the sticky line,
+// un-stick the nav so it scrolls away and the settlements header takes the top spot.
+function _updateFloatingNav() {
+  const nav = document.querySelector(".tab-nav");
+  if (!nav) return;
+  const settle = document.getElementById("settlementsHeader");
+  // Only applies when a settlements section is actually rendered on the current tab
+  if (!settle || settle.offsetParent === null) { if (nav.style.position) nav.style.position = ""; return; }
+  const settleTop = settle.getBoundingClientRect().top;
+  if (settleTop <= 64 + nav.offsetHeight + 4) {
+    if (nav.style.position !== "static") nav.style.position = "static";  // reached settlements → stop floating
+  } else if (nav.style.position) {
+    nav.style.position = "";  // above settlements → revert to CSS position:sticky (floating)
+  }
+}
+window.addEventListener("scroll", _updateFloatingNav, { passive: true });
+window.addEventListener("resize", _updateFloatingNav, { passive: true });
 
 // ── Auto-restart bot if it was running before page reload / Flask crash ───
 if (localStorage.getItem("kb_bot_was_running")) {
