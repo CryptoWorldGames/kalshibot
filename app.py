@@ -1551,10 +1551,10 @@ def scan():
         cutoff = now + timedelta(days=365)  # fallback cap
     results = []
 
-    # If "buy at X¢, sell at Y¢" strategy active, override max_thr with buy-in price
-    bip = sell_strategy.get("buy_in_price_cents")
-    if bip is not None and sell_strategy.get("mode") == "profit":
-        max_thr = min(max_thr, float(bip))
+    # NOTE: Sell strategy should NOT interfere with buy scan range.
+    # Buy range (min_thr/max_thr) is independent of sell logic.
+    # If user sets conflicting values (e.g., buy range 20-96% but sell at 15¢),
+    # that's their choice — we don't cap one based on the other.
 
     def _scan_batch(markets_iter):
         for m in markets_iter:
