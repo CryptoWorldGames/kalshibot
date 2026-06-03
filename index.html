@@ -1608,18 +1608,12 @@ function setStrategy(mode) {
   checkStrategyConflicts();
 
   // IMPORTANT: Save the strategy choice immediately (both locally and to server/API)
-  // saveSettings() writes to localStorage synchronously
+  // but silently — only the explicit "Save Settings" button shows toast feedback
   saveSettings();
-  // pushStrategy() is async, so we need to await it and show feedback
-  (async () => {
-    try {
-      await pushStrategy();
-      toast(`✓ Strategy saved: ${mode}`, "ok");
-    } catch (e) {
-      toast(`Failed to save strategy`, "err");
-      console.error("pushStrategy failed:", e);
-    }
-  })();
+  // pushStrategy() is async, fire-and-forget (don't show toast on radio click)
+  pushStrategy().catch(e => {
+    console.error("pushStrategy failed:", e);
+  });
   pushStrategy();
   saveSettings();
 }
