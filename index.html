@@ -4233,10 +4233,15 @@ function _updateFloatingNav() {
   // Only applies when a settlements section is actually rendered on the current tab
   if (!settle || settle.offsetParent === null) { if (nav.style.position) nav.style.position = ""; return; }
   const settleTop = settle.getBoundingClientRect().top;
-  if (settleTop <= 64 + nav.offsetHeight + 4) {
-    if (nav.style.position !== "static") nav.style.position = "static";  // reached settlements → stop floating
+  // Release the nav once the settlements header is clearly in view ("you've reached
+  // settlements"). Settlements is the LAST section, so with many positions this happens
+  // near the bottom of the scroll; with few positions, earlier. Either way the nav stops
+  // floating instead of hovering over the settlements area. Re-floats when you scroll up.
+  const releaseLine = window.innerHeight - 80;
+  if (settleTop <= releaseLine) {
+    if (nav.style.position !== "static") nav.style.position = "static";
   } else if (nav.style.position) {
-    nav.style.position = "";  // above settlements → revert to CSS position:sticky (floating)
+    nav.style.position = "";
   }
 }
 window.addEventListener("scroll", _updateFloatingNav, { passive: true });
