@@ -112,21 +112,7 @@
   <!-- SCAN VIEW -->
   <section id="scanView" class="view active">
     <div class="controls">
-      <div class="lab">Win probability</div>
-      <div class="row"><div class="seg" id="probSeg">
-        <div class="chip on" data-min="85" data-max="96">85–96%</div>
-        <div class="chip" data-min="90" data-max="98">90–98%</div>
-        <div class="chip" data-min="95" data-max="98">95–98%</div>
-      </div></div>
-      <div class="lab">Ends within</div>
-      <div class="row"><div class="seg" id="timeSeg">
-        <div class="chip" data-min="5">5m</div>
-        <div class="chip on" data-min="15">15m</div>
-        <div class="chip" data-min="60">1h</div>
-        <div class="chip" data-min="240">4h</div>
-      </div></div>
-
-      <div class="lab">Bet amount — used for buys (type anything, or tap a preset)</div>
+      <div class="lab">Amount you want to pay (type anything, or tap a preset)</div>
       <div class="row"><div class="seg" id="betSeg">
         <div class="chip" data-amt="0.25">25¢</div>
         <div class="chip" data-amt="0.50">50¢</div>
@@ -144,6 +130,20 @@
         <button class="save" id="saveBtn" onclick="saveSettings(true)">💾 Save</button>
       </div>
       <div id="capNote" style="font-size:11px;color:var(--muted);margin-top:6px">Server caps each buy at $5.</div>
+
+      <div class="lab">Win probability</div>
+      <div class="row"><div class="seg" id="probSeg">
+        <div class="chip on" data-min="85" data-max="96">85–96%</div>
+        <div class="chip" data-min="90" data-max="98">90–98%</div>
+        <div class="chip" data-min="95" data-max="98">95–98%</div>
+      </div></div>
+      <div class="lab">Ends within</div>
+      <div class="row"><div class="seg" id="timeSeg">
+        <div class="chip" data-min="5">5m</div>
+        <div class="chip on" data-min="15">15m</div>
+        <div class="chip" data-min="60">1h</div>
+        <div class="chip" data-min="240">4h</div>
+      </div></div>
 
       <button class="go" id="scanBtn" onclick="doScan()">🔍 Scan Markets</button>
     </div>
