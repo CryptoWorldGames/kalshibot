@@ -1879,20 +1879,25 @@ async function scan() {
               let pauseSecs = 60;
               _cashPauseTimer = setInterval(() => {
                 pauseSecs--;
+                // Re-read the buy amount every tick so LOWERING it (e.g. $1.00 → $0.25)
+                // resumes the bot immediately, instead of staying stuck on the amount
+                // that was set when the pause first started.
+                const needAmt = parseFloat(document.getElementById("buyAmount")?.value) || 1;
+                _waitForCashAmt = needAmt;
                 const cash = parseFloat((document.getElementById("navCash")?.textContent||"0").replace("$",""))||0;
-                if (cash >= autoAmt) {
+                if (cash >= needAmt) {
                   clearInterval(_cashPauseTimer); _cashPauseTimer = null;
                   _waitingForCash = false;
                   toast(`💰 Cash available ($${cash.toFixed(2)}) — bot resuming!`, "ok");
-                  if (!scanTimer) scanTimer = setInterval(scan, 15000)  // 15 seconds - safe from rate limiting;
+                  if (!scanTimer) scanTimer = setInterval(scan, 15000);  // 15s — safe from rate limiting
                   scan();
                 } else if (pauseSecs <= 0) {
                   // Check balance and reset countdown
                   loadBalanceThrottled(true);
                   pauseSecs = 60;
-                  setStatus(`⏸ Still waiting for cash ($${cash.toFixed(2)} < $${autoAmt.toFixed(2)}) — checking again in 60s`, "");
+                  setStatus(`⏸ Still waiting for cash ($${cash.toFixed(2)} < $${needAmt.toFixed(2)}) — checking again in 60s`, "");
                 } else {
-                  setStatus(`⏸ Insufficient cash — resuming in ${pauseSecs}s (have $${cash.toFixed(2)}, need $${autoAmt.toFixed(2)})`, "");
+                  setStatus(`⏸ Insufficient cash — resuming in ${pauseSecs}s (have $${cash.toFixed(2)}, need $${needAmt.toFixed(2)})`, "");
                 }
               }, 1000);
               return;
