@@ -1764,8 +1764,19 @@ def buy():
     try:
         result = kalshi_post("/portfolio/orders", order_body)
     except req.HTTPError as e:
+        # Log the FULL Kalshi rejection (status + body) so the 502 cause is visible.
+        # The client only gets a truncated toast, so without this the real reason
+        # (price moved, insufficient balance, market closed, etc.) is lost.
+        err_text = e.response.text[:500]
+        print(f"[buy] ORDER FAILED {e.response.status_code} {ticker} {side} x{contracts} @{price_c}c: {err_text}")
+        try:
+            with open(HERE / "buy_errors.log", "a", encoding="utf-8") as f:
+                f.write(f"{datetime.now(timezone.utc).isoformat()} {e.response.status_code} {ticker} {side} count={contracts} price={price_c} body={err_text}\n")
+        except Exception:
+            pass
         return jsonify({"error": f"Order failed ({e.response.status_code}): {e.response.text[:200]}"}), 502
     except Exception as e:
+        print(f"[buy] EXCEPTION {ticker}: {type(e).__name__}: {e}")
         return jsonify({"error": str(e)}), 500
 
     order = result.get("order", result)

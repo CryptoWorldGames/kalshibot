@@ -2192,6 +2192,7 @@ async function buyOne(idx, override=false) {
     setTimeout(() => loadBalanceThrottled(true), 8000);
     startPosMon();
   } catch(e) {
+    console.error("[buy failed]", m.ticker, m.side, "@", m.price, "→", e.message);
     msgEl.textContent = e.message;
     msgEl.className = "row-msg err";
     toast(e.message,"err");
@@ -3999,7 +4000,11 @@ function loadStratSlot(i) {
   pushStrategy();
   pushSellSettings();
   renderStratSlots();
-  toast(`✓ Loaded "${slot.name}" — ready, hit Start Bot`, "ok");
+  // Context-aware message: don't tell the user to "Start Bot" when it's already running.
+  const tail = autoModeOn
+    ? "— bot running, hit Save Settings to apply the new filters"
+    : "— ready, hit Start Bot";
+  toast(`✓ Loaded "${slot.name}" ${tail}`, "ok");
 }
 
 // ── Settings save/load ───────────────────────────────────────────────────
