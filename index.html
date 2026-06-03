@@ -1606,6 +1606,10 @@ function setStrategy(mode) {
 
   // Conflict warning: if target_price selected, check buy range vs buy-in price
   checkStrategyConflicts();
+
+  // IMPORTANT: Save the strategy choice immediately (both locally and to server/API)
+  saveSettings();
+  pushStrategy();
   pushStrategy();
   saveSettings();
 }
