@@ -172,6 +172,7 @@ _lock = threading.RLock()  # Reentrant lock to allow nested acquisitions (e.g., 
 TRACKED_FILE   = HERE / "bot_positions.json"
 STRATEGY_FILE  = HERE / "bot_strategy.json"
 SAVED_STRATS_FILE = HERE / "bot_saved_strategies.json"
+BUY_SETTINGS_FILE = HERE / "buy_settings.json"  # the auto-bot's BUY filters, set from the UI
 SCAN_LOG       = HERE / "scan_log.jsonl"      # append-only; one JSON line per scan run
 
 def _save_tracked():
@@ -228,6 +229,40 @@ except Exception:
 sell_strategy.setdefault("mode", "resolution")
 sell_strategy.setdefault("target_pct", 10.0)
 print(f"[strategy] loaded: mode={sell_strategy.get('mode')} target_pct={sell_strategy.get('target_pct')} target_dollars={sell_strategy.get('target_dollars')}")
+
+# ── BUY settings ───────────────────────────────────────────────────────────
+# The auto-bot's BUY filters. Set from the UI (POST /api/buy-settings), read LIVE
+# by _bot_thread every cycle — this is the bridge that makes the headless bot trade
+# what the UI says instead of hardcoded 80–96% crypto YES.
+_DEFAULT_BUY_SETTINGS = {
+    "enable_buy_up":   True,  "up_min":   80.0, "up_max":   96.0,  # YES side range
+    "enable_buy_down": False, "down_min": 80.0, "down_max": 96.0,  # NO side range
+    "minutes":         15,        # only markets closing within this many minutes
+    "buy_amount":      0.50,      # MAX dollars to spend per buy
+    "max_per_scan":    3,         # max NEW buys per 15s cycle (rate-limit safety)
+    "max_concurrent":  999,       # max total open positions
+    "max_per_market":  1,         # max buys per ticker
+    "show_crypto": True, "show_combo": False, "show_sports": False,
+    "show_politics": False, "show_economics": False,
+    "good_liq": True, "hide_multi": True,
+    "min_age_mins": None, "max_age_mins": None, "no_buy_within_mins": None,
+}
+try:
+    _bs_loaded = json.loads(BUY_SETTINGS_FILE.read_text(encoding="utf-8")) if BUY_SETTINGS_FILE.exists() else {}
+except Exception:
+    _bs_loaded = {}
+buy_settings = {**_DEFAULT_BUY_SETTINGS, **_bs_loaded}
+
+def _save_buy_settings():
+    """Persist buy_settings so they survive restarts and the bot reads them live."""
+    try:
+        BUY_SETTINGS_FILE.write_text(json.dumps(buy_settings, indent=2), encoding="utf-8")
+    except Exception as e:
+        print(f"[buy settings] save error: {e}")
+
+print(f"[buy] loaded: up={buy_settings['enable_buy_up']}({buy_settings['up_min']}-{buy_settings['up_max']}) "
+      f"down={buy_settings['enable_buy_down']}({buy_settings['down_min']}-{buy_settings['down_max']}) "
+      f"amt=${buy_settings['buy_amount']} win={buy_settings['minutes']}m")
 
 # In-memory cache of event_ticker → clean title
 _event_cache: dict = {}
@@ -755,117 +790,145 @@ def _bot_thread():
         last_scan = now
 
         try:
-            # Fetch scan results using same logic as frontend but with default filters
-            # (user can customize via the UI; this is just a sane default)
-            min_prob = 80
-            max_prob = 96
-            minutes = 15
+            cycle_start = time.time()
+            bs = dict(buy_settings)  # snapshot the LIVE UI settings for this cycle
 
-            # Call the existing scan endpoint
-            from urllib.parse import urlencode
-            params = urlencode({
-                "min_thr": min_prob,
-                "max_thr": max_prob,
-                "minutes": minutes,
-                "show_crypto": "true",
-            })
-            # Simulate an internal request (avoid HTTP round-trip)
+            up_on   = bool(bs.get("enable_buy_up"))
+            down_on = bool(bs.get("enable_buy_down"))
+            if not (up_on or down_on):
+                continue  # neither side enabled — nothing to do
+
+            up_min,   up_max   = float(bs.get("up_min", 80)),   float(bs.get("up_max", 96))
+            down_min, down_max = float(bs.get("down_min", 80)), float(bs.get("down_max", 96))
+            minutes  = int(bs.get("minutes", 15))
+            buy_amt  = float(bs.get("buy_amount", 0.50))
+            max_scan = int(bs.get("max_per_scan", 3))
+            max_conc = int(bs.get("max_concurrent", 999))
+            max_mkt  = int(bs.get("max_per_market", 1))
+
+            # Union range — passes the category/liquidity/time gate; we re-check each
+            # side's specific range below so UP and DOWN can have different bands.
+            mins_, maxs_ = [], []
+            if up_on:   mins_.append(up_min);   maxs_.append(up_max)
+            if down_on: mins_.append(down_min); maxs_.append(down_max)
+            union_min, union_max = min(mins_), max(maxs_)
+
             now_utc = datetime.now(timezone.utc)
-            cutoff = now_utc + timedelta(minutes=minutes)
+            cutoff  = now_utc + timedelta(minutes=minutes)
 
-            results = []
-            # Use the same KNOWN_SERIES approach as the scan endpoint
-            KNOWN_SERIES = [
-                "KXBTC15M", "KXETH15M", "KXSOL15M", "KXHYPE15M",
-                "KXDOGE15M", "KXBNB15M", "KXXRP15M",
-                "KXBTC30M", "KXETH30M", "KXSOL30M",
-                "KXBTC1H", "KXETH1H", "KXSOL1H",
-                "KXBTC", "KXBTCD", "KXBTCW", "KXBTCM",
-                "KXETH", "KXETHUSD", "KXETHD",
-                "KXSOL", "KXSOLD", "KXDOGE", "KXXRP",
-            ]
+            no_crypto    = not bs.get("show_crypto", True)
+            no_combo     = not bs.get("show_combo", False)
+            no_sports    = not bs.get("show_sports", False)
+            no_politics  = not bs.get("show_politics", False)
+            no_economics = not bs.get("show_economics", False)
+            good_liq     = bool(bs.get("good_liq", True))
+            hide_multi   = bool(bs.get("hide_multi", True))
+            min_age      = bs.get("min_age_mins")
+            max_age      = bs.get("max_age_mins")
+            no_buy_within = bs.get("no_buy_within_mins")
 
-            for series_ticker in KNOWN_SERIES:
-                if len(results) >= 5:  # Small batch per cycle
+            # Probe only the series for enabled categories (keeps the cycle fast).
+            CRYPTO_SERIES = ["KXBTC15M","KXETH15M","KXSOL15M","KXHYPE15M","KXDOGE15M","KXBNB15M","KXXRP15M",
+                             "KXBTC30M","KXETH30M","KXSOL30M","KXBTC1H","KXETH1H","KXSOL1H",
+                             "KXBTC","KXBTCD","KXBTCW","KXBTCM","KXETH","KXETHUSD","KXETHD",
+                             "KXSOL","KXSOLD","KXDOGE","KXXRP"]
+            ECON_SERIES   = ["INX","INXD","INXW","KXNDAQ","KXNDAQD","NDX","KXDJIA","DJI",
+                             "KXFED","KXCPI","KXPCE","KXUNEMP"]
+            SPORTS_SERIES = ["NBAG","KXNBA","NBA","MLBG","KXMLB","MLB","NFLG","KXNFL","NFL",
+                             "KXNHL","NHL","KXSOCCER"]
+            series_list = []
+            if bs.get("show_crypto", True):    series_list += CRYPTO_SERIES
+            if bs.get("show_economics", False): series_list += ECON_SERIES
+            if bs.get("show_sports", False):    series_list += SPORTS_SERIES
+
+            # Current open-position count (concurrency cap)
+            with _lock:
+                open_now = sum(1 for p in tracked.values() if p.get("status") == "open")
+
+            # ── Find candidates ──────────────────────────────────────────────
+            candidates = []  # (ticker, side, price_cents, market)
+            for st in series_list:
+                if len(candidates) >= max_scan * 4:
+                    break
+                if time.time() - cycle_start > 12:  # time budget — keep cycles bounded
                     break
                 try:
-                    time.sleep(0.35)  # Rate limit
-                    d = kalshi_get("/markets", {"series_ticker": series_ticker, "status": "open", "limit": 200})
+                    time.sleep(0.35)  # rate limit
+                    d = kalshi_get("/markets", {"series_ticker": st, "status": "open", "limit": 200})
                     for m in d.get("markets", []):
+                        hit = _apply_market_filters(
+                            m, now_utc, cutoff, union_min, union_max,
+                            no_crypto, no_combo, no_sports, no_politics, no_economics, good_liq, 10,
+                            min_age_mins=min_age, max_age_mins=max_age,
+                            no_buy_within_mins=no_buy_within, crypto_times=None, hide_multi=hide_multi)
+                        if not hit:
+                            continue
                         ticker = m.get("ticker", "")
-                        title = m.get("title", ticker)
-                        cat = m.get("category", "")
-
-                        # Quick filter: 80-96% YES probability, expires within minutes
-                        yes_prob = float(m.get("yes_ask_price") or 0)
-                        if not (min_prob <= yes_prob <= max_prob):
-                            continue
-
-                        close_ts_str = m.get("close_time") or m.get("expiration_time") or ""
-                        try:
-                            close_ts = datetime.fromisoformat(close_ts_str.replace("Z", "+00:00"))
-                            if close_ts > cutoff:
-                                continue
-                        except (ValueError, AttributeError):
-                            continue
-
-                        results.append({
-                            "ticker": ticker,
-                            "title": title,
-                            "category": cat,
-                            "yes_ask": yes_prob,
-                        })
+                        yes_p = _market_price(m, "yes")
+                        no_p  = _market_price(m, "no")
+                        if up_on and yes_p is not None and up_min <= yes_p < up_max:
+                            candidates.append((ticker, "yes", yes_p, m))
+                        elif down_on and no_p is not None and down_min <= no_p < down_max:
+                            candidates.append((ticker, "no", no_p, m))
                 except Exception:
                     pass
 
-            # Auto-buy logic: simple heuristic (can be extended to read buy settings from UI)
-            if results:
-                with _lock:
-                    for market in results:
-                        ticker = market["ticker"]
-                        if ticker in tracked and tracked[ticker]["status"] == "open":
-                            continue  # Already holding
-
-                        # Simple auto-buy: 1 contract at 80-96% (user can customize via UI later)
-                        yes_price = market.get("yes_ask", 50)
-                        buy_dollars = 0.50  # Small default; user sets via UI
-                        contracts = max(1, int(buy_dollars / (yes_price / 100)))
-
-                        try:
-                            # Same buy logic as /api/buy endpoint
-                            order_body = {
-                                "ticker": ticker,
-                                "client_order_id": str(uuid.uuid4()),
-                                "action": "buy",
-                                "side": "yes",
-                                "type": "market",
-                                "count": contracts,
-                                "yes_price": int(math.ceil(yes_price)),
+            # ── Place buys ───────────────────────────────────────────────────
+            bought = 0
+            with _lock:
+                for ticker, side, price_c, m in candidates:
+                    if bought >= max_scan or open_now >= max_conc:
+                        break
+                    held = sum(1 for t, p in tracked.items()
+                               if t == ticker and p.get("status") == "open")
+                    if held >= max_mkt:
+                        continue
+                    pc = int(math.ceil(price_c))
+                    if pc <= 0 or pc > 99:
+                        continue
+                    contracts = math.floor(buy_amt / (pc / 100))
+                    if contracts < 1:
+                        continue
+                    order_body = {
+                        "ticker": ticker,
+                        "client_order_id": str(uuid.uuid4()),
+                        "action": "buy",
+                        "side": side,
+                        "type": "market",
+                        "count": contracts,
+                    }
+                    if side == "yes": order_body["yes_price"] = pc
+                    else:             order_body["no_price"]  = pc
+                    try:
+                        result = kalshi_post("/portfolio/orders", order_body)
+                        order = result.get("order", result)
+                        if order.get("status") != "rejected":
+                            tracked[ticker] = {
+                                "title":  _event_title(m.get("event_ticker", "")) or m.get("title", ticker),
+                                "category": m.get("category", ""),
+                                "side":   side,
+                                "count":  contracts,
+                                "buy_price":     pc,
+                                "current_price": pc,
+                                "profit_pct":    0.0,
+                                "strategy":      sell_strategy.get("mode", "resolution"),
+                                "target_pct":    sell_strategy.get("target_pct"),
+                                "target_dollars": sell_strategy.get("target_dollars"),
+                                "target_price_cents": sell_strategy.get("target_price_cents"),
+                                "stop_loss_pct": sell_strategy.get("stop_loss_pct"),
+                                "status": "open",
+                                "bought_at": datetime.now(timezone.utc).isoformat(),
+                                "bot_bought": True,
                             }
-                            result = kalshi_post("/portfolio/orders", order_body)
-                            order = result.get("order", result)
-                            if order.get("status") != "rejected":
-                                tracked[ticker] = {
-                                    "title": market["title"],
-                                    "category": market["category"],
-                                    "side": "yes",
-                                    "count": contracts,
-                                    "buy_price": int(yes_price),
-                                    "current_price": int(yes_price),
-                                    "profit_pct": 0.0,
-                                    "strategy": sell_strategy.get("mode", "resolution"),
-                                    "target_pct": sell_strategy.get("target_pct"),
-                                    "target_dollars": sell_strategy.get("target_dollars"),
-                                    "target_price_cents": sell_strategy.get("target_price_cents"),
-                                    "status": "open",
-                                    "bought_at": datetime.now(timezone.utc).isoformat(),
-                                    "bot_bought": True,
-                                }
-                                _save_tracked()
-                                _balance_cache["ts"] = 0
-                                print(f"[bot] Auto-bought {ticker}: {contracts} @ {yes_price}¢")
-                        except Exception as e:
-                            print(f"[bot] Buy {ticker} failed: {e}")
+                            _save_tracked()
+                            _balance_cache["ts"] = 0
+                            open_now += 1
+                            bought += 1
+                            print(f"[bot] Auto-bought {side.upper()} {ticker}: {contracts} @ {pc}¢")
+                    except Exception as e:
+                        print(f"[bot] Buy {ticker} failed: {e}")
+            if bought:
+                print(f"[bot] cycle: bought {bought} ({len(candidates)} candidates, {open_now} open)")
 
         except Exception as e:
             print(f"[bot] Scan cycle error: {e}")
@@ -2419,6 +2482,76 @@ def set_sell_settings():
     # /api/strategy) because that's the dict the monitor reads. Writing it here
     # was the original bug — it silently never fired.
     return jsonify({"ok": True, "settings": sell_settings})
+
+
+@app.route("/api/buy-settings", methods=["GET", "POST"])
+def buy_settings_endpoint():
+    """GET returns the auto-bot's live BUY filters; POST updates them.
+
+    This is the bridge that makes the headless bot trade what the UI shows. The
+    frontend posts here whenever buy filters change; `_bot_thread` reads the saved
+    values live every cycle. Unknown keys are ignored; types are coerced safely.
+    """
+    global buy_settings
+    if request.method == "GET":
+        return jsonify(buy_settings)
+
+    data = request.get_json(silent=True) or {}
+
+    def _pct(v, default):
+        try:
+            return max(1.0, min(99.0, float(v)))
+        except (TypeError, ValueError):
+            return default
+
+    def _posint(v, default, lo=0):
+        try:
+            return max(lo, int(float(v)))
+        except (TypeError, ValueError):
+            return default
+
+    def _optfloat(v):
+        if v in (None, "", "any", "off"):
+            return None
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+
+    bool_keys = ["enable_buy_up", "enable_buy_down", "show_crypto", "show_combo",
+                 "show_sports", "show_politics", "show_economics", "good_liq", "hide_multi"]
+    for k in bool_keys:
+        if k in data:
+            buy_settings[k] = bool(data[k])
+
+    for k in ("up_min", "up_max", "down_min", "down_max"):
+        if k in data:
+            buy_settings[k] = _pct(data[k], buy_settings[k])
+    if "minutes" in data:
+        buy_settings["minutes"] = _posint(data["minutes"], buy_settings["minutes"], lo=1)
+    if "buy_amount" in data:
+        try:
+            buy_settings["buy_amount"] = max(0.01, float(data["buy_amount"]))
+        except (TypeError, ValueError):
+            pass
+    if "max_per_scan" in data:
+        buy_settings["max_per_scan"] = _posint(data["max_per_scan"], buy_settings["max_per_scan"], lo=1)
+    if "max_concurrent" in data:
+        buy_settings["max_concurrent"] = _posint(data["max_concurrent"], buy_settings["max_concurrent"], lo=1)
+    if "max_per_market" in data:
+        buy_settings["max_per_market"] = _posint(data["max_per_market"], buy_settings["max_per_market"], lo=1)
+    for k in ("min_age_mins", "max_age_mins", "no_buy_within_mins"):
+        if k in data:
+            buy_settings[k] = _optfloat(data[k])
+
+    # Keep min <= max for each side
+    if buy_settings["up_min"] > buy_settings["up_max"]:
+        buy_settings["up_min"], buy_settings["up_max"] = buy_settings["up_max"], buy_settings["up_min"]
+    if buy_settings["down_min"] > buy_settings["down_max"]:
+        buy_settings["down_min"], buy_settings["down_max"] = buy_settings["down_max"], buy_settings["down_min"]
+
+    _save_buy_settings()
+    return jsonify({"ok": True, "settings": buy_settings})
 
 
 @app.route("/api/enrich-positions", methods=["GET"])
