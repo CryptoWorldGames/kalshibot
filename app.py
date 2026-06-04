@@ -712,17 +712,18 @@ _bot_lock = threading.RLock()
 BOT_CONFIG_FILE = HERE / "bot_config.json"  # Persists bot state across restarts
 
 def _load_bot_config():
-    """Load bot config (whether it should be running). Auto-starts if it was running before."""
+    """Always auto-start the bot on launch.
+
+    The user wants the bot botting whenever the server is up. Stop still works
+    during a running session (POST /api/bot/stop), but a fresh start/restart
+    always resumes trading so it never silently sits idle after a reboot.
+    """
     try:
-        if BOT_CONFIG_FILE.exists():
-            cfg = json.loads(BOT_CONFIG_FILE.read_text(encoding="utf-8"))
-            should_run = cfg.get("should_run", False)
-            if should_run:
-                print("[bot] Auto-starting (was running before restart)")
-                return True
+        _save_bot_config(True)  # persist the running intent
     except Exception as e:
-        print(f"[bot config] load error: {e}")
-    return False
+        print(f"[bot config] save error: {e}")
+    print("[bot] Auto-starting on launch (always-on policy)")
+    return True
 
 def _save_bot_config(should_run: bool):
     """Persist the bot's desired state (so it survives restarts)."""

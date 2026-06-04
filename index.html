@@ -1113,6 +1113,14 @@ async function loadBotStatus() {
       el.textContent = "🔴 Stopped";
       el.style.color = "var(--red)";
     }
+    // Backend is the single source of truth for "is the bot running". Mirror it into
+    // the client flag + button so the page never says "Start Bot" while it's botting.
+    // (Safe: legacy client-side auto-buy is disabled via CLIENT_SIDE_AUTOBUY, so this
+    //  can't cause double-buying.)
+    if (typeof autoModeOn !== "undefined" && autoModeOn !== !!d.running) {
+      autoModeOn = !!d.running;
+      try { syncFabButtons(); } catch(_) {}
+    }
   } catch(e) {
     // Silently fail — bot backend may not be responding yet
   }
@@ -1122,6 +1130,10 @@ const BALANCE_THROTTLE_MS = 60000; // max once every 60s (reduces Kalshi API cal
 // The per-buy dollar amount is a MAX (spend UP TO it). We only refuse to buy when cash
 // is below this tiny floor — otherwise we buy with whatever cash is available.
 const MIN_BUY_DOLLARS = 0.02;
+// SINGLE-BOT SAFETY: the backend headless bot (_bot_thread) is now the sole trader.
+// The legacy browser-side auto-buy in scan() is kept for display but must NOT place
+// orders — otherwise an open scanner tab would double-buy alongside the backend.
+const CLIENT_SIDE_AUTOBUY = false;
 function loadBalanceThrottled(force=false) {
   const now = Date.now();
   if (!force && now - _lastBalanceCall < BALANCE_THROTTLE_MS) return;
@@ -1900,7 +1912,10 @@ async function scan() {
       }, 60000);
 
       // Auto Mode: buy everything found, then keep scanning
-      if (autoModeOn) {
+      // CLIENT_SIDE_AUTOBUY is false — the backend bot is the sole trader, so this
+      // browser-side buy path is disabled to prevent double-buying. Scanner still
+      // displays markets; the backend handles all order placement.
+      if (autoModeOn && CLIENT_SIDE_AUTOBUY) {
         // Time-mode expiry check
         if (autoRunMode === "time" && autoModeStartTime) {
           const mins = parseInt(document.getElementById("autoMins").value) || 30;
