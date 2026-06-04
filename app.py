@@ -952,8 +952,10 @@ def portfolio():
             current_yes  = None
             current_no   = None
             close_time   = None
-            # Skip expensive market enrichment if enrich=false (for fast initial load)
-            if enrich:
+            # When 1000+ positions + enrich=true, skip expensive market lookups (they race
+            # with the scan loop for rate-limit lock). Only use cached balance/positions.
+            # Frontend will request individual position enrichment on-demand.
+            if enrich and len(raw_positions) < 100:
                 time.sleep(0.01)
                 try:
                     mkt          = _get_market(ticker)
@@ -1052,8 +1054,9 @@ def portfolio():
         current_yes  = None
         current_no   = None
 
-        # Only enrich tracked fallback positions if enriching
-        if enrich:
+        # Only enrich tracked fallback positions if enriching AND < 100 total positions
+        # (to avoid rate-limit starvation during heavy portfolios)
+        if enrich and len(raw_positions) < 100:
             try:
                 mkt        = _get_market(ticker)
                 mkt_status = (mkt.get("status") or "").lower()

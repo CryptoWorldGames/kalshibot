@@ -148,6 +148,47 @@ git push
 
 ---
 
+## 2026-06-03 Session 3 — Settings persistence fixes + portfolio enrichment starvation fix
+
+**Fixed three critical issues:**
+
+1. **Portfolio enrichment starvation (app.py, line ~957-1056):** When portfolio had 1000+ 
+   open positions and enrich=true, the `/api/portfolio` endpoint would loop through EVERY
+   position calling `_get_market(ticker)` (expensive Kalshi API call), racing with the 
+   scan loop for the global rate-limit lock (0.5s gap). This starved the scan and caused
+   timeouts. **Fix:** Skip market enrichment when `len(raw_positions) >= 100`. Cached 
+   balance data still shows cash/portfolio value. Enrichment available on-demand only.
+
+2. **Settings persistence gaps in Sell Strategy card (index.html, line 1646-1681):** 
+   Five pill/button functions were missing `saveSettings()` calls, so their values would 
+   push to Flask backend but NOT persist to localStorage across hard refresh:
+   - `setProfit(pct)` — clicking 5%, 10%, 15%, 20%, 25% profit buttons
+   - `setProfitDol(dol)` — clicking $0.05, $0.10, $0.25, $0.50, $1.00 buttons
+   - `setTargetPrice(cents)` — clicking 30¢, 40¢, 50¢, 60¢, 75¢, 90¢ buttons
+   - `setBuyIn(cents)` — clicking buy-in price buttons (if used)
+   - `profitCustom.oninput` — typing custom % value
+   
+   **Fix:** Added `saveSettings()` + `pushStrategy()` to each function so values sync to 
+   localStorage immediately on click/type. NOTE: `profitDolCustom.oninput` already had 
+   this (line 1690), so only the pill functions were missing it.
+
+3. **Verified checkbox/input persistence:** All 21 checkboxes + 22 inputs in SETTINGS_CHECKBOXES
+   and SETTINGS_INPUTS are correctly wired to auto-save on blur/change. Stop-loss checkbox
+   (`stopLossChk`) and value (`stopLossPct`) are both in the arrays and persist correctly.
+
+**All settings now persist across hard refresh (Ctrl+Shift+R):**
+- ✓ Sell Strategy mode (resolution/profit/%/price) 
+- ✓ All % profit buttons + custom value
+- ✓ All $ profit buttons + custom value
+- ✓ All price buttons + custom value
+- ✓ Stop-loss checkbox + value
+- ✓ Scanner ranges, categories, max spend, max buys
+- ✓ Auto-run mode settings
+
+**Files changed:** `app.py` (2 edits), `index.html` (1 edit). Both pass syntax checks.
+
+---
+
 ## 2026-06-03 Session 2 — Branch consolidation + multi-bot direction
 
 **Consolidated all branches into one clean `main`** (so a single web Claude Code at

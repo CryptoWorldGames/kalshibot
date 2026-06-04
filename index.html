@@ -1647,12 +1647,16 @@ function setTargetPrice(cents) {
   document.getElementById("targetPriceCustom").value = cents;
   activatePills("profitPriceGroup", cents + "¢");
   setStrategy("target_price");
+  pushStrategy();
+  saveSettings();
 }
 
 function setBuyIn(cents) {
   document.getElementById("buyInPriceCustom").value = cents;
   activatePills("buyInGroup", cents + "¢");
   setStrategy("target_price");
+  pushStrategy();
+  saveSettings();
 }
 
 function setProfit(pct) {
@@ -1661,6 +1665,7 @@ function setProfit(pct) {
   activatePills("profitGroup", pct + "%");
   setStrategy("profit");  // FIX: Switch to profit mode when clicking profit buttons
   pushStrategy();
+  saveSettings();
 }
 
 function setProfitDol(dol) {
@@ -1668,6 +1673,7 @@ function setProfitDol(dol) {
   activatePills("profitDolGroup", "$" + dol.toFixed(2));
   setStrategy("profit_dollars");  // FIX: Switch to profit_dollars mode when clicking dollar buttons
   pushStrategy();
+  saveSettings();
 }
 
 document.getElementById("profitCustom").oninput = function() {
@@ -1678,6 +1684,7 @@ document.getElementById("profitCustom").oninput = function() {
 
   stratPct = parseFloat(this.value) || 10;
   pushStrategy();
+  saveSettings();
 };
 
 document.getElementById("profitDolCustom").oninput = function() {
