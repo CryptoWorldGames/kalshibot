@@ -612,7 +612,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   <div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:14px;align-items:center;border:2px solid #fff;border-radius:8px;padding:12px;background:#0f1419">
     <div style="display:flex;align-items:center;gap:6px">
       <span style="color:#fff;font-size:14px;font-weight:600">Max spend per purchase:</span>
-      <input type="number" id="buyAmount" value="1.00" min="0.01" step="0.01" style="width:72px">
+      <input type="number" id="buyAmount" value="1.00" min="0.01" step="0.01" style="width:72px" oninput="saveSettings()">
       <div style="display:flex;gap:3px">
         <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setAmt(1)">$1</button>
         <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setAmt(2)">$2</button>
@@ -623,7 +623,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     </div>
     <div style="display:flex;align-items:center;gap:6px">
       <span style="color:#fff;font-size:14px;font-weight:600">Max buys per contract type:</span>
-      <input type="number" id="maxBuysPerMarket" value="1" min="1" max="5" style="width:60px">
+      <input type="number" id="maxBuysPerMarket" value="1" min="1" max="5" style="width:60px" oninput="saveSettings()">
       <div style="display:flex;gap:3px">
         <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setMaxBuys(1)">1</button>
         <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setMaxBuys(2)">2</button>
@@ -637,12 +637,12 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
     <div style="display:flex;align-items:center;gap:6px">
       <span style="color:#fff;font-size:14px;font-weight:600">Max</span>
-      <input type="number" id="autoMaxPerScan" value="20" min="1" style="width:60px" title="Max games to BUY per scan cycle (scanner always scans everything)">
+      <input type="number" id="autoMaxPerScan" value="20" min="1" style="width:60px" title="Max games to BUY per scan cycle (scanner always scans everything)" oninput="saveSettings()">
       <span style="color:#fff;font-size:14px;font-weight:600">max buys per scan cycle</span>
     </div>
     <div style="display:flex;align-items:center;gap:6px">
       <span style="color:#fff;font-size:14px;font-weight:600">Hold max</span>
-      <input type="number" id="autoMaxConcurrent" value="20" min="1" style="width:60px" title="Max open positions across all games">
+      <input type="number" id="autoMaxConcurrent" value="20" min="1" style="width:60px" title="Max open positions across all games" oninput="saveSettings()">
       <span style="color:#fff;font-size:14px;font-weight:600">positions</span>
     </div>
   </div>
@@ -1611,7 +1611,8 @@ function setTime(val, label) {
   const c = val === "custom";
   document.getElementById("timeCustom").style.display      = c ? "inline-block" : "none";
   document.getElementById("timeCustomLabel").style.display = c ? "inline" : "none";
-  if (c) document.getElementById("timeCustom").oninput = () => { selTime = parseInt(document.getElementById("timeCustom").value) || 15; };
+  if (c) document.getElementById("timeCustom").oninput = () => { selTime = parseInt(document.getElementById("timeCustom").value) || 15; saveSettings(); };
+  saveSettings();
 }
 
 function activatePills(groupId, label) {
@@ -4191,6 +4192,53 @@ function saveSettings() {
   SETTINGS_CHECKBOXES.forEach(id => { const el = document.getElementById(id); if (el) s[id] = el.checked; });
   SETTINGS_INPUTS.forEach(id => { const el = document.getElementById(id); if (el) s[id] = el.value; });
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch(e) {}
+  // Bridge the BUY filters to the backend so the headless bot trades what the UI shows.
+  pushBuySettings();
+}
+
+// Send the live BUY filters to the server (debounced). The backend bot reads these
+// every cycle, so editing them from any device changes what the bot buys within ~15s.
+let _pushBuyTimer = null;
+function pushBuySettings(immediate=false) {
+  const run = () => {
+    const chk = id => { const el = document.getElementById(id); return el ? el.checked : false; };
+    const num = (id, d) => { const el = document.getElementById(id); const v = parseFloat(el?.value); return isNaN(v) ? d : v; };
+    const optNum = id => { const el = document.getElementById(id); return el && el.value !== "" ? parseFloat(el.value) : null; };
+    // Mirror scan(): show_sports is true if the umbrella OR any sub-sport is checked
+    const showSports = chk("showSports") || chk("showNFL") || chk("showNBA") || chk("showMLB")
+      || chk("showNHL") || chk("showSoccer") || chk("showGolf") || chk("showTennis") || chk("showMMA");
+    const payload = {
+      enable_buy_up:   chk("enableBuyUp"),
+      up_min:          num("minProb", 80),
+      up_max:          num("maxProb", 96),
+      enable_buy_down: chk("enableBuyDown"),
+      down_min:        num("minProbDown", 80),
+      down_max:        num("maxProbDown", 96),
+      minutes:         (typeof selTime !== "undefined" ? selTime : 15),
+      buy_amount:      num("buyAmount", 1.0),
+      max_per_scan:    num("autoMaxPerScan", 20),
+      max_concurrent:  num("autoMaxConcurrent", 20),
+      max_per_market:  num("maxBuysPerMarket", 1),
+      show_crypto:     chk("showCrypto"),
+      show_combo:      chk("showCombo"),
+      show_sports:     showSports,
+      show_politics:   chk("showPolitics"),
+      show_economics:  chk("showEconomics"),
+      good_liq:        chk("goodLiq"),
+      hide_multi:      chk("hideMultiOutcome"),
+      min_age_mins:    optNum("minAgeMins"),
+      max_age_mins:    optNum("maxAgeMins"),
+      no_buy_within_mins: optNum("noBuyWithinMins"),
+    };
+    fetch("/api/buy-settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }).catch(() => {});  // best-effort; bot keeps last-known on failure
+  };
+  if (_pushBuyTimer) clearTimeout(_pushBuyTimer);
+  if (immediate) { run(); return; }
+  _pushBuyTimer = setTimeout(run, 600);  // debounce rapid slider/typing changes
 }
 
 function loadSettings() {
@@ -4324,8 +4372,9 @@ async function applyCoachSettings() {
 loadSettings();
 renderStratSlots();
 syncFabButtons();
-// Always push current sell strategy to Flask on page load (survives Flask restarts)
-setTimeout(() => { pushStrategy(); pushSellSettings(); }, 1000);
+// Always push current sell strategy + BUY filters to Flask on page load so the
+// headless bot trades the UI's settings (survives Flask restarts / device switches).
+setTimeout(() => { pushStrategy(); pushSellSettings(); pushBuySettings(true); }, 1000);
 
 // ── Flask crash recovery (page reload DISABLED) ───────────────────────────
 // Previously this polled every 5s and reloaded the page when Flask recovered,
