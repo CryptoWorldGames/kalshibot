@@ -16,6 +16,31 @@
 
 ## Active
 
+## ✅ BUILT 2026-06-04 (needs ONE desktop `git pull` + restart to go live)
+
+User said "build everything." Done, syntax-checked + stub-run-verified (cloud can't reach
+Kalshi, so live trading is unverified — VERIFY ON DESKTOP before letting it run unattended):
+1. **Button sync** — page reads real backend bot state on load (no more "Start Bot" while running).
+2. **Buy-settings bridge** — `buy_settings.json` + `/api/buy-settings` (GET/POST). `_bot_thread`
+   now reads the UI's live BUY filters every cycle (up/down ranges, categories, time window,
+   buy amount, max-per-scan/concurrent/per-market, age filters). Frontend pushes on change + load.
+3. **NO/"down" side** — bot now buys NO when BUY DOWN is enabled and NO price is in its range.
+4. **PORTFOLIO "—" fix** — `loadCash()` now fills navPositions from `/api/balance.positions_value`.
+5. **Remote Update & Restart** — manager `/api/manager/update` (git pull + restart) + nav "⟳ Update"
+   button (calls manager on Flask port+100). Deploy from any device after this first manual pull.
+6. **Coach** — already had the 20s timeout fix; it's rule-based (not an LLM) and returns data fine.
+   If user wants a TRUE LLM advisor, that's a separate feature (needs an API key) — ASK first.
+
+⚠️ **SAFETY before enabling unattended:** once deployed, the bot trades whatever the UI shows.
+On deploy the UI defaulted to 80–96% YES / all-categories — user must set their intended filters
+(e.g. 40–60% both sides) + buy amount + caps, which auto-push to the bot. Bot still always
+auto-starts on launch (always-on policy).
+
+**DEPLOY:** on the DESKTOP: `cd "...\kalshi bot" && taskkill /F /IM python.exe & git pull && python kalshi-manager.py`
+then Ctrl+Shift+R in the browser. (Run kalshi-manager.py, NOT app.py, so the ⟳ Update button works.)
+
+---
+
 ## ⏰ PENDING — REMIND USER WHEN THEY SAY "I'm on my PC" (added 2026-06-04)
 
 User is at work on their phone; bot is **left running as-is** on the stub buy defaults
