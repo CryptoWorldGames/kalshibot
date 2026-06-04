@@ -21,8 +21,8 @@ import threading
 
 HERE = Path(__file__).resolve().parent
 FLASK_PROCESS = None
-FLASK_PORT = 5000
-MANAGER_PORT = 5100  # Manager runs on Flask port + 100
+FLASK_PORT = 5004
+MANAGER_PORT = 5104  # Manager runs on Flask port + 100
 RUNNING = True
 INTENTIONALLY_STOPPED = False  # Track if user manually stopped Flask
 

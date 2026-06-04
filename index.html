@@ -371,6 +371,9 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     </div>
     <div id="navPnlAll" style="display:flex;align-items:stretch;gap:0"></div>
   </div>
+  <div style="display:flex;align-items:center;gap:12px;font-size:13px;color:var(--muted);margin:0 12px">
+    <span id="botStatusEl" style="font-weight:600;white-space:nowrap">🔴 Stopped</span>
+  </div>
   <button id="snoozeBtn" onclick="toggleVoiceSnooze()" style="background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;padding:6px 12px;margin-left:auto;transition:all .2s;white-space:nowrap" title="Mute the voice announcements for the snooze period (set the duration in Settings)">🔔 Snooze</button>
   <button onclick="document.getElementById('settingsModal').classList.toggle('open')" style="background:transparent;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:8px 12px;margin-left:6px;transition:color .2s" title="Settings">⚙️</button>
 </nav>
@@ -1091,6 +1094,30 @@ function renderSaleTicker() {
 let _waitForCashAmt = 1.0;
 let _cashPauseTimer = null;
 let _recentlySold = []; // {title, ticker, side, profit, soldAt, kalshi_url}
+
+async function loadBotStatus() {
+  try {
+    const r = await fetch("/api/bot/status");
+    const d = await r.json();
+    const el = document.getElementById("botStatusEl");
+    if (!el) return;
+
+    if (d.running) {
+      const uptime = d.uptime_seconds || 0;
+      const mins = Math.floor(uptime / 60);
+      const secs = uptime % 60;
+      const uptimeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+      el.textContent = `🟢 Running · ${uptimeStr} · ${d.total_bought_session || 0} bought`;
+      el.style.color = "var(--green)";
+    } else {
+      el.textContent = "🔴 Stopped";
+      el.style.color = "var(--red)";
+    }
+  } catch(e) {
+    // Silently fail — bot backend may not be responding yet
+  }
+}
+
 const BALANCE_THROTTLE_MS = 60000; // max once every 60s (reduces Kalshi API calls)
 // The per-buy dollar amount is a MAX (spend UP TO it). We only refuse to buy when cash
 // is below this tiny floor — otherwise we buy with whatever cash is available.
@@ -1392,7 +1419,12 @@ async function enrichPositionMarkets() {
   if (!tickers.length) return;
 
   try {
-    const r = await fetch(`/api/enrich-positions?tickers=${tickers.slice(0,20).join(",")}`, {timeout: 10000});
+    // NOTE: fetch() has no {timeout} option — it was silently ignored, so a slow
+    // enrich could hang forever and positions stayed on "—". Use AbortController.
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 12000);
+    const r = await fetch(`/api/enrich-positions?tickers=${tickers.slice(0,20).join(",")}`, {signal: ctrl.signal});
+    clearTimeout(to);
     const enriched = await r.json() || {};
 
     // Merge enriched data into allPositions
@@ -1417,8 +1449,8 @@ async function enrichPositionMarkets() {
 }
 
 window.addEventListener("load", () => {
-  // Cash first — fast cached /api/balance shows the top figures immediately, even
-  // if the heavy positions load is slow or stuck behind a scan.
+  // Load bot status (running/stopped) and cash first
+  loadBotStatus();
   loadCash();
   // Phase 1 (0-2s): Load positions + balance WITHOUT market enrichment
   loadBalance(false);
@@ -2056,7 +2088,20 @@ function toggleAutoMode() {
   autoModeOn ? stopAutoMode("Stopped manually") : startAutoMode();
 }
 
-function startAutoMode() {
+async function startAutoMode() {
+  // Tell the backend to start its headless trading loop
+  try {
+    const r = await fetch("/api/bot/start", {method: "POST"});
+    const d = await r.json();
+    if (!r.ok) {
+      alert("Bot start failed: " + (d.error || r.status));
+      return;
+    }
+  } catch(e) {
+    alert("Could not reach bot backend: " + e.message);
+    return;
+  }
+
   autoModeOn     = true;
   autoModeBought = 0;
   localStorage.setItem("kb_bot_was_running", "1");
@@ -2072,24 +2117,36 @@ function startAutoMode() {
 
   syncFabButtons();
 
-  const refreshChk = document.getElementById("autoRefresh");
-  if (refreshChk) refreshChk.checked = true;
-  if (!scanTimer) scanTimer = setInterval(scan, 15000)  // 15 seconds - safe from rate limiting;
-
-  autoModeCountdown = setInterval(updateAutoStatus, 1000);
+  // DO NOT start a client-side scan loop — the backend now handles it.
+  // Just poll the status periodically so the UI stays in sync.
+  if (autoModeCountdown) clearInterval(autoModeCountdown);
+  autoModeCountdown = setInterval(() => {
+    updateAutoStatus();
+    loadBotStatus();  // Refresh bot status from backend
+  }, 2000);  // Every 2 seconds
   updateAutoStatus();
-  scan();
+  loadBotStatus();
 }
 
-function stopAutoMode(reason) {
+async function stopAutoMode(reason) {
+  // Tell the backend to stop its headless trading loop
+  try {
+    const r = await fetch("/api/bot/stop", {method: "POST"});
+    const d = await r.json();
+    if (!r.ok && r.status !== 409) {  // 409 = already stopped
+      console.warn("Bot stop returned:", d.error || r.status);
+    }
+  } catch(e) {
+    console.warn("Could not reach bot backend:", e.message);
+  }
+
   autoModeOn = false;
   clearInterval(autoModeCountdown);
   const note = document.getElementById("autoRefreshNote");
   if (note) note.style.display = "none";
   autoModeCountdown = null;
 
-  // Stop the periodic scan that startAutoMode enabled. Symmetric — if the user
-  // wants no-buy periodic scans, they can re-check the box manually after stopping.
+  // No longer need the client-side scan loop (it's on the backend now)
   if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
   const refreshChk = document.getElementById("autoRefresh");
   if (refreshChk) refreshChk.checked = false;
@@ -3314,7 +3371,12 @@ async function loadCoach() {
       buyAmount: parseFloat(document.getElementById("buyAmount")?.value) || 1.0,
       maxPerScan: parseInt(document.getElementById("autoMaxPerScan")?.value) || 5,
     };
-    const r = await fetch("/api/coach?filters=" + encodeURIComponent(JSON.stringify(filters)));
+    // Coach aggregates 30 days of Kalshi settlements server-side and can be slow.
+    // Without an abort timeout a hung request leaves the tab stuck on "Loading…".
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 20000);
+    const r = await fetch("/api/coach?filters=" + encodeURIComponent(JSON.stringify(filters)), {signal: ctrl.signal});
+    clearTimeout(to);
     const d = await r.json();
     const t = d.totals || {};
     const totalsEl = document.getElementById("coachTotals");
@@ -4096,7 +4158,7 @@ const SETTINGS_CHECKBOXES = ["showCrypto","showSports","showPolitics","showEcono
   "stopLossChk",
   "skipAutoSellNearResolution","hideSmallPositions","hide95LossPositions"];
 const SETTINGS_INPUTS = ["buyAmount","maxBuysPerMarket","autoMaxPerScan","autoMaxConcurrent","posSort",
-  "autoMins","autoBuysMax","profitCustom","profitDolCustom","minProb","maxProb","timeCustom",
+  "autoMins","autoBuysMax","profitCustom","profitDolCustom","targetPriceCustom","minProb","maxProb","timeCustom",
   "stopLossPct","skipAutoSellMinutes",
   "minAgeMins","maxAgeMins","noBuyWithinMins","minProbDown","maxProbDown","spreadUp","spreadDown","snoozeDuration"];
 

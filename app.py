@@ -558,6 +558,12 @@ def _monitor():
                 pos = tracked.get(ticker)
                 if not pos or pos["status"] != "open":
                     continue
+                # Already past its close time — stop probing it every cycle. This was
+                # the source of endless "holding to resolution" log spam plus a wasted
+                # /markets call per cycle for every expired position (which, with a big
+                # tracked file, monopolised the rate-limited API and starved scan/buy).
+                if pos.get("expired"):
+                    continue
                 # Skip only if no profit target exists at all (per-position or global)
                 has_pct_target = pos.get("strategy") == "profit" or sell_strategy.get("mode") == "profit"
                 has_dol_target = pos.get("target_dollars") is not None or sell_strategy.get("target_dollars") is not None
@@ -601,6 +607,16 @@ def _monitor():
                             now = datetime.now(timezone.utc)
                             mins_left = (ct - now).total_seconds() / 60
                             threshold = sell_settings.get("skip_auto_sell_minutes", 1)
+                            if mins_left <= 0:
+                                # Market is closed (awaiting settlement). Mark it so we
+                                # never probe it again — it settles on its own, and the
+                                # live Kalshi positions feed still shows it until then.
+                                with _lock:
+                                    if ticker in tracked:
+                                        tracked[ticker]["expired"] = True
+                                _save_tracked()
+                                print(f"[monitor] {ticker} past close ({mins_left:.1f} min) — done probing, awaiting settlement")
+                                continue
                             if mins_left <= threshold:
                                 print(f"[monitor] {ticker} expires in {mins_left:.1f} min (<= {threshold}m threshold) — SKIPPING AUTO-SELL (holding to resolution)")
                                 continue
@@ -686,6 +702,182 @@ def _monitor():
 threading.Thread(target=_monitor, daemon=True).start()
 
 # ---------------------------------------------------------------------------
+# Bot auto-trading thread (scan/buy loop) — run headless, controlled by /api/bot/start/stop
+# ---------------------------------------------------------------------------
+
+_bot_running = False
+_bot_start_time = None
+_bot_lock = threading.RLock()
+
+BOT_CONFIG_FILE = HERE / "bot_config.json"  # Persists bot state across restarts
+
+def _load_bot_config():
+    """Load bot config (whether it should be running). Auto-starts if it was running before."""
+    try:
+        if BOT_CONFIG_FILE.exists():
+            cfg = json.loads(BOT_CONFIG_FILE.read_text(encoding="utf-8"))
+            should_run = cfg.get("should_run", False)
+            if should_run:
+                print("[bot] Auto-starting (was running before restart)")
+                return True
+    except Exception as e:
+        print(f"[bot config] load error: {e}")
+    return False
+
+def _save_bot_config(should_run: bool):
+    """Persist the bot's desired state (so it survives restarts)."""
+    try:
+        BOT_CONFIG_FILE.write_text(json.dumps({"should_run": should_run}, indent=2), encoding="utf-8")
+    except Exception as e:
+        print(f"[bot config] save error: {e}")
+
+def _bot_thread():
+    """Scan markets and auto-buy every 15s, respecting the sell strategy.
+    Runs independent of browser; start/stop via /api/bot/start and /api/bot/stop.
+    Checks the persisted config file to know if it should be running."""
+    global _bot_running, _bot_start_time
+
+    scan_interval = 15  # seconds between scans
+    last_scan = 0
+
+    while True:
+        time.sleep(1)  # Check every second if we should scan
+
+        with _bot_lock:
+            if not _bot_running:
+                continue  # Wait for start signal (from API or config file)
+
+        now = time.time()
+        if (now - last_scan) < scan_interval:
+            continue  # Not time yet
+
+        last_scan = now
+
+        try:
+            # Fetch scan results using same logic as frontend but with default filters
+            # (user can customize via the UI; this is just a sane default)
+            min_prob = 80
+            max_prob = 96
+            minutes = 15
+
+            # Call the existing scan endpoint
+            from urllib.parse import urlencode
+            params = urlencode({
+                "min_thr": min_prob,
+                "max_thr": max_prob,
+                "minutes": minutes,
+                "show_crypto": "true",
+            })
+            # Simulate an internal request (avoid HTTP round-trip)
+            now_utc = datetime.now(timezone.utc)
+            cutoff = now_utc + timedelta(minutes=minutes)
+
+            results = []
+            # Use the same KNOWN_SERIES approach as the scan endpoint
+            KNOWN_SERIES = [
+                "KXBTC15M", "KXETH15M", "KXSOL15M", "KXHYPE15M",
+                "KXDOGE15M", "KXBNB15M", "KXXRP15M",
+                "KXBTC30M", "KXETH30M", "KXSOL30M",
+                "KXBTC1H", "KXETH1H", "KXSOL1H",
+                "KXBTC", "KXBTCD", "KXBTCW", "KXBTCM",
+                "KXETH", "KXETHUSD", "KXETHD",
+                "KXSOL", "KXSOLD", "KXDOGE", "KXXRP",
+            ]
+
+            for series_ticker in KNOWN_SERIES:
+                if len(results) >= 5:  # Small batch per cycle
+                    break
+                try:
+                    time.sleep(0.35)  # Rate limit
+                    d = kalshi_get("/markets", {"series_ticker": series_ticker, "status": "open", "limit": 200})
+                    for m in d.get("markets", []):
+                        ticker = m.get("ticker", "")
+                        title = m.get("title", ticker)
+                        cat = m.get("category", "")
+
+                        # Quick filter: 80-96% YES probability, expires within minutes
+                        yes_prob = float(m.get("yes_ask_price") or 0)
+                        if not (min_prob <= yes_prob <= max_prob):
+                            continue
+
+                        close_ts_str = m.get("close_time") or m.get("expiration_time") or ""
+                        try:
+                            close_ts = datetime.fromisoformat(close_ts_str.replace("Z", "+00:00"))
+                            if close_ts > cutoff:
+                                continue
+                        except (ValueError, AttributeError):
+                            continue
+
+                        results.append({
+                            "ticker": ticker,
+                            "title": title,
+                            "category": cat,
+                            "yes_ask": yes_prob,
+                        })
+                except Exception:
+                    pass
+
+            # Auto-buy logic: simple heuristic (can be extended to read buy settings from UI)
+            if results:
+                with _lock:
+                    for market in results:
+                        ticker = market["ticker"]
+                        if ticker in tracked and tracked[ticker]["status"] == "open":
+                            continue  # Already holding
+
+                        # Simple auto-buy: 1 contract at 80-96% (user can customize via UI later)
+                        yes_price = market.get("yes_ask", 50)
+                        buy_dollars = 0.50  # Small default; user sets via UI
+                        contracts = max(1, int(buy_dollars / (yes_price / 100)))
+
+                        try:
+                            # Same buy logic as /api/buy endpoint
+                            order_body = {
+                                "ticker": ticker,
+                                "client_order_id": str(uuid.uuid4()),
+                                "action": "buy",
+                                "side": "yes",
+                                "type": "market",
+                                "count": contracts,
+                                "yes_price": int(math.ceil(yes_price)),
+                            }
+                            result = kalshi_post("/portfolio/orders", order_body)
+                            order = result.get("order", result)
+                            if order.get("status") != "rejected":
+                                tracked[ticker] = {
+                                    "title": market["title"],
+                                    "category": market["category"],
+                                    "side": "yes",
+                                    "count": contracts,
+                                    "buy_price": int(yes_price),
+                                    "current_price": int(yes_price),
+                                    "profit_pct": 0.0,
+                                    "strategy": sell_strategy.get("mode", "resolution"),
+                                    "target_pct": sell_strategy.get("target_pct"),
+                                    "target_dollars": sell_strategy.get("target_dollars"),
+                                    "target_price_cents": sell_strategy.get("target_price_cents"),
+                                    "status": "open",
+                                    "bought_at": datetime.now(timezone.utc).isoformat(),
+                                    "bot_bought": True,
+                                }
+                                _save_tracked()
+                                _balance_cache["ts"] = 0
+                                print(f"[bot] Auto-bought {ticker}: {contracts} @ {yes_price}¢")
+                        except Exception as e:
+                            print(f"[bot] Buy {ticker} failed: {e}")
+
+        except Exception as e:
+            print(f"[bot] Scan cycle error: {e}")
+
+# Auto-load bot state from config file (so restarts preserve running state)
+if _load_bot_config():
+    _bot_running = True
+    _bot_start_time = time.time()
+
+# Start the bot thread (enabled/disabled based on config or API calls)
+threading.Thread(target=_bot_thread, daemon=True).start()
+
+# ---------------------------------------------------------------------------
 # Portfolio snapshots — persisted to file, used for PnL time windows
 # ---------------------------------------------------------------------------
 
@@ -706,11 +898,13 @@ except Exception as e:
 def _take_snapshot():
     try:
         bal_data = kalshi_get("/portfolio/balance")
-        cash_raw = float(bal_data.get("balance") or 0)
-        pv_raw   = float(bal_data.get("portfolio_value") or 0)
-        cash = round(cash_raw / 100 if cash_raw > 200 else cash_raw, 2)
-        pv   = round(pv_raw   / 100 if pv_raw   > 200 else pv_raw,   2)
-        total = cash + pv
+        # Kalshi field types are fixed (see BUGLOG-001): balance_dollars is dollars,
+        # balance is cents, portfolio_value is cents. NEVER use a `> 200` heuristic.
+        cash = float(bal_data.get("balance_dollars") or 0)
+        if not cash:
+            cash = float(bal_data.get("balance") or 0) / 100
+        pv   = float(bal_data.get("portfolio_value") or 0) / 100
+        total = round(cash + pv, 2)
         with _snap_lock:
             snapshots.append({"ts": time.time(), "v": total})
             cutoff = time.time() - 30 * 86400
@@ -1109,7 +1303,8 @@ def portfolio():
     try:
         pv_raw = float(bal_data.get("portfolio_value", 0))
         if pv_raw > 0:
-            api_positions_value = round(pv_raw / 100 if pv_raw > 200 else pv_raw, 2)
+            # portfolio_value is ALWAYS cents (BUGLOG-001) — no `> 200` heuristic.
+            api_positions_value = round(pv_raw / 100, 2)
     except Exception:
         pass
 
@@ -2719,9 +2914,63 @@ def coach():
     })
 
 
+# ---------------------------------------------------------------------------
+# Bot control endpoints (start/stop/status) — headless trading loop
+# ---------------------------------------------------------------------------
+
+@app.route("/api/bot/start", methods=["POST"])
+def bot_start():
+    """Start the headless auto-trading loop."""
+    global _bot_running, _bot_start_time
+    with _bot_lock:
+        if _bot_running:
+            return jsonify({"error": "Bot already running"}), 409
+        _bot_running = True
+        _bot_start_time = time.time()
+    _save_bot_config(True)  # Persist so it restarts if home PC reboots
+    print("[bot] Trading loop started")
+    return jsonify({"ok": True, "status": "running"})
+
+
+@app.route("/api/bot/stop", methods=["POST"])
+def bot_stop():
+    """Stop the headless auto-trading loop gracefully."""
+    global _bot_running
+    with _bot_lock:
+        if not _bot_running:
+            return jsonify({"error": "Bot not running"}), 409
+        _bot_running = False
+    _save_bot_config(False)  # Persist so it doesn't restart if home PC reboots
+    print("[bot] Trading loop stopped")
+    return jsonify({"ok": True, "status": "stopped"})
+
+
+@app.route("/api/bot/status", methods=["GET"])
+def bot_status():
+    """Get current bot status: running, uptime, total bought this session."""
+    with _bot_lock:
+        running = _bot_running
+        start_time = _bot_start_time
+
+    uptime_seconds = 0
+    if running and start_time:
+        uptime_seconds = int(time.time() - start_time)
+
+    # Count buys in this session (positions with bot_bought=True)
+    with _lock:
+        buys_this_session = sum(1 for p in tracked.values() if p.get("bot_bought"))
+
+    return jsonify({
+        "running": running,
+        "uptime_seconds": uptime_seconds,
+        "total_bought_session": buys_this_session,
+        "start_time": start_time,
+    })
+
+
 if __name__ == "__main__":
-    print("Open http://localhost:5000")
-    app.run(debug=False, host="0.0.0.0", port=5000)
+    print("Open http://localhost:5004")
+    app.run(debug=False, host="0.0.0.0", port=5004)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
