@@ -744,6 +744,17 @@ def index():
     return resp
 
 
+@app.route("/mobile")
+def mobile():
+    # Phone-optimized UI (separate page, same backend/API). Never cache so
+    # design tweaks show up immediately on the phone.
+    resp = make_response(send_from_directory(HERE, "mobile.html"))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
+
+
 @app.route("/audio/<path:filename>")
 def serve_audio(filename):
     # Serves user-supplied sounds (e.g. audio/chaching.mp3) committed to the repo.
@@ -762,8 +773,9 @@ def debug():
 
 @app.route("/api/debug/balance")
 def debug_balance():
-    bal = kalshi_get("/portfolio/balance")
-    return jsonify(bal)
+    # Cached raw balance (shared cache; same shape the /mobile page expects).
+    b = _get_balance()
+    return jsonify(b["raw"] if b else {})
 
 
 @app.route("/api/show-public-key")
@@ -863,6 +875,17 @@ def balance_only():
     })
 
 
+def _position_age_seconds(info):
+    """Seconds since a tracked position was bought, or None if unknown."""
+    ts = info.get("bought_at")
+    if not ts:
+        return None
+    try:
+        return (datetime.now(timezone.utc) - datetime.fromisoformat(ts)).total_seconds()
+    except Exception:
+        return None
+
+
 @app.route("/api/portfolio")
 def portfolio():
     # Check if we should skip expensive market enrichment (for fast initial load)
@@ -881,6 +904,7 @@ def portfolio():
     # ── Positions ──
     positions = []
     portfolio_value = 0.0
+    positions_ok = True  # did Kalshi's live positions fetch succeed this call?
     try:
         # Fetch ALL open positions with cursor pagination
         raw_positions = []
@@ -991,6 +1015,7 @@ def portfolio():
                 "status":         bot_info.get("status", "open") if bot_info else "open",
             })
     except Exception as e:
+        positions_ok = False
         print(f"[portfolio] positions error: {e}")
 
     # ── Tracked fallback ──────────────────────────────────────────────────────
@@ -1006,6 +1031,21 @@ def portfolio():
         # Also skip anything just sold via the UI (status may not have flushed yet)
         if _is_recently_sold(ticker, info.get("side", "yes")):
             continue
+        # Ghost reconciliation: if the live positions fetch SUCCEEDED but this
+        # tracked-"open" position isn't actually held on Kalshi, it's been sold/
+        # closed (sold on Kalshi directly, or a sell whose status never persisted).
+        # Mark it sold and drop it so it stops reappearing — unless it was bought
+        # in the last 90s (Kalshi post-buy propagation grace).
+        if positions_ok:
+            age = _position_age_seconds(info)
+            if age is None or age > 90:
+                with _lock:
+                    if ticker in tracked and tracked[ticker].get("status") == "open":
+                        tracked[ticker]["status"] = "sold"
+                        tracked[ticker].setdefault("sold_by", "external")
+                        tracked[ticker].setdefault("sold_at", datetime.now(timezone.utc).isoformat())
+                _save_tracked()
+                continue
         event_ticker = ""
         market_title = info.get("title", ticker)
         category     = ""
@@ -1885,6 +1925,13 @@ def buy():
                 f.write(f"{datetime.now(timezone.utc).isoformat()} {e.response.status_code} {ticker} {side} count={contracts} price={price_c} body={err_text}\n")
         except Exception:
             pass
+        # Market closed/expired between scan and order — normal for short-expiry
+        # markets, and nothing was bought. Clean, non-alarming message + flag.
+        if e.response.status_code == 404 or "market_not_found" in err_text:
+            return jsonify({
+                "error": f"{ticker} closed before the order went through — skipped (normal for fast-expiring markets, nothing was bought)",
+                "market_closed": True,
+            }), 409
         return jsonify({"error": f"Order failed ({e.response.status_code}): {e.response.text[:200]}"}), 502
     except Exception as e:
         print(f"[buy] EXCEPTION {ticker}: {type(e).__name__}: {e}")
@@ -2004,6 +2051,12 @@ def sell():
                 f.write(f"{datetime.now(timezone.utc).isoformat()} SELL {e.response.status_code} {ticker} {side} count={count_int} body={err_text}\n")
         except Exception:
             pass
+        # Market already resolved/closed — common on sells of expiring positions.
+        if e.response.status_code == 404 or "market_not_found" in err_text:
+            return jsonify({
+                "error": f"{ticker} already resolved/closed — can't sell (it will settle on its own)",
+                "market_closed": True,
+            }), 409
         return jsonify({"error": f"Sell failed ({e.response.status_code}): {e.response.text[:200]}"}), 502
     except Exception as e:
         print(f"[sell] Exception: {type(e).__name__}: {e}")

@@ -148,6 +148,42 @@ git push
 
 ---
 
+## 2026-06-03 Session 2 — Branch consolidation + multi-bot direction
+
+**Consolidated all branches into one clean `main`** (so a single web Claude Code at
+claude.ai/code can work from PC/laptop/mobile off one repo). Reviewed all 6 branches:
+- **Merged in:** my stop-loss/sell/strategy/cash fixes; the **`/mobile` phone page**
+  (`mobile.html`) + 404 "market closed" handling on buy/sell (from `mobile-local-trading-bot`);
+  the **ghost-position reconciliation** in `/api/portfolio` (drops tracked-"open" positions
+  Kalshi no longer reports, >90s old — from the `drone-evtol` branch's one real fix).
+- **`/api/debug/balance`** (pre-existing, used by mobile page) now routed through the cached
+  `_get_balance()`; `/api/balance` (main page) kept. Both cached now.
+- **Dropped:** the eVTOL/Skyway commits (wrong project), `hello-v68ub` (just MCP perms),
+  and the **port-5003 "kalshi bot 2"** config (superseded via `git merge -s ours`).
+
+**Kalshi = ONE bot on port 5000** (2+ bots on one Kalshi account risks ToS — user confirmed).
+**Port scheme for the user's bots:** 5000 Kalshi, 5001 CNS bot, 5002 CNS-tree, 5003 Binance
+(new), each with a +5100/+51xx manager. Each is its OWN project (don't mix — see router).
+
+**⚠️ KEY ARCHITECTURE GAP (next work):** the bot only runs *in the background* for SELLING
+(the `_monitor` thread). **Scanning + buying runs in the browser tab** (JS auto-mode loop), so
+closing the browser stops buying. The user wants "hit run, close browser, keeps botting" — that
+requires **moving the scan/buy loop into a backend thread**. Applies to CNS/Binance bots too.
+
+**Roadmap:** (1) ✅ clean Kalshi main; (2) move scan/buy to backend (true headless botting);
+(3) build a **"Bots Home" launcher** as its OWN root project (lists Kalshi/CNS/CNS-tree/Binance,
+start/stop each, status); (4) Binance bot (new project).
+
+**Multi-device setup answer:** local Claude Code (PC) = local-only sessions; cloud
+`claude.ai/code` = synced across devices but edits via GitHub only. To use THIS PC's Claude
+(edits+runs the bot) from anywhere: `claude remote-control` on the PC → URL. To centralize: use
+`claude.ai/code` everywhere off the clean repo. Bot must run on one always-on machine; reach its
+dashboard remotely via Tailscale. Never run the bot on two machines at once (caused the dup-process
+chaos: 4× `app.py` + 2 spawners → 429s + cash starvation; fixed by killing all, running one
+manager+app.py).
+
+---
+
 ## 2026-06-03 Session — Cash "—" fix (rate-limit overhaul)
 
 **Symptom:** cash not showing at top (navCash stuck on "—"). **Root cause:** the
