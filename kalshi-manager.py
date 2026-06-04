@@ -75,6 +75,29 @@ class ManagerHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({"status": "restarted"}).encode())
 
+        elif path == "/api/manager/update":
+            # git pull + restart Flask — lets the user deploy new code from any device
+            # (phone/laptop) with zero desktop access. Returns the git output so the UI
+            # can show what changed (or why it failed).
+            result = {"status": "updated"}
+            try:
+                out = subprocess.run(["git", "pull"], cwd=str(HERE),
+                                     capture_output=True, text=True, timeout=90)
+                result["git"] = (out.stdout + out.stderr).strip()[-3000:]
+                result["git_ok"] = (out.returncode == 0)
+            except Exception as e:
+                result["git_error"] = str(e)
+                result["git_ok"] = False
+            stop_flask()
+            time.sleep(1)
+            start_flask()
+            time.sleep(2)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps(result).encode())
+
         else:
             self.send_response(404)
             self.send_header("Access-Control-Allow-Origin", "*")

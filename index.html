@@ -375,6 +375,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <span id="botStatusEl" style="font-weight:600;white-space:nowrap">🔴 Stopped</span>
   </div>
   <button id="snoozeBtn" onclick="toggleVoiceSnooze()" style="background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;padding:6px 12px;margin-left:auto;transition:all .2s;white-space:nowrap" title="Mute the voice announcements for the snooze period (set the duration in Settings)">🔔 Snooze</button>
+  <button id="updateBtn" onclick="updateAndRestart()" style="background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;padding:6px 12px;margin-left:6px;transition:all .2s;white-space:nowrap" title="Pull the latest code from GitHub and restart the bot — deploy updates from any device, no desktop access needed">⟳ Update</button>
   <button onclick="document.getElementById('settingsModal').classList.toggle('open')" style="background:transparent;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:8px 12px;margin-left:6px;transition:color .2s" title="Settings">⚙️</button>
 </nav>
 
@@ -1162,6 +1163,10 @@ async function loadCash() {
     if (d.balance != null) {
       const el = document.getElementById("navCash");
       if (el) { el.textContent = "$" + d.balance.toFixed(2); el.className = "fund-amount cash-val"; }
+    }
+    if (d.positions_value != null) {
+      const el = document.getElementById("navPositions");
+      if (el) el.textContent = "$" + d.positions_value.toFixed(2);
     }
     if (d.portfolio_value != null) {
       const el = document.getElementById("navPortfolio");
@@ -3086,6 +3091,29 @@ function chaChing() {
 
 // Web Speech API for voice announcements
 // ── Voice snooze (mute announcements for a set period) ───────────────────
+// Remote deploy: tell the manager (Flask port + 100) to `git pull` + restart Flask.
+// Lets you ship new code from phone/laptop with zero desktop access.
+async function updateAndRestart() {
+  if (!confirm("Pull the latest code from GitHub and restart the bot?\n\nThe bot will be down for a few seconds, then come back on the new code.")) return;
+  const btn = document.getElementById("updateBtn");
+  const mgrPort = (parseInt(location.port || "5003") + 100);
+  const mgrUrl = `${location.protocol}//${location.hostname}:${mgrPort}/api/manager/update`;
+  if (btn) { btn.disabled = true; btn.textContent = "⟳ Updating…"; }
+  try {
+    const r = await fetch(mgrUrl, { method: "POST" });
+    const d = await r.json().catch(() => ({}));
+    const gitMsg = (d.git || d.git_error || "").split("\n").slice(-4).join("\n");
+    alert((d.git_ok === false ? "⚠️ git pull had issues:\n\n" : "✅ Updated & restarting:\n\n") +
+          (gitMsg || "(no git output)") + "\n\nReloading in 4s…");
+    setTimeout(() => location.reload(true), 4000);
+  } catch(e) {
+    alert("Couldn't reach the manager on port " + mgrPort + ".\n\n" +
+          "Make sure kalshi-manager.py is running (not just app.py), and that port " +
+          mgrPort + " is open in the firewall.\n\nError: " + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = "⟳ Update"; }
+  }
+}
+
 let _voiceSnoozeUntil = 0;     // epoch ms; voice is muted while Date.now() < this
 let _snoozeTickTimer  = null;
 
