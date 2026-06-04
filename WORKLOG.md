@@ -16,6 +16,30 @@
 
 ## Active
 
+## ⏰ PENDING — REMIND USER WHEN THEY SAY "I'm on my PC" (added 2026-06-04)
+
+User is at work on their phone; bot is **left running as-is** on the stub buy defaults
+(80–96% crypto, YES-only, $0.50/contract, ≤15 min). They explicitly said: *let it run for
+now, don't change these yet, remind me later when I'm on my PC.*
+
+**When the user next says they're on their PC, remind them of this approved-but-not-yet-built work:**
+1. **Fix mobile layout** — wallet totals don't show at top on phone; make the page usable on mobile.
+2. **Build live BUY-settings bridge** — the headless bot ignores the UI buy filters. Persist UI
+   buy settings server-side (`buy_settings.json` + `/api/buy-settings`, mirroring sell-settings)
+   and have `_bot_thread` read them each cycle so the bot trades what the UI says (e.g. user's
+   intended **40–60% both sides**), editable live from phone/laptop/desktop.
+3. **Add NO/"down"-side buying** — `_bot_thread` currently only buys YES; add NO support so the
+   "40–60% down" half works.
+4. **Add manager "Update & Restart" button** — `/api/manager/update` that does `git pull` +
+   restart, so future code updates need ZERO desktop access (after one initial pull).
+5. **"Make the AI work"** — user reported the Coach/AI feature isn't working; investigate & fix.
+
+**Deployment constraint to re-explain:** items 1–4 are NEW code → require ONE desktop `git pull`
++ restart to go live. Bot keeps trading on current code meanwhile. SELL settings + Start/Stop are
+already remote-live today (no pull needed). Do NOT start this work until the user gives the go.
+
+---
+
 **Feature request: Add "All" or "Max" button to Ends Within**
 - User wants broad market capture but 24h is the highest preset button
 - Currently: 5min, 10min, 15min, 20min, 30min, 1h, 2h, 3h, 4h, 6h, 12h, 24h, Custom
