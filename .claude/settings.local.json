@@ -87,16 +87,6 @@
         ]
       }
     ],
-    "PostToolUse": [
-      {
-        "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit|PowerShell",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python \"C:\\Users\\mycry\\OneDrive\\Documents\\claude code\\kalshi bot\\.claude\\log_action.py\""
-          }
-        ]
-      }
-    ]
+    "PostToolUse": []
   }
 }
