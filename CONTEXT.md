@@ -9,7 +9,7 @@
 
 Flask + single-page HTML trading bot for [Kalshi](https://kalshi.com) prediction markets.
 **Goal:** Scan, auto-buy, and auto-sell high-probability short-expiry contracts.
-**Run:** `python app.py` → open `http://localhost:5000`
+**Run:** `python app.py` → open `http://localhost:5003`  (manager on 5103)
 **GitHub:** https://github.com/CryptoWorldGames/kalshibot
 
 ---
@@ -202,9 +202,10 @@ claude.ai/code can work from PC/laptop/mobile off one repo). Reviewed all 6 bran
 - **Dropped:** the eVTOL/Skyway commits (wrong project), `hello-v68ub` (just MCP perms),
   and the **port-5003 "kalshi bot 2"** config (superseded via `git merge -s ours`).
 
-**Kalshi = ONE bot on port 5000** (2+ bots on one Kalshi account risks ToS — user confirmed).
-**Port scheme for the user's bots:** 5000 Kalshi, 5001 CNS bot, 5002 CNS-tree, 5003 Binance
-(new), each with a +5100/+51xx manager. Each is its OWN project (don't mix — see router).
+**Kalshi = ONE bot on port 5003** (2+ bots on one Kalshi account risks ToS — user confirmed).
+**Port scheme for the user's bots (updated 2026-06-04):** 5003 Kalshi (manager 5103),
+5004 Binance (manager 5104), 5001 CNS bot, 5002 CNS-tree. Each is its OWN project
+(don't mix — see router). NOTE: Binance claimed 5004/5104, so Kalshi moved 5004 → 5003.
 
 **⚠️ KEY ARCHITECTURE GAP (next work):** the bot only runs *in the background* for SELLING
 (the `_monitor` thread). **Scanning + buying runs in the browser tab** (JS auto-mode loop), so
