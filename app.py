@@ -287,6 +287,10 @@ _MARKET_CACHE_TTL = 60.0   # seconds
 _failed_market_cache: set = set()  # tickers that 404/failed — don't retry for 5 min
 _failed_market_ts: dict = {}  # ticker → timestamp of failure
 
+# Last good open-positions list — served when a fetch comes back empty while the
+# balance API still shows positions (transient empty / the bot starving the API).
+_last_positions_cache: dict = {"data": [], "value": 0.0, "ts": 0.0}
+
 def _get_market(ticker: str) -> dict:
     """Fetch market data with 60s cache to reduce Kalshi API calls."""
     now = time.time()
@@ -1291,12 +1295,14 @@ def portfolio():
         # Also skip anything just sold via the UI (status may not have flushed yet)
         if _is_recently_sold(ticker, info.get("side", "yes")):
             continue
-        # Ghost reconciliation: if the live positions fetch SUCCEEDED but this
-        # tracked-"open" position isn't actually held on Kalshi, it's been sold/
-        # closed (sold on Kalshi directly, or a sell whose status never persisted).
-        # Mark it sold and drop it so it stops reappearing — unless it was bought
-        # in the last 90s (Kalshi post-buy propagation grace).
-        if positions_ok:
+        # Ghost reconciliation: if the live positions fetch SUCCEEDED AND returned a
+        # real (non-empty) position list, but this tracked-"open" position isn't in
+        # it, it's been sold/closed externally — mark it sold so it stops reappearing
+        # (unless bought in the last 90s: Kalshi post-buy propagation grace).
+        # CRITICAL: only do this when raw_positions is NON-EMPTY. An empty result is
+        # almost always the bot starving the API (transient), NOT "everything sold" —
+        # marking all positions sold on a transient empty wipes the whole portfolio.
+        if positions_ok and raw_positions:
             age = _position_age_seconds(info)
             if age is None or age > 90:
                 with _lock:
@@ -1371,6 +1377,18 @@ def portfolio():
             api_positions_value = round(pv_raw / 100, 2)
     except Exception:
         pass
+
+    # Cache the last good positions list. If THIS fetch came back empty but the
+    # balance API still shows open positions, the positions fetch was just starved
+    # by the bot's API traffic — serve the cached list instead of showing nothing.
+    global _last_positions_cache
+    if positions:
+        _last_positions_cache = {"data": positions, "value": round(portfolio_value, 2), "ts": time.time()}
+    elif api_positions_value > 0 and _last_positions_cache.get("data"):
+        positions = _last_positions_cache["data"]
+        positions_ok = False  # tell the frontend this is cached, not a fresh empty
+        if portfolio_value == 0.0:
+            portfolio_value = _last_positions_cache.get("value") or api_positions_value
 
     if portfolio_value == 0.0:
         portfolio_value = api_positions_value
