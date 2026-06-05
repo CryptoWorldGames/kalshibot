@@ -33,3 +33,4 @@ updates.json
 # OS
 .DS_Store
 Thumbs.db
+positions_cache.json
