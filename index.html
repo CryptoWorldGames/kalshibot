@@ -4415,13 +4415,13 @@ function switchTab(name) {
     seedLottoMemDefaults();// ensure M1 preset + memory slot highlights
   }
   if (name === "lottostats") {
-    // Pull fresh positions + settlements, then render the T2 odds tracker.
+    // Pull fresh positions + a wide 30-day settlement history, then render.
     loadPositionsFast();
-    loadSettlements();
+    loadLottoHistory();    // 30d history for the ledger + per-1¢ table
     renderLottoStats();
     setTimeout(renderLottoStats, 1500);  // re-render once data lands
     if (window._lottoStatsRefresh) clearInterval(window._lottoStatsRefresh);
-    if (!document.hidden) window._lottoStatsRefresh = setInterval(renderLottoStats, 15000);
+    if (!document.hidden) window._lottoStatsRefresh = setInterval(() => { loadLottoHistory(); }, 30000);
   } else {
     if (window._lottoStatsRefresh) { clearInterval(window._lottoStatsRefresh); window._lottoStatsRefresh = null; }
   }
@@ -4935,13 +4935,29 @@ function _statBox(label, value, color) {
     <div style="font-size:18px;font-weight:800;color:${color||'#fff'}">${value}</div>
     <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-top:2px">${label}</div></div>`;
 }
+// Pull a wide (30-day) settlement window just for the Lotto history ledger, so it
+// shows a full history without changing the Settled tab's own period filter.
+async function loadLottoHistory() {
+  try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 25000);
+    const r = await fetch("/api/settlements?hours=720", {signal: ctrl.signal});
+    clearTimeout(tid);
+    const d = await r.json();
+    const rows = Array.isArray(d) ? d : (d.settlements || d.recent_settlements || []);
+    if (rows && rows.length) { window._lottoSettlements = rows; renderLottoStats(); }
+  } catch(e) {}
+}
+
 function renderLottoStats() {
   const sumEl = document.getElementById("lottoStatsSummary");
   const bodyEl = document.getElementById("lottoStatsBody");
   if (!sumEl || !bodyEl) return;
 
   const openT2 = (allPositions || []).filter(p => p.profile === "T2" && (p.quantity ?? 0) !== 0 && p.status !== "sold");
-  const settledT2 = (window._lastSettlements || []).filter(s => s.profile === "T2");
+  // Prefer the wide (30d) lotto history if loaded, else fall back to the live settlements.
+  const settledT2 = ((window._lottoSettlements && window._lottoSettlements.length ? window._lottoSettlements : window._lastSettlements) || [])
+    .filter(s => s.profile === "T2");
 
   const openCost = openT2.reduce((a,p) => a + Math.abs((p.quantity||0)*(p.buy_price||0))/100, 0);
   const wins = settledT2.filter(s => s.won);
@@ -4961,34 +4977,65 @@ function renderLottoStats() {
     return;
   }
 
-  // Biggest long-shot WINNERS (lowest entry price first = longest odds that hit)
-  const bigWins = [...wins].sort((a,b) => (a.cost/Math.max(a.count,1)) - (b.cost/Math.max(b.count,1))).slice(0,10);
-  const winsHtml = bigWins.length ? `
-    <div style="font-weight:700;margin:16px 0 6px;color:var(--green)">🏆 Long-shots that HIT</div>
-    <table style="width:100%;font-size:12px"><thead><tr style="color:var(--muted);text-align:left">
-      <th>Market</th><th>Odds</th><th>Staked</th><th>Won</th></tr></thead><tbody>
-      ${bigWins.map(s => { const cps = Math.round(100*s.cost/Math.max(s.count,1)); return `<tr>
-        <td style="padding:4px 0">${esc(s.title||s.ticker)}</td>
-        <td style="color:#ff9416;font-weight:700">${_oddsLabel(cps)}</td>
-        <td>$${(s.cost||0).toFixed(2)}</td>
-        <td style="color:var(--green);font-weight:700">+$${(s.pnl||0).toFixed(2)}</td></tr>`; }).join("")}
-    </tbody></table>` : "";
+  // ── Per-1¢ increment win/loss table (settled T2 bets bucketed by entry price) ──
+  // Each row = one cent of entry price: how many bets, $ invested, how many won,
+  // win ratio, and total P&L. "1¢ bet ×N invested $X won M ratio Y% P&L $Z".
+  const buckets = {};  // cent -> {n, invested, won, pnl}
+  settledT2.forEach(s => {
+    const c = Math.max(1, Math.round(100 * (s.cost || 0) / Math.max(s.count || 1, 1)));
+    const b = buckets[c] || (buckets[c] = {n:0, invested:0, won:0, pnl:0});
+    b.n++; b.invested += (s.cost || 0); if (s.won) b.won++; b.pnl += (s.pnl || 0);
+  });
+  const centRows = Object.keys(buckets).map(Number).sort((a,b)=>a-b);
+  const centTable = centRows.length ? `
+    <div style="font-weight:700;margin:18px 0 6px">📊 Win/Loss by 1¢ bet</div>
+    <div style="overflow-x:auto"><table style="width:100%;font-size:12px;border-collapse:collapse">
+      <thead><tr style="color:var(--muted);text-align:left">
+        <th style="padding:4px">Bet</th><th>Bets</th><th>Invested</th><th>Won</th><th>Win&nbsp;ratio</th><th>P&amp;L</th></tr></thead>
+      <tbody>${centRows.map((c,i) => { const b = buckets[c]; const ratio = Math.round(100*b.won/b.n);
+        const bg = i % 2 ? "#141414" : "transparent"; const pc = b.pnl>=0?"var(--green)":"var(--red)";
+        return `<tr style="background:${bg}">
+          <td style="padding:5px;font-weight:800;color:#ff9416">${c}¢</td>
+          <td>${b.n}</td>
+          <td>$${b.invested.toFixed(2)}</td>
+          <td>${b.won}</td>
+          <td style="color:${ratio>0?'var(--green)':'#aaa'};font-weight:700">${ratio}%</td>
+          <td style="color:${pc};font-weight:800">${b.pnl>=0?'+':''}$${b.pnl.toFixed(2)}</td></tr>`; }).join("")}
+      </tbody></table></div>` : "";
 
-  // Current open long-shots, longest odds first
-  const openSorted = [...openT2].sort((a,b) => (a.buy_price||99) - (b.buy_price||99));
-  const openHtml = openSorted.length ? `
-    <div style="font-weight:700;margin:18px 0 6px">🎟️ Open long-shots (riding)</div>
-    <table style="width:100%;font-size:12px"><thead><tr style="color:var(--muted);text-align:left">
-      <th>Market</th><th>Odds</th><th>Shares</th><th>Staked</th></tr></thead><tbody>
-      ${openSorted.slice(0,30).map(p => { const c = p.buy_price||0; const abs=Math.abs(p.quantity||0); return `<tr>
-        <td style="padding:4px 0">${esc(p.title||p.ticker)}</td>
-        <td style="color:#ff9416;font-weight:700">${_oddsLabel(c)}</td>
-        <td>${abs}</td>
-        <td>$${(abs*c/100).toFixed(2)}</td></tr>`; }).join("")}
-    </tbody></table>` : "";
+  // ── Full history ledger: every buy + sell, one line each, newest first, zebra ──
+  const hist = [];
+  settledT2.forEach(s => {
+    const cps = Math.round(100 * (s.cost || 0) / Math.max(s.count || 1, 1));
+    hist.push({ t: s.settled_time || "", kind: s.won ? "WON" : "LOST",
+      color: s.won ? "var(--green)" : "var(--red)",
+      title: s.title || s.ticker, side: (s.side||"").toUpperCase(),
+      qty: s.count || 0, cents: cps, pnl: s.pnl });
+  });
+  openT2.forEach(p => {
+    const abs = Math.abs(p.quantity || 0);
+    hist.push({ t: p.bought_at || "", kind: "BUY", color: "#5b9dff",
+      title: p.title || p.ticker, side: (p.quantity>=0?"YES":"NO"),
+      qty: abs, cents: p.buy_price || 0, pnl: null });
+  });
+  hist.sort((a,b) => (b.t||"").localeCompare(a.t||""));
+  const fmtTs = iso => { try { const d=new Date(iso); return d.toLocaleString([], {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}); } catch(e){ return "—"; } };
+  const histHtml = hist.length ? `
+    <div style="font-weight:700;margin:18px 0 6px">🧾 History — every buy & sell</div>
+    <div style="overflow-x:auto"><table style="width:100%;font-size:11px;border-collapse:collapse">
+      <tbody>${hist.slice(0,300).map((h,i) => {
+        const bg = i % 2 ? "#141414" : "transparent";
+        const pnl = h.pnl == null ? `<span style="color:#888">open</span>` : `<span style="color:${h.pnl>=0?'var(--green)':'var(--red)'};font-weight:700">${h.pnl>=0?'+':''}$${h.pnl.toFixed(2)}</span>`;
+        return `<tr style="background:${bg}">
+          <td style="padding:4px 6px;white-space:nowrap;color:#888">${fmtTs(h.t)}</td>
+          <td style="font-weight:800;color:${h.color};white-space:nowrap">${h.kind}</td>
+          <td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(h.title)}</td>
+          <td style="white-space:nowrap">${h.side} ${h.qty}×@${h.cents}¢</td>
+          <td style="text-align:right;white-space:nowrap">${pnl}</td></tr>`; }).join("")}
+      </tbody></table></div>
+      ${hist.length>300 ? `<div style="font-size:11px;color:#888;margin-top:6px">Showing newest 300 of ${hist.length}.</div>` : ""}` : "";
 
-  bodyEl.innerHTML = winsHtml + openHtml +
-    (losses.length ? `<div style="margin-top:14px;font-size:12px;color:var(--muted)">${losses.length} long-shots didn't hit (that's expected — the winners pay for them).</div>` : "");
+  bodyEl.innerHTML = centTable + histHtml;
 }
 
 function loadSettings() {
