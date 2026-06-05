@@ -1142,6 +1142,8 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     </div>
     <div id="coachTotals" style="font-size:13px;color:#bbb;margin-bottom:14px"></div>
     <div id="coachRecs" style="margin-bottom:18px"></div>
+    <!-- Lotto (T2) advice — analyzes the long-shot odds, links to the Lotto Stats tab -->
+    <div id="coachLotto" style="margin-bottom:18px"></div>
     <div style="margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--border)">
       <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px;font-weight:700">Ranked Strategy Recommendations</div>
       <div id="coachStrategies" style="display:flex;flex-direction:column;gap:10px"></div>
@@ -3803,6 +3805,41 @@ if (Date.now() - _lastClippy > 6 * 3600 * 1000) {
 
 // ── Coach tab ────────────────────────────────────────────────────────────
 
+// Coach → Lotto (T2) advice: analyzes the long-shot odds from the coach data and
+// gives concrete advice, with a link to the full Lotto Stats tab.
+function renderCoachLotto(d) {
+  const el = document.getElementById("coachLotto");
+  if (!el) return;
+  const link = `<a href="#" onclick="switchTab('lottostats');return false" style="color:var(--blue);text-decoration:none;font-weight:700">See full Lotto Stats →</a>`;
+  const prof = (d.by_profile || []).find(r => r.key === "T2");
+  const bands = (d.lotto_odds || []).filter(r => r.n >= 1);
+
+  if (!prof || prof.n < 1) {
+    el.innerHTML = `<div style="background:#0c0c0e;border:1px solid var(--border);border-left:3px solid #ff9416;border-radius:4px;padding:10px 12px;font-size:13px;color:#bbb">
+      🎟️ <b style="color:#ff9416">Lotto bot</b>: no settled long-shots yet — advice appears once a few resolve. ${link}</div>`;
+    return;
+  }
+
+  const sorted = [...bands].sort((a,b) => b.total_pnl - a.total_pnl);
+  const best = sorted.find(r => r.n >= 3 && r.total_pnl > 0);
+  const worst = [...sorted].reverse().find(r => r.n >= 3 && r.total_pnl < 0);
+  const pnlCol = prof.total_pnl >= 0 ? "var(--green)" : "var(--red)";
+
+  let advice = [];
+  advice.push(`Hit <b>${prof.win_rate}%</b> of <b>${prof.n}</b> long-shots for <b style="color:${pnlCol}">${prof.total_pnl>=0?'+':''}$${prof.total_pnl.toFixed(2)}</b>.`);
+  if (best)  advice.push(`✅ Lean into the <b style="color:var(--green)">${best.key}</b> band — ${best.win_rate}% hit, +$${best.total_pnl.toFixed(2)} over ${best.n}.`);
+  if (worst) advice.push(`⛔ Ease off <b style="color:var(--red)">${worst.key}</b> — ${worst.win_rate}% hit, $${worst.total_pnl.toFixed(2)} over ${worst.n}.`);
+  if (!best && !worst) advice.push(`Not enough per-band data yet — keep it running and check back.`);
+
+  el.innerHTML = `<div style="background:#0c0c0e;border:1px solid var(--border);border-left:3px solid #ff9416;border-radius:4px;padding:10px 14px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <span style="font-weight:800;color:#ff9416;font-size:13px">🎟️ LOTTO BOT (T2) ADVICE</span>
+      <span style="margin-left:auto">${link}</span>
+    </div>
+    <div style="font-size:13px;color:#ddd;line-height:1.5">${advice.map(a=>`<div>${a}</div>`).join("")}</div>
+  </div>`;
+}
+
 async function loadCoach() {
   try {
     // Send current filter settings to Coach for analysis
@@ -3847,6 +3884,8 @@ async function loadCoach() {
         return `<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 12px;background:#0c0c0e;border-left:3px solid ${color};border-radius:4px;margin-bottom:6px;font-size:13px"><span style="color:${color};font-weight:700;min-width:14px">${icon}</span><span>${msg}</span></div>`;
       }).join("");
     }
+
+    renderCoachLotto(d);
 
     const stratEl = document.getElementById("coachStrategies");
     const strats = d.strategies || [];
