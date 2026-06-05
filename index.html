@@ -281,9 +281,13 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   .fab-container{bottom:0;right:0;left:0;gap:2px;flex-direction:row;background:var(--card);border-top:1px solid var(--border);padding:6px 4px;justify-content:center;flex-wrap:wrap}
   .fab{padding:8px 10px;font-size:11px;width:auto;max-width:calc(100vw - 20px);flex:1;min-width:80px}
 
-  /* Tab nav - PREVENT SCROLL. top must clear nav(56)+totals strip(38)=94px, and
-     tighten the bottom margin so there's no big black gap before the content. */
-  .tab-nav{display:flex;gap:0;border-bottom:1px solid var(--border);overflow-x:auto;scroll-behavior:smooth;-webkit-overflow-scrolling:touch;width:100%;max-width:100%;top:94px;margin-bottom:8px}
+  /* Tab nav: must NOT be sticky on mobile. body/html have overflow-x:hidden (to
+     stop sideways scroll), and that BREAKS position:sticky — the tabs detach,
+     float to a random spot over the content, and leave an empty black gap where
+     they belong. Forcing static makes them scroll naturally with the page. The
+     other sticky headers below have the same problem, so neutralize them too. */
+  .tab-nav{display:flex;gap:0;border-bottom:1px solid var(--border);overflow-x:auto;scroll-behavior:smooth;-webkit-overflow-scrolling:touch;width:100%;max-width:100%;position:static !important;top:auto;margin-bottom:8px}
+  #settlementsHeader,#posFilterHeader{position:static !important;top:auto}
   .tab-btn{flex:1;min-width:60px;padding:10px 8px;font-size:12px;border:none;background:transparent;border-bottom:2px solid transparent;white-space:nowrap;width:auto}
   .tab-btn.active{border-bottom-color:var(--green);color:var(--green)}
 
