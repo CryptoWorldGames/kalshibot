@@ -296,10 +296,26 @@ def _load_profiles():
     return {}, "T1"
 
 _profiles, active_profile = _load_profiles()
+# Lotto-style default for T2: buy lots of cheap, far-fetched long-shots (low price =
+# low implied probability = big payout if it hits), across all categories, incl.
+# 15-min crypto. Thin + multi-outcome markets allowed — that's where long-shots live.
+_LOTTO_DEFAULTS = {
+    "enable_buy_up":   True,  "up_min":   1.0,  "up_max":   15.0,   # cheap YES long-shots (1¢–15¢)
+    "enable_buy_down": False, "down_min": 1.0,  "down_max": 15.0,
+    "minutes":         60,        # wider net than the front page, still catches 15-min crypto
+    "buy_amount":      0.50,
+    "max_per_scan":    10,        # buy lots per cycle
+    "max_concurrent":  999,
+    "max_per_market":  1,
+    "show_crypto": True, "show_combo": True, "show_sports": True,
+    "show_politics": True, "show_economics": True,   # all categories on
+    "good_liq": False, "hide_multi": False,          # allow thin + multi-outcome long-shots
+    "min_age_mins": None, "max_age_mins": None, "no_buy_within_mins": None,
+}
 # Seed any missing profile. T1 inherits the existing live buy_settings (so nothing
-# changes for the current bot); T2 starts as a copy of T1 ("copy front-page settings").
+# changes for the current bot); T2 starts as the Lotto preset ("cheap long-shots").
 _profiles.setdefault("T1", dict(buy_settings))
-_profiles.setdefault("T2", dict(_profiles["T1"]))
+_profiles.setdefault("T2", dict(_LOTTO_DEFAULTS))
 for _pid in PROFILE_IDS:
     _profiles[_pid] = {**_DEFAULT_BUY_SETTINGS, **_profiles[_pid]}
 # The bot reads the ACTIVE profile.
@@ -3024,6 +3040,9 @@ def coach():
     bands    = defaultdict(lambda: {"n":0,"wins":0,"pnl":0.0})
     sides    = defaultdict(lambda: {"n":0,"wins":0,"pnl":0.0})
     hours    = defaultdict(lambda: {"n":0,"wins":0,"pnl":0.0})
+    profs    = defaultdict(lambda: {"n":0,"wins":0,"pnl":0.0})   # by bot tab (T1/T2)
+    # Odds-band performance for the Lotto bot specifically (T2 long-shots).
+    lotto_bands = defaultdict(lambda: {"n":0,"wins":0,"pnl":0.0})
 
     total_n = 0
     total_wins = 0
@@ -3051,10 +3070,15 @@ def coach():
         total_pnl += pnl
         if won: total_wins += 1
 
-        for bucket, key in [(cats,cat), (bands, price_band(bp)), (sides, side)]:
+        prof = pos.get("profile") or "T1"
+        for bucket, key in [(cats,cat), (bands, price_band(bp)), (sides, side), (profs, prof)]:
             bucket[key]["n"]    += 1
             bucket[key]["pnl"]  += pnl
             if won: bucket[key]["wins"] += 1
+        if prof == "T2":  # Lotto bot — track which odds bands actually hit
+            lb = lotto_bands[price_band(bp)]
+            lb["n"] += 1; lb["pnl"] += pnl
+            if won: lb["wins"] += 1
         if hr is not None:
             hours[hr]["n"]   += 1
             hours[hr]["pnl"] += pnl
@@ -3080,6 +3104,8 @@ def coach():
     band_rows = rows_from(bands)
     side_rows = rows_from(sides)
     hour_rows = sorted(rows_from(hours), key=lambda r: r["key"])
+    profile_rows = rows_from(profs)        # T1 vs T2 head-to-head
+    lotto_band_rows = rows_from(lotto_bands)  # Lotto bot's odds-band hit rates
 
     # ── Recommendations ──────────────────────────────────────────────────────
     recs = []
@@ -3103,6 +3129,20 @@ def coach():
     if losing_bands:
         worst = min(losing_bands, key=lambda r: r["total_pnl"])
         recs.append({"type":"avoid", "msg": f"Riskiest price band: **{worst['key']}** ({worst['win_rate']}% win rate, ${worst['total_pnl']:.2f})."})
+
+    # ── Lotto bot (T2) odds insight ──────────────────────────────────────────
+    lotto_total = profs.get("T2", {}).get("n", 0)
+    if lotto_total >= sample_min:
+        l_wins = profs["T2"]["wins"]; l_pnl = profs["T2"]["pnl"]
+        l_wr = round(l_wins / lotto_total * 100, 1)
+        recs.append({"type": ("prefer" if l_pnl > 0 else "avoid"),
+                     "msg": f"🎟️ Lotto bot (T2): {l_wr}% of {lotto_total} long-shots hit, "
+                            f"{'+' if l_pnl>=0 else ''}${l_pnl:.2f} total."})
+        best_l = [r for r in lotto_band_rows if r["n"] >= sample_min and r["total_pnl"] > 0]
+        if best_l:
+            b = best_l[0]
+            recs.append({"type":"prefer", "msg": f"🎟️ Lotto's best odds band: **{b['key']}** "
+                                                 f"({b['win_rate']}% hit, +${b['total_pnl']:.2f}) — lean cheaper/dearer toward it."})
 
     if total_n < 5:
         recs.append({"type":"info", "msg": f"Sample size is small ({total_n} trades) — recommendations get sharper with more data."})
@@ -3288,6 +3328,8 @@ def coach():
         "by_price_band": band_rows,
         "by_side":       side_rows,
         "by_hour_utc":   hour_rows,
+        "by_profile":    profile_rows,      # T1 (Scanner) vs T2 (Lotto)
+        "lotto_odds":    lotto_band_rows,   # Lotto bot's hit rate by odds band
         "recommendations": recs,
         "strategies": strategies,
     })

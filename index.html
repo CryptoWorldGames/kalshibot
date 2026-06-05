@@ -482,6 +482,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 <div class="tab-nav">
   <button class="tab-btn active" id="tabScanner" onclick="switchTab('scanner')"><span class="tabLed" id="led-T1"></span>Scanner</button>
   <button class="tab-btn" id="tabLotto" onclick="switchTab('lotto')"><span class="tabLed" id="led-T2"></span>Lotto</button>
+  <button class="tab-btn" id="tabLottoStats" onclick="switchTab('lottostats')">Lotto Stats</button>
   <button class="tab-btn" id="tabPositions" onclick="switchTab('positions')">Positions</button>
   <button class="tab-btn" id="tabSettlements" onclick="switchTab('settlements')">Settled</button>
   <button class="tab-btn" onclick="switchTab('debug')">Debug</button>
@@ -966,11 +967,29 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
         <label style="font-size:12px;color:var(--muted)">Max open positions<br><input type="number" id="L_autoMaxConcurrent" min="1" value="20" onchange="pushLottoSettings()"></label>
         <label style="font-size:12px;color:var(--muted)">Max buys / market<br><input type="number" id="L_maxBuysPerMarket" min="1" value="1" onchange="pushLottoSettings()"></label>
       </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px">
+        <label style="font-size:12px;color:var(--muted)">Min age (min)<br><input type="number" id="L_minAgeMins" min="0" placeholder="any" onchange="pushLottoSettings()"></label>
+        <label style="font-size:12px;color:var(--muted)">Max age (min)<br><input type="number" id="L_maxAgeMins" min="0" placeholder="any" onchange="pushLottoSettings()"></label>
+        <label style="font-size:12px;color:var(--muted)">Skip if &lt; (min) left<br><input type="number" id="L_noBuyWithinMins" min="0" placeholder="off" onchange="pushLottoSettings()"></label>
+      </div>
     </div>
 
-    <div id="L_saveStatus" style="font-size:12px;color:var(--green);margin-top:10px;height:16px"></div>
+    <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
+      <button onclick="resetLottoDefaults()" style="background:#ff941622;color:#ff9416;border:1px solid #ff941655;border-radius:7px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer">🎟️ Reset to Lotto defaults</button>
+      <span id="L_saveStatus" style="font-size:12px;color:var(--green);height:16px"></span>
+    </div>
   </div>
 </div><!-- /tab-lotto -->
+
+<!-- ── Lotto Stats tab (T2 odds tracking) ───────────────────────── -->
+<div id="tab-lottostats" class="tab-pane">
+  <div class="card">
+    <div class="card-title">🎟️ Lotto Stats (T2) — far-fetched tracker</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Only the <b style="color:#ff9416">T2</b> Lotto bot's bets. "Odds" = the price you paid (a 5¢ buy ≈ a 20-to-1 long-shot). Pulls from your live positions + settlements.</div>
+    <div id="lottoStatsSummary" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"></div>
+    <div id="lottoStatsBody" style="color:var(--muted);font-size:13px">Loading…</div>
+  </div>
+</div><!-- /tab-lottostats -->
 
 <!-- ── Positions tab ────────────────────────────────────────────── -->
 <div id="tab-positions" class="tab-pane">
@@ -4348,6 +4367,17 @@ function switchTab(name) {
     loadLottoSettings();   // pull the T2 profile into the form
     loadActiveProfile();   // refresh which bot is active (LED/pill)
   }
+  if (name === "lottostats") {
+    // Pull fresh positions + settlements, then render the T2 odds tracker.
+    loadPositionsFast();
+    loadSettlements();
+    renderLottoStats();
+    setTimeout(renderLottoStats, 1500);  // re-render once data lands
+    if (window._lottoStatsRefresh) clearInterval(window._lottoStatsRefresh);
+    if (!document.hidden) window._lottoStatsRefresh = setInterval(renderLottoStats, 15000);
+  } else {
+    if (window._lottoStatsRefresh) { clearInterval(window._lottoStatsRefresh); window._lottoStatsRefresh = null; }
+  }
   // Hide Start Bot on non-scanner tabs, show Stop Bot everywhere
   const fab = document.getElementById("fab");
   const scanBtn = document.getElementById("scanBtn");
@@ -4673,18 +4703,19 @@ let _pushLottoTimer = null;
 function pushLottoSettings() {
   const chk = id => { const el = document.getElementById(id); return el ? el.checked : false; };
   const num = (id,d) => { const el = document.getElementById(id); const v = parseFloat(el?.value); return isNaN(v)?d:v; };
+  const optNum = id => { const el = document.getElementById(id); return el && el.value !== "" ? parseFloat(el.value) : null; };
   const payload = {
     profile: "T2",
     enable_buy_up:   chk("L_enableBuyUp"),
-    up_min:          num("L_minProb", 80),
-    up_max:          num("L_maxProb", 96),
+    up_min:          num("L_minProb", 1),
+    up_max:          num("L_maxProb", 15),
     enable_buy_down: chk("L_enableBuyDown"),
-    down_min:        num("L_minProbDown", 80),
-    down_max:        num("L_maxProbDown", 96),
-    minutes:         num("L_minutes", 15),
+    down_min:        num("L_minProbDown", 1),
+    down_max:        num("L_maxProbDown", 15),
+    minutes:         num("L_minutes", 60),
     buy_amount:      num("L_buyAmount", 0.50),
-    max_per_scan:    num("L_autoMaxPerScan", 3),
-    max_concurrent:  num("L_autoMaxConcurrent", 20),
+    max_per_scan:    num("L_autoMaxPerScan", 10),
+    max_concurrent:  num("L_autoMaxConcurrent", 999),
     max_per_market:  num("L_maxBuysPerMarket", 1),
     show_crypto:     chk("L_showCrypto"),
     show_combo:      chk("L_showCombo"),
@@ -4693,6 +4724,9 @@ function pushLottoSettings() {
     show_economics:  chk("L_showEconomics"),
     good_liq:        chk("L_goodLiq"),
     hide_multi:      chk("L_hideMultiOutcome"),
+    min_age_mins:    optNum("L_minAgeMins"),
+    max_age_mins:    optNum("L_maxAgeMins"),
+    no_buy_within_mins: optNum("L_noBuyWithinMins"),
   };
   const st = document.getElementById("L_saveStatus");
   if (st) st.textContent = "Saving…";
@@ -4717,7 +4751,92 @@ async function loadLottoSettings() {
     chk("L_showCrypto", s.show_crypto); chk("L_showCombo", s.show_combo); chk("L_showSports", s.show_sports);
     chk("L_showPolitics", s.show_politics); chk("L_showEconomics", s.show_economics);
     chk("L_goodLiq", s.good_liq); chk("L_hideMultiOutcome", s.hide_multi);
+    set("L_minAgeMins", s.min_age_mins); set("L_maxAgeMins", s.max_age_mins); set("L_noBuyWithinMins", s.no_buy_within_mins);
   } catch(e) {}
+}
+
+// Fill the Lotto form with the cheap-long-shot preset and save it.
+function resetLottoDefaults() {
+  const setV = (id,v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  const setC = (id,v) => { const el = document.getElementById(id); if (el) el.checked = v; };
+  setC("L_enableBuyUp", true);  setV("L_minProb", 1);  setV("L_maxProb", 15);
+  setC("L_enableBuyDown", false); setV("L_minProbDown", 1); setV("L_maxProbDown", 15);
+  setV("L_minutes", 60); setV("L_buyAmount", 0.50);
+  setV("L_autoMaxPerScan", 10); setV("L_autoMaxConcurrent", 999); setV("L_maxBuysPerMarket", 1);
+  setC("L_showCrypto", true); setC("L_showCombo", true); setC("L_showSports", true);
+  setC("L_showPolitics", true); setC("L_showEconomics", true);
+  setC("L_goodLiq", false); setC("L_hideMultiOutcome", false);
+  setV("L_minAgeMins", ""); setV("L_maxAgeMins", ""); setV("L_noBuyWithinMins", "");
+  pushLottoSettings();
+  toast("Lotto reset to cheap-long-shot defaults", "ok");
+}
+
+// ── Lotto Stats: tracks the T2 bot's far-fetched bets, odds, and wins ──────
+// Odds language: entry price in cents ≈ implied %. A 5¢ buy ≈ "20-to-1".
+function _oddsLabel(cents) {
+  if (!cents || cents <= 0) return "—";
+  const x = Math.max(1, Math.round((100 - cents) / cents));  // payout multiple ≈ (1-p)/p
+  return `${x}-to-1`;
+}
+function _statBox(label, value, color) {
+  return `<div style="flex:1 1 90px;min-width:90px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
+    <div style="font-size:18px;font-weight:800;color:${color||'#fff'}">${value}</div>
+    <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-top:2px">${label}</div></div>`;
+}
+function renderLottoStats() {
+  const sumEl = document.getElementById("lottoStatsSummary");
+  const bodyEl = document.getElementById("lottoStatsBody");
+  if (!sumEl || !bodyEl) return;
+
+  const openT2 = (allPositions || []).filter(p => p.profile === "T2" && (p.quantity ?? 0) !== 0 && p.status !== "sold");
+  const settledT2 = (window._lastSettlements || []).filter(s => s.profile === "T2");
+
+  const openCost = openT2.reduce((a,p) => a + Math.abs((p.quantity||0)*(p.buy_price||0))/100, 0);
+  const wins = settledT2.filter(s => s.won);
+  const losses = settledT2.filter(s => !s.won);
+  const settledPnl = settledT2.reduce((a,s) => a + (s.pnl||0), 0);
+  const winRate = settledT2.length ? Math.round(100*wins.length/settledT2.length) : 0;
+
+  sumEl.innerHTML =
+    _statBox("Open bets", openT2.length, "#ff9416") +
+    _statBox("Staked", "$"+openCost.toFixed(2)) +
+    _statBox("Settled", settledT2.length) +
+    _statBox("Hit rate", winRate+"%", winRate>0?"var(--green)":"#fff") +
+    _statBox("Lotto P&L", (settledPnl>=0?"+":"")+"$"+settledPnl.toFixed(2), settledPnl>=0?"var(--green)":"var(--red)");
+
+  if (!openT2.length && !settledT2.length) {
+    bodyEl.innerHTML = `<div style="text-align:center;padding:30px;color:var(--muted)">No Lotto (T2) bets yet. Activate the <b>Lotto</b> bot and it'll start buying cheap long-shots — they'll show up here with their odds.</div>`;
+    return;
+  }
+
+  // Biggest long-shot WINNERS (lowest entry price first = longest odds that hit)
+  const bigWins = [...wins].sort((a,b) => (a.cost/Math.max(a.count,1)) - (b.cost/Math.max(b.count,1))).slice(0,10);
+  const winsHtml = bigWins.length ? `
+    <div style="font-weight:700;margin:16px 0 6px;color:var(--green)">🏆 Long-shots that HIT</div>
+    <table style="width:100%;font-size:12px"><thead><tr style="color:var(--muted);text-align:left">
+      <th>Market</th><th>Odds</th><th>Staked</th><th>Won</th></tr></thead><tbody>
+      ${bigWins.map(s => { const cps = Math.round(100*s.cost/Math.max(s.count,1)); return `<tr>
+        <td style="padding:4px 0">${esc(s.title||s.ticker)}</td>
+        <td style="color:#ff9416;font-weight:700">${_oddsLabel(cps)}</td>
+        <td>$${(s.cost||0).toFixed(2)}</td>
+        <td style="color:var(--green);font-weight:700">+$${(s.pnl||0).toFixed(2)}</td></tr>`; }).join("")}
+    </tbody></table>` : "";
+
+  // Current open long-shots, longest odds first
+  const openSorted = [...openT2].sort((a,b) => (a.buy_price||99) - (b.buy_price||99));
+  const openHtml = openSorted.length ? `
+    <div style="font-weight:700;margin:18px 0 6px">🎟️ Open long-shots (riding)</div>
+    <table style="width:100%;font-size:12px"><thead><tr style="color:var(--muted);text-align:left">
+      <th>Market</th><th>Odds</th><th>Shares</th><th>Staked</th></tr></thead><tbody>
+      ${openSorted.slice(0,30).map(p => { const c = p.buy_price||0; const abs=Math.abs(p.quantity||0); return `<tr>
+        <td style="padding:4px 0">${esc(p.title||p.ticker)}</td>
+        <td style="color:#ff9416;font-weight:700">${_oddsLabel(c)}</td>
+        <td>${abs}</td>
+        <td>$${(abs*c/100).toFixed(2)}</td></tr>`; }).join("")}
+    </tbody></table>` : "";
+
+  bodyEl.innerHTML = winsHtml + openHtml +
+    (losses.length ? `<div style="margin-top:14px;font-size:12px;color:var(--muted)">${losses.length} long-shots didn't hit (that's expected — the winners pay for them).</div>` : "");
 }
 
 function loadSettings() {
