@@ -238,7 +238,10 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   /* Show the Cash / Portfolio / Total figures as a compact fixed strip directly
      under the nav — this is what the user wants visible up top on the phone. */
   .nav-funds{display:flex !important;flex-direction:row;position:fixed;top:56px;left:0;right:0;height:38px;background:#0f0f0f;border-bottom:1px solid var(--border);z-index:101;gap:0;margin:0;align-items:stretch}
-  #navPnlAll{display:none}
+  /* Hide the P&L columns on phones — !important beats the inline style on the div.
+     Keeps just the 3 core totals (Cash / Portfolio / Portfolio+Cash) so they're
+     wide and readable instead of 10 boxes overlapping. */
+  #navPnlAll{display:none !important}
   button.nav-btn{font-size:11px;padding:4px 8px;margin-left:4px}
 
   /* Main content - CRITICAL FIX */
@@ -289,11 +292,12 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   thead th{padding:8px 6px;font-size:11px}
   td{padding:6px 4px;font-size:11px;overflow:hidden;text-overflow:ellipsis}
 
-  /* Wallet total blocks — compact, evenly split across the fixed strip */
-  .fund-block{display:flex !important;flex:1 1 0;min-width:0;flex-direction:column;align-items:center;justify-content:center;padding:2px 2px;border-right:1px solid var(--border);border-left:none;text-align:center}
+  /* Wallet total blocks — 3 even columns across the fixed strip, no overflow */
+  .fund-block{display:flex !important;flex:1 1 0;min-width:0;flex-direction:column;align-items:center;justify-content:center;padding:2px 4px;border-right:1px solid var(--border);border-left:none;text-align:center;overflow:hidden}
   .fund-block:first-child{border-left:none}
-  .fund-amount{font-size:14px;line-height:1.1}
-  .fund-label{font-size:8px;margin-top:0;letter-spacing:.2px}
+  .fund-block:last-child{border-right:none}
+  .fund-amount{font-size:14px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  .fund-label{font-size:8px;margin-top:0;letter-spacing:.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
   .market-title-tooltip{display:none}
 
   /* Checkboxes and labels */
