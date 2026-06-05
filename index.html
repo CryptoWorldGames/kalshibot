@@ -230,11 +230,15 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   /* CRITICAL MOBILE FIXES - NO OVERFLOW */
   *{box-sizing:border-box}
   html{width:100%;overflow-x:hidden}
-  body{font-size:16px;padding-top:56px;width:100%;overflow-x:hidden;margin:0;padding-left:0;padding-right:0}
+  /* nav (56) + wallet totals bar (38) = 94px reserved at top */
+  body{font-size:16px;padding-top:94px;width:100%;overflow-x:hidden;margin:0;padding-left:0;padding-right:0}
 
   nav{height:56px;padding:0 8px;width:100%}
   .nav-logo{font-size:14px;margin-right:8px}
-  .nav-funds{flex-direction:column;gap:0;display:none}
+  /* Show the Cash / Portfolio / Total figures as a compact fixed strip directly
+     under the nav — this is what the user wants visible up top on the phone. */
+  .nav-funds{display:flex !important;flex-direction:row;position:fixed;top:56px;left:0;right:0;height:38px;background:#0f0f0f;border-bottom:1px solid var(--border);z-index:101;gap:0;margin:0;align-items:stretch}
+  #navPnlAll{display:none}
   button.nav-btn{font-size:11px;padding:4px 8px;margin-left:4px}
 
   /* Main content - CRITICAL FIX */
@@ -274,8 +278,9 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   .fab-container{bottom:0;right:0;left:0;gap:2px;flex-direction:row;background:var(--card);border-top:1px solid var(--border);padding:6px 4px;justify-content:center;flex-wrap:wrap}
   .fab{padding:8px 10px;font-size:11px;width:auto;max-width:calc(100vw - 20px);flex:1;min-width:80px}
 
-  /* Tab nav - PREVENT SCROLL */
-  .tab-nav{display:flex;gap:0;border-bottom:1px solid var(--border);overflow-x:auto;scroll-behavior:smooth;-webkit-overflow-scrolling:touch;width:100%;max-width:100%}
+  /* Tab nav - PREVENT SCROLL. top must clear nav(56)+totals strip(38)=94px, and
+     tighten the bottom margin so there's no big black gap before the content. */
+  .tab-nav{display:flex;gap:0;border-bottom:1px solid var(--border);overflow-x:auto;scroll-behavior:smooth;-webkit-overflow-scrolling:touch;width:100%;max-width:100%;top:94px;margin-bottom:8px}
   .tab-btn{flex:1;min-width:60px;padding:10px 8px;font-size:12px;border:none;background:transparent;border-bottom:2px solid transparent;white-space:nowrap;width:auto}
   .tab-btn.active{border-bottom-color:var(--green);color:var(--green)}
 
@@ -284,8 +289,11 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   thead th{padding:8px 6px;font-size:11px}
   td{padding:6px 4px;font-size:11px;overflow:hidden;text-overflow:ellipsis}
 
-  /* Hide unnecessary desktop elements */
-  .fund-block{display:none}
+  /* Wallet total blocks — compact, evenly split across the fixed strip */
+  .fund-block{display:flex !important;flex:1 1 0;min-width:0;flex-direction:column;align-items:center;justify-content:center;padding:2px 2px;border-right:1px solid var(--border);border-left:none;text-align:center}
+  .fund-block:first-child{border-left:none}
+  .fund-amount{font-size:14px;line-height:1.1}
+  .fund-label{font-size:8px;margin-top:0;letter-spacing:.2px}
   .market-title-tooltip{display:none}
 
   /* Checkboxes and labels */
@@ -329,9 +337,14 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 
 /* Extra small screens (320px-375px) */
 @media(max-width:375px){
-  body{font-size:13px;padding-top:48px;width:100%;overflow-x:hidden}
+  /* nav (48) + wallet totals bar (34) = 82px reserved at top */
+  body{font-size:13px;padding-top:82px;width:100%;overflow-x:hidden}
   nav{height:48px;padding:0 6px;width:100%}
   .nav-logo{font-size:12px;margin-right:6px}
+  .nav-funds{top:48px;height:34px}
+  .fund-amount{font-size:12px}
+  .fund-label{font-size:7px}
+  .tab-nav{top:82px}
   .main{padding:4px 6px 80px;width:100%;max-width:100%;overflow-x:hidden}
   h1{font-size:16px;word-wrap:break-word}
 
@@ -1472,6 +1485,11 @@ window.addEventListener("load", () => {
   // Phase 1 (0-2s): Load positions + balance WITHOUT market enrichment
   loadBalance(false);
 
+  // Keep the Start/Stop button + banner PERMANENTLY in sync with the real backend
+  // bot state — poll every 3s no matter what. Without this the button drifts and
+  // shows "Start Bot" while the bot is actually running (then clicking it errors).
+  setInterval(loadBotStatus, 3000);
+
   // Phase 2 (2-5s): Enrich positions with market data
   setTimeout(() => {
     enrichPositionMarkets();
@@ -2113,13 +2131,18 @@ async function startAutoMode() {
   // Tell the backend to start its headless trading loop
   try {
     const r = await fetch("/api/bot/start", {method: "POST"});
-    const d = await r.json();
+    const d = await r.json().catch(() => ({}));
     if (!r.ok) {
-      alert("Bot start failed: " + (d.error || r.status));
-      return;
+      // "Already running" is NOT an error — the backend bot is on, so silently
+      // adopt that state instead of popping an ugly alert. Only real failures toast.
+      const msg = (d.error || "").toLowerCase();
+      if (!(r.status === 409 || msg.includes("already"))) {
+        toast("Bot start failed: " + (d.error || r.status), "err");
+        return;
+      }
     }
   } catch(e) {
-    alert("Could not reach bot backend: " + e.message);
+    toast("Could not reach bot backend: " + e.message, "err");
     return;
   }
 
