@@ -208,11 +208,18 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
    dark when not — visible from any tab so you can see which bot is running. */
 .tabLed{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle;background:#3a3a3a;box-shadow:none;transition:all .2s}
 .tabLed.on{background:#ff9416;box-shadow:0 0 6px 1px #ff9416cc}
-/* Active/Inactive pill shown at the top inside each bot tab. */
-.activePill{display:inline-flex;align-items:center;gap:7px;cursor:pointer;border:1px solid var(--border);border-radius:20px;padding:6px 14px;font-size:13px;font-weight:800;color:var(--muted);background:transparent;user-select:none;transition:all .2s}
-.activePill .dot{width:9px;height:9px;border-radius:50%;background:#3a3a3a}
-.activePill.on{color:#0a0a0a;background:var(--green);border-color:var(--green)}
-.activePill.on .dot{background:#0a0a0a}
+/* Per-bot ON/OFF switch + its header box (identical on the Scanner & Lotto tabs). */
+.botHeader{display:flex;align-items:center;gap:12px;border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin:10px 0 14px;background:#0d0d0f}
+.botHeaderTxt{font-size:12px;color:var(--muted);line-height:1.4}
+.botSwitch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;border-radius:20px;padding:8px 18px;font-size:14px;font-weight:900;letter-spacing:.5px;border:2px solid #4a4a4a;color:#888;background:#161616;user-select:none;transition:all .2s;min-width:84px;justify-content:center}
+.botSwitch .dot{width:11px;height:11px;border-radius:50%;background:#555;transition:all .2s}
+.botSwitch.on{color:#0a0a0a;background:var(--green);border-color:var(--green);box-shadow:0 0 10px 1px #00d97e55}
+.botSwitch.on .dot{background:#0a0a0a}
+/* Dot-select sell rows — shared by the Scanner (T1) & Lotto (T2) tabs so they match. */
+.lottoSellOpt{border-radius:7px;cursor:pointer}
+.lottoSellOpt:hover{background:#0e0e10}
+.lottoSellOpt input[type=number]{background:#111;border:1px solid var(--border);border-radius:6px;color:#fff;font-size:14px;font-weight:700;padding:6px 9px;outline:none}
+.lottoSellOpt input[type=radio]{cursor:pointer}
 /* Tiny T1/T2 tag showing which bot/tab made a buy. */
 .tabtag{display:inline-block;font-size:10px;font-weight:800;padding:1px 6px;border-radius:4px;background:#ff941622;color:#ff9416;border:1px solid #ff941655}
 /* Lotto memory slots (M1–M5) */
@@ -510,10 +517,10 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 
 <div id="tab-scanner" class="tab-pane active">
 
-<!-- Active-bot toggle: this is the T1 (front-page) bot. Only one bot runs at a time. -->
-<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-  <div class="activePill" id="pill-T1" onclick="setActiveProfile('T1')"><span class="dot"></span><span id="pillText-T1">Inactive</span></div>
-  <span style="font-size:12px;color:var(--muted)">Scanner bot <b style="color:#ff9416">T1</b> — tap to run/stop this bot (can run alongside others)</span>
+<!-- Per-bot ON/OFF switch (T1 = Scanner). Bots can run at the same time. -->
+<div class="botHeader">
+  <div class="botSwitch" id="pill-T1" onclick="setActiveProfile('T1')" role="button" title="Turn the Scanner bot on/off"><span class="dot"></span><span id="pillText-T1">OFF</span></div>
+  <div class="botHeaderTxt"><b style="color:#fff">Scanner Bot</b> <span style="color:#ff9416;font-weight:800">T1</span> — tap the switch to turn this bot on or off. Bots can run at the same time as the Lotto bot.</div>
 </div>
 
 <!-- Inline Coach (always visible on main page) -->
@@ -796,86 +803,29 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   <div class="card-title" onclick="document.getElementById('stratBody').style.display = document.getElementById('stratBody').style.display === 'none' ? 'block' : 'none'; this.style.cursor='pointer'" style="cursor:pointer;user-select:none">
     Sell Strategy <span style="font-weight:400;color:#aaa;font-size:12px">(applies to all new buys)</span> <span style="font-size:11px;color:#666;margin-left:10px">◀ click to collapse</span>
   </div>
-  <div id="stratBody" style="display:flex;flex-direction:column;gap:8px">
+  <div id="stratBody" style="display:flex;flex-direction:column;gap:0">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Pick the sell rule with the dot. The values stay editable so you can set whichever one you choose.</div>
 
-    <!-- Option 1: Hold until resolution -->
-    <label class="radio-pill active" id="pillResolution" onclick="setStrategy('resolution')" style="align-items:center">
-      <input type="radio" name="strat" value="resolution" checked>
-      <span>⏳ Wait for resolution</span>
-      <span style="font-size:11px;color:#888;margin-left:8px">bot holds until market closes</span>
+    <!-- Same dot-select layout as the Lotto (T2) tab so both pages match. -->
+    <label class="lottoSellOpt" style="display:flex;align-items:center;gap:10px;padding:9px 4px">
+      <input type="radio" name="strat" value="resolution" checked onchange="setStrategy('resolution')" style="accent-color:var(--green);width:18px;height:18px">
+      <span style="font-size:13px">⏳ Wait for resolution <span style="color:var(--muted)">(holds until market closes)</span></span>
     </label>
-
-    <!-- Option 2: Sell at % profit -->
-    <label class="radio-pill" id="pillProfit" onclick="setStrategy('profit')" style="align-items:center">
-      <input type="radio" name="strat" value="profit">
-      <span>📈 Sell at % profit:</span>
+    <label class="lottoSellOpt" style="display:flex;align-items:center;gap:10px;padding:9px 4px;flex-wrap:wrap">
+      <input type="radio" name="strat" value="profit" onchange="setStrategy('profit')" style="accent-color:var(--green);width:18px;height:18px">
+      <span style="font-size:13px">📈 Sell at % profit:</span>
+      <input type="number" id="profitCustom" value="10" min="1" step="1" onclick="setStrategy('profit')" onchange="stratPct=parseFloat(this.value)||10;setStrategy('profit')" style="width:74px"><span style="color:var(--muted)">%</span>
     </label>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding-left:12px" onclick="setStrategy('profit')">
-      <div class="btn-group" id="profitGroup" style="margin:0">
-        <button class="pill" onclick="setProfit(5)">5%</button>
-        <button class="pill active" onclick="setProfit(10)">10%</button>
-        <button class="pill" onclick="setProfit(15)">15%</button>
-        <button class="pill" onclick="setProfit(20)">20%</button>
-        <button class="pill" onclick="setProfit(25)">25%</button>
-      </div>
-      <div style="display:flex;align-items:center;gap:4px">
-        <input type="number" id="profitCustom" value="10" min="1" step="1"
-          style="width:72px;background:#111;border:2px solid var(--green);border-radius:7px;color:var(--green);font-size:15px;font-weight:700;padding:7px 10px;outline:none"
-          placeholder="% custom"
-          onclick="event.stopPropagation();setStrategy('profit')"
-          onblur="stratPct=parseFloat(this.value)||10;activatePills('profitGroup','');setStrategy('profit');saveSettings();pushStrategy()">
-        <span style="color:var(--green);font-size:14px;font-weight:700">%</span>
-      </div>
-    </div>
-
-    <!-- Option 3: Sell at $ profit -->
-    <label class="radio-pill" id="pillProfitDol" onclick="setStrategy('profit_dollars')" style="align-items:center">
-      <input type="radio" name="strat" value="profit_dollars">
-      <span>💵 Sell at $ profit:</span>
+    <label class="lottoSellOpt" style="display:flex;align-items:center;gap:10px;padding:9px 4px;flex-wrap:wrap">
+      <input type="radio" name="strat" value="profit_dollars" onchange="setStrategy('profit_dollars')" style="accent-color:var(--green);width:18px;height:18px">
+      <span style="font-size:13px">💵 Sell at $ profit:</span>
+      <span style="color:var(--muted)">$</span><input type="number" id="profitDolCustom" value="0.05" min="0.01" step="0.01" onclick="setStrategy('profit_dollars')" onchange="setStrategy('profit_dollars')" style="width:84px">
     </label>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding-left:12px" onclick="setStrategy('profit_dollars')">
-      <div class="btn-group" id="profitDolGroup" style="margin:0">
-        <button class="pill" onclick="setProfitDol(0.05)">$0.05</button>
-        <button class="pill" onclick="setProfitDol(0.10)">$0.10</button>
-        <button class="pill" onclick="setProfitDol(0.25)">$0.25</button>
-        <button class="pill" onclick="setProfitDol(0.50)">$0.50</button>
-        <button class="pill" onclick="setProfitDol(1.00)">$1.00</button>
-      </div>
-      <div style="display:flex;align-items:center;gap:4px">
-        <span style="color:var(--green);font-size:14px;font-weight:700">$</span>
-        <input type="number" id="profitDolCustom" value="0.05" min="0.01" step="0.01"
-          style="width:85px;background:#111;border:2px solid var(--green);border-radius:7px;color:var(--green);font-size:15px;font-weight:700;padding:7px 10px;outline:none"
-          placeholder="$ custom"
-          onclick="event.stopPropagation();setStrategy('profit_dollars')"
-          onblur="setStrategy('profit_dollars');saveSettings();pushStrategy()">
-      </div>
-    </div>
-
-    <!-- Option 4: Sell when price hits X cents -->
-    <label class="radio-pill" id="pillProfitPrice" onclick="setStrategy('target_price')" style="align-items:center">
-      <input type="radio" name="strat" value="target_price">
-      <span>🎯 Sell when price hits X¢</span>
+    <label class="lottoSellOpt" style="display:flex;align-items:center;gap:10px;padding:9px 4px;flex-wrap:wrap">
+      <input type="radio" name="strat" value="target_price" onchange="setStrategy('target_price')" style="accent-color:var(--green);width:18px;height:18px">
+      <span style="font-size:13px">🎯 Sell when price hits:</span>
+      <input type="number" id="targetPriceCustom" value="35" min="1" max="99" step="1" onclick="setStrategy('target_price')" onchange="setStrategy('target_price');checkStrategyConflicts()" style="width:74px"><span style="color:var(--muted)">¢</span>
     </label>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding-left:12px" onclick="setStrategy('target_price')">
-      <div class="btn-group" id="profitPriceGroup" style="margin:0">
-        <button class="pill" onclick="setTargetPrice(30)">30¢</button>
-        <button class="pill" onclick="setTargetPrice(40)">40¢</button>
-        <button class="pill" onclick="setTargetPrice(50)">50¢</button>
-        <button class="pill" onclick="setTargetPrice(60)">60¢</button>
-        <button class="pill" onclick="setTargetPrice(75)">75¢</button>
-        <button class="pill" onclick="setTargetPrice(90)">90¢</button>
-      </div>
-      <div style="display:flex;align-items:center;gap:4px" onclick="event.stopPropagation()">
-        <input type="number" id="targetPriceCustom" value="35" min="1" max="99" step="1"
-          style="width:72px;background:#111;border:2px solid var(--green);border-radius:7px;color:var(--green);font-size:15px;font-weight:700;padding:7px 10px;outline:none"
-          placeholder="¢ sell"
-          onclick="setStrategy('target_price')"
-          onblur="setStrategy('target_price');saveSettings();pushStrategy();checkStrategyConflicts()">
-        <span style="color:var(--green);font-size:14px;font-weight:700">¢</span>
-      </div>
-    </div>
-
-
   </div>
     <div id="stratConflictWarn" style="display:none;background:#3a1a00;border:1px solid var(--yellow);color:var(--yellow);border-radius:6px;padding:8px 12px;font-size:12px;margin:8px 0"></div>
 
@@ -916,9 +866,9 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 
 <!-- ── Lotto tab (T2 bot) ───────────────────────────────────────── -->
 <div id="tab-lotto" class="tab-pane">
-  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
-    <div class="activePill" id="pill-T2" onclick="setActiveProfile('T2')"><span class="dot"></span><span id="pillText-T2">Inactive</span></div>
-    <span style="font-size:12px;color:var(--muted)">Lotto bot <b style="color:#ff9416">T2</b> — tap to run/stop this bot (can run alongside the regular bot)</span>
+  <div class="botHeader">
+    <div class="botSwitch" id="pill-T2" onclick="setActiveProfile('T2')" role="button" title="Turn the Lotto bot on/off"><span class="dot"></span><span id="pillText-T2">OFF</span></div>
+    <div class="botHeaderTxt"><b style="color:#fff">Lotto Bot</b> <span style="color:#ff9416;font-weight:800">T2</span> — tap the switch to turn this bot on or off. Bots can run at the same time as the Scanner bot.</div>
   </div>
 
   <!-- M1–M5 memory slots (Lotto page ONLY) — like a calculator's memory buttons -->
@@ -2237,13 +2187,14 @@ function syncFabButtons() {
     if (botBtn) { botBtn.textContent = "⏹ Stop Bot"; botBtn.style.background = "#ff4d4d"; botBtn.style.color = "#fff"; }
     if (barStatus) { barStatus.textContent = "✓ Running"; barStatus.style.color = "#00d97e"; barStatus.style.borderColor = "#00d97e"; }
     if (statusBar) { statusBar.style.background = "#00d97e"; statusBar.style.display = "flex"; }
-    if (centerStatus) { centerStatus.textContent = "✓ BOT RUNNING"; centerStatus.style.color = "#000"; }
+    if (centerStatus) centerStatus.style.color = "#000";
   } else {
     if (botBtn) { botBtn.textContent = "▶ Start Bot"; botBtn.style.background = "#00d97e"; botBtn.style.color = "#000"; }
     if (barStatus) { barStatus.textContent = "✗ Stopped"; barStatus.style.color = "#ff4d4d"; barStatus.style.borderColor = "#ff4d4d"; }
     if (statusBar) { statusBar.style.background = "#2a2a2a"; statusBar.style.display = "flex"; }
-    if (centerStatus) { centerStatus.textContent = "✗ BOT STOPPED — click Start Bot"; centerStatus.style.color = "#fff"; }
+    if (centerStatus) centerStatus.style.color = "#fff";
   }
+  refreshBotBar();   // compose the bar text from engine + active bots
 }
 
 let _lastScanResultsTs = 0; // timestamp of last scan that found results
@@ -4249,7 +4200,7 @@ function updateBotControlBar() {
         status.textContent = "✓ Bot Running";
         status.style.color = "#00d97e";
         status.style.borderColor = "#00d97e";
-        if (centerStatus) centerStatus.textContent = "✓ BOT RUNNING";
+        if (centerStatus) { centerStatus.style.color = "#000"; refreshBotBar(); }
         if (statusBar) {
           statusBar.style.background = "#00d97e";
           statusBar.style.display = "flex";
@@ -4262,8 +4213,8 @@ function updateBotControlBar() {
         status.style.color = "#ff4d4d";
         status.style.borderColor = "#ff4d4d";
         if (centerStatus) {
-          centerStatus.textContent = "✗ BOT STOPPED";
           centerStatus.style.color = "#000";
+          refreshBotBar();
         }
         if (statusBar) {
           statusBar.style.background = "#ff4d4d";
@@ -4756,11 +4707,11 @@ function pushBuySettings(immediate=false) {
 }
 
 // ── Multi-bot profiles (T1 = Scanner front page, T2 = Lotto tab) ──────────
-// Only ONE profile is active (the running bot) at a time. The LEDs on the tab
-// buttons and the Active pills inside each tab reflect which one.
-let _activeProfile = ["T1"];   // list of active bots (multiple may run at once)
+// Bots run INDEPENDENTLY — any combination of T1/T2 can be on at the same time.
+// Each tab has its own ON/OFF switch; the LEDs on the tab buttons mirror them.
+let _activeProfile = [];   // list of bots currently switched ON
 
-// `active` is now a LIST of running bots — multiple can be on at once.
+// `active` is a LIST of running bots — multiple can be on at once.
 function updateProfileUI(active) {
   const list = Array.isArray(active) ? active : (active ? [active] : []);
   _activeProfile = list;
@@ -4771,9 +4722,25 @@ function updateProfileUI(active) {
     const txt  = document.getElementById(tid);
     const led  = document.getElementById(lid);
     if (pill) pill.classList.toggle("on", on);
-    if (txt)  txt.textContent = on ? "Active" : "Inactive";
+    if (txt)  txt.textContent = on ? "ON" : "OFF";
     if (led)  led.classList.toggle("on", on);
   });
+  refreshBotBar();   // keep the top status bar in sync with which bots are on
+}
+
+// The top green bar reflects the REAL state: master engine + which bots are on,
+// so it never contradicts a tab's switch (e.g. "RUNNING: Scanner" while Lotto is OFF).
+function botBarText() {
+  const engineOn = (typeof autoModeOn !== "undefined" && autoModeOn) ||
+                   (typeof botIsRunning !== "undefined" && botIsRunning);
+  if (!engineOn) return "✗ BOT STOPPED — tap Start Bot";
+  const names = (_activeProfile || []).map(p => p === "T1" ? "Scanner" : p === "T2" ? "Lotto" : p);
+  if (!names.length) return "⏸ Engine on — no bots switched on yet";
+  return "✓ RUNNING: " + names.join(" + ");
+}
+function refreshBotBar() {
+  const c = document.getElementById("botStatusCenter");
+  if (c) c.textContent = botBarText();
 }
 
 async function loadActiveProfile() {
