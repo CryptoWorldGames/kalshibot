@@ -225,9 +225,8 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     white-space:normal;word-wrap:break-word;z-index:1000;
     box-shadow:0 4px 12px rgba(0,0,0,.4)
   }
-  /* Desktop: restore all columns 4-12 */
-  th:nth-child(4),th:nth-child(5),th:nth-child(6),th:nth-child(7),th:nth-child(8),th:nth-child(9),th:nth-child(10),th:nth-child(11),th:nth-child(12),
-  td:nth-child(4),td:nth-child(5),td:nth-child(6),td:nth-child(7),td:nth-child(8),td:nth-child(9),td:nth-child(10),td:nth-child(11),td:nth-child(12){display:table-cell !important}
+  /* Desktop: restore all hidden columns */
+  th:nth-child(n+6),td:nth-child(n+6){display:table-cell !important}
   table{font-size:12px}
   thead th{padding:8px 6px;font-size:11px}
   td{padding:6px 4px;font-size:11px}
@@ -307,15 +306,15 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   .tab-btn{flex:1;min-width:60px;padding:10px 8px;font-size:12px;border:none;background:transparent;border-bottom:2px solid transparent;white-space:nowrap;width:auto}
   .tab-btn.active{border-bottom-color:var(--green);color:var(--green)}
 
-  /* Tables on mobile: show CHECKBOX, MARKET, QTY, and SELL BUTTON only.
-     Hide columns 4-12 (BOUGHT@, CURRENT, SPENT, VALUE, PROFIT, MAX, etc).
-     Keep col 1,2,3,13. */
-  table{font-size:11px;width:100%;box-sizing:border-box}
-  thead th{padding:6px 4px;font-size:9px}
-  td{padding:4px 2px;font-size:10px}
-  /* Hide non-essential columns 4-12 on mobile */
-  th:nth-child(4),th:nth-child(5),th:nth-child(6),th:nth-child(7),th:nth-child(8),th:nth-child(9),th:nth-child(10),th:nth-child(11),th:nth-child(12),
-  td:nth-child(4),td:nth-child(5),td:nth-child(6),td:nth-child(7),td:nth-child(8),td:nth-child(9),td:nth-child(10),td:nth-child(11),td:nth-child(12){display:none}
+  /* Tables on mobile: show CHECKBOX, MARKET, QTY, BOUGHT@, CURRENT only.
+     Hide columns 6-12 (SPENT, VALUE, PROFIT, MAX, CAPTURED, TIME, etc).
+     Sell button in col 13 stays visible via horizontal scroll. */
+  table{font-size:10px;width:100%;box-sizing:border-box}
+  thead th{padding:5px 3px;font-size:8px}
+  td{padding:3px 2px;font-size:9px}
+  /* Hide non-essential columns 6-12 on mobile */
+  th:nth-child(n+6):not(:nth-child(13)),td:nth-child(n+6):not(:nth-child(13)){display:none}
+  th:nth-child(14),td:nth-child(14){display:none}  /* Hide right checkbox */
 
   /* Each total = fixed readable width (no squish). They sit in a row that swipes,
      so 10 boxes never overlap — you scroll to see the P&L ones. */
