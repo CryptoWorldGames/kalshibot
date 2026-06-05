@@ -155,6 +155,38 @@ def auto_restart_monitor():
             print("[manager] Flask crashed! Auto-restarting...")
             start_flask()
 
+AUTO_UPDATE_INTERVAL = 900  # 15 minutes — how often to auto-pull new code from GitHub
+
+def auto_update_monitor():
+    """Every AUTO_UPDATE_INTERVAL seconds, run `git pull`. If new code arrived,
+    restart Flask so it loads. This is FREE — just git running locally, no API/AI
+    calls. Lets the user deploy from any device by pushing to GitHub; the desktop
+    picks the update up on its own with zero clicks."""
+    while RUNNING:
+        # Wait first — we just (re)started, so don't pull the instant we boot.
+        for _ in range(AUTO_UPDATE_INTERVAL):
+            if not RUNNING:
+                return
+            time.sleep(1)
+        try:
+            out = subprocess.run(["git", "pull"], cwd=str(HERE),
+                                 capture_output=True, text=True, timeout=90)
+            combined = (out.stdout + out.stderr).strip()
+            up_to_date = ("Already up to date" in combined or
+                          "Already up-to-date" in combined)
+            if out.returncode == 0 and not up_to_date:
+                print(f"[auto-update] New code pulled — restarting Flask:\n{combined[-500:]}")
+                stop_flask()
+                time.sleep(1)
+                start_flask()
+                time.sleep(2)
+            elif out.returncode == 0:
+                print("[auto-update] Checked GitHub — already up to date.")
+            else:
+                print(f"[auto-update] git pull failed: {combined[-300:]}")
+        except Exception as e:
+            print(f"[auto-update] error: {e}")
+
 def signal_handler(sig, frame):
     """Handle shutdown signals"""
     global RUNNING
@@ -168,6 +200,10 @@ if __name__ == "__main__":
 
     monitor_thread = threading.Thread(target=auto_restart_monitor, daemon=True)
     monitor_thread.start()
+
+    # Auto-pull new code from GitHub every 15 min so deploys go live with zero clicks
+    update_thread = threading.Thread(target=auto_update_monitor, daemon=True)
+    update_thread.start()
 
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
