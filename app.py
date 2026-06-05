@@ -1417,6 +1417,25 @@ def portfolio():
     })
 
 
+@app.route("/api/settlements")
+def api_settlements():
+    """Dedicated settlements endpoint, decoupled from /api/portfolio so the Recent
+    Settlements table loads on its own and isn't blocked by slow position enrichment.
+    First call may take a few seconds (Kalshi), then it's cached and instant."""
+    try:
+        hours = int(request.args.get("hours", 24))
+    except (TypeError, ValueError):
+        hours = 24
+    try:
+        data = _cached_settlements(hours=hours)
+        return jsonify({"settlements": data, "ok": True})
+    except Exception as e:
+        print(f"[settlements] error: {e}")
+        # Serve whatever's cached even if a refresh failed, so the table isn't blank.
+        _c = _settlements_cache.get(hours)
+        return jsonify({"settlements": (_c["data"] if _c else []), "ok": False, "error": str(e)})
+
+
 def _recent_settlements(hours: int = 24) -> list:
     """Fetch Kalshi settlements from the past `hours` hours, enriched with title/category."""
     cutoff_ts = datetime.now(timezone.utc) - timedelta(hours=hours)

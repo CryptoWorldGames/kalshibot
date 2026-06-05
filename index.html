@@ -1171,7 +1171,7 @@ function setSettleFilter(hours, label) {
   });
   const title = document.getElementById("settlementsTitle");
   if (title) title.textContent = `Recent Settlements (${label})`;
-  loadBalanceThrottled(true); // force refresh when changing settlement period
+  loadSettlements(); // dedicated, fast settlements refresh for the new period
 }
 
 // Fast, standalone cash fetch. Hits the lightweight cached /api/balance so the top
@@ -1343,10 +1343,10 @@ async function loadPositionsFast() {
     if (d.portfolio_value != null) { const el = document.getElementById("navPortfolio");  if (el) { el.textContent = "$" + d.portfolio_value.toFixed(2); el.className = "fund-amount port-val"; } }
     const np = d.positions || [];
     // The fast path (enrich=false) has no live prices/titles. Carry them over from
-    // the last enriched render so the 8s refresh doesn't keep wiping CURRENT /
-    // PROFIT NOW back to "—" while the slow enrich fills them in.
+    // the currently-rendered positions (allPositions, which the price enrichment
+    // keeps current) so the 8s refresh doesn't wipe CURRENT / PROFIT NOW to "—".
     const _prev = {};
-    (window._lastApiPositions || []).forEach(p => { if (p && p.ticker) _prev[p.ticker] = p; });
+    ((typeof allPositions !== "undefined" ? allPositions : []) || []).forEach(p => { if (p && p.ticker) _prev[p.ticker] = p; });
     np.forEach(p => {
       const q = _prev[p.ticker];
       if (!q) return;
@@ -1519,8 +1519,9 @@ async function enrichPositionMarkets() {
     // NOTE: fetch() has no {timeout} option — it was silently ignored, so a slow
     // enrich could hang forever and positions stayed on "—". Use AbortController.
     const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 12000);
-    const r = await fetch(`/api/enrich-positions?tickers=${tickers.slice(0,20).join(",")}`, {signal: ctrl.signal});
+    const to = setTimeout(() => ctrl.abort(), 25000);
+    // Enrich up to 50 tickers (backend cap) so ALL positions get prices, not just 20.
+    const r = await fetch(`/api/enrich-positions?tickers=${tickers.slice(0,50).join(",")}`, {signal: ctrl.signal});
     clearTimeout(to);
     const enriched = await r.json() || {};
 
@@ -1545,6 +1546,28 @@ async function enrichPositionMarkets() {
   }
 }
 
+// Dedicated settlements loader — independent of the slow /api/portfolio enrich so
+// the Recent Settlements table fills in on its own and never gets stuck loading.
+async function loadSettlements() {
+  try {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 25000);
+    const r = await fetch(`/api/settlements?hours=${_settleHours}`, {signal: ctrl.signal});
+    clearTimeout(to);
+    const d = await r.json();
+    const s = d.settlements || [];
+    if (s.length > 0) {
+      window._lastSettlements = s;
+      renderSettlements(s);
+      renderSettlementsTickerTicker();
+    } else if (!window._lastSettlements || !window._lastSettlements.length) {
+      // Truly nothing (and nothing cached on screen) — show the empty state.
+      window._lastSettlements = [];
+      renderSettlements([]);
+    }
+  } catch(e) { /* keep whatever's on screen — never blank on a transient failure */ }
+}
+
 window.addEventListener("load", () => {
   // Load bot status (running/stopped) and cash first
   loadBotStatus();
@@ -1562,11 +1585,12 @@ window.addEventListener("load", () => {
     enrichPositionMarkets();
   }, 1500);
 
-  // Phase 3 (5-10s+): Load full balance with settlements (background)
+  // Phase 3 (5-10s+): settlements + prices + P&L, each on its own fast endpoint.
   setTimeout(() => {
-    loadBalance(true);
+    loadSettlements();        // dedicated settlements (not blocked by position enrich)
+    enrichPositionMarkets();  // live prices for the position list
     loadPnl();
-  }, 5000);
+  }, 4000);
 
   // Keep cash current independently of the 60s heavy refresh (cheap + cached).
   setInterval(() => { if (!document.hidden) loadCash(); }, 15000);
@@ -4073,16 +4097,22 @@ function switchTab(name) {
     if (window._coachRefresh) { clearInterval(window._coachRefresh); window._coachRefresh = null; }
   }
   if (name === "positions") {
-    loadPositionsFast();   // instant render — never blank, not blocked by enrich
-    loadBalance(true);     // background enrich upgrades prices + loads settlements
-    // Keep positions fresh fast (8s); run the heavy enrich less often (30s).
+    // Three INDEPENDENT loads so none blocks another:
+    //  1) list (fast, never blank)  2) live prices  3) settlements
+    loadPositionsFast().then(() => enrichPositionMarkets());
+    loadSettlements();
     if (window._posTabRefresh) clearInterval(window._posTabRefresh);
     if (window._posEnrich)     clearInterval(window._posEnrich);
-    if (!document.hidden) window._posTabRefresh = setInterval(loadPositionsFast, 8000);
-    if (!document.hidden) window._posEnrich     = setInterval(() => loadBalance(true), 30000);
+    if (window._posSettle)     clearInterval(window._posSettle);
+    if (!document.hidden) {
+      window._posTabRefresh = setInterval(loadPositionsFast, 8000);        // keep list current
+      window._posEnrich     = setInterval(enrichPositionMarkets, 15000);   // refresh prices
+      window._posSettle     = setInterval(loadSettlements, 60000);         // refresh settlements
+    }
   } else {
     if (window._posTabRefresh) { clearInterval(window._posTabRefresh); window._posTabRefresh = null; }
     if (window._posEnrich)     { clearInterval(window._posEnrich);     window._posEnrich = null; }
+    if (window._posSettle)     { clearInterval(window._posSettle);     window._posSettle = null; }
   }
   // Hide Start Bot on non-scanner tabs, show Stop Bot everywhere
   const fab = document.getElementById("fab");
