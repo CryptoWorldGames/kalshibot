@@ -1511,8 +1511,29 @@ try {
 
 // Defer API calls until page is interactive (speeds up hard refresh)
 // Progressive loading: show positions fast, enrich market data next
-async function enrichPositionMarkets() {
-  const tickers = allPositions.map(p => p.ticker).filter(Boolean);
+// Staged loader: the 10 biggest/most-important positions get their prices first
+// (fast), THEN the rest, THEN settlements — so the numbers that matter show ASAP.
+async function enrichStaged() {
+  const wt = allPositions.filter(p => p.ticker);
+  if (!wt.length) { loadSettlements(); return; }
+  const stake = p => Math.abs((p.quantity || 0) * (p.buy_price || 0)) / 100;
+  const needsPrice = p => (p.current_yes == null && p.current_no == null);
+  // Missing-a-price positions first, biggest stake first within each group.
+  const sorted = [...wt].sort((a, b) => {
+    const an = needsPrice(a) ? 1 : 0, bn = needsPrice(b) ? 1 : 0;
+    if (an !== bn) return bn - an;
+    return stake(b) - stake(a);
+  });
+  const top  = sorted.slice(0, 10).map(p => p.ticker);
+  const rest = sorted.slice(10).map(p => p.ticker);
+  if (top.length)  await enrichPositionMarkets(top);    // top 10 numbers — fast
+  if (rest.length) await enrichPositionMarkets(rest);   // then everything else
+  loadSettlements();                                     // settlements last
+}
+
+async function enrichPositionMarkets(tickerList) {
+  const tickers = ((tickerList && tickerList.length) ? tickerList
+                   : allPositions.map(p => p.ticker)).filter(Boolean);
   if (!tickers.length) return;
 
   try {
@@ -1520,7 +1541,7 @@ async function enrichPositionMarkets() {
     // enrich could hang forever and positions stayed on "—". Use AbortController.
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 25000);
-    // Enrich up to 50 tickers (backend cap) so ALL positions get prices, not just 20.
+    // Enrich up to 50 tickers (backend cap) per call.
     const r = await fetch(`/api/enrich-positions?tickers=${tickers.slice(0,50).join(",")}`, {signal: ctrl.signal});
     clearTimeout(to);
     const enriched = await r.json() || {};
@@ -1587,8 +1608,7 @@ window.addEventListener("load", () => {
 
   // Phase 3 (5-10s+): settlements + prices + P&L, each on its own fast endpoint.
   setTimeout(() => {
-    loadSettlements();        // dedicated settlements (not blocked by position enrich)
-    enrichPositionMarkets();  // live prices for the position list
+    enrichStaged();  // top-10 prices first -> the rest -> settlements last
     loadPnl();
   }, 4000);
 
@@ -4105,10 +4125,8 @@ function switchTab(name) {
     if (window._coachRefresh) { clearInterval(window._coachRefresh); window._coachRefresh = null; }
   }
   if (name === "positions") {
-    // Three INDEPENDENT loads so none blocks another:
-    //  1) list (fast, never blank)  2) live prices  3) settlements
-    loadPositionsFast().then(() => enrichPositionMarkets());
-    loadSettlements();
+    // Staged: list (fast) -> top-10 biggest positions' prices -> the rest -> settlements.
+    loadPositionsFast().then(() => enrichStaged());
     if (window._posTabRefresh) clearInterval(window._posTabRefresh);
     if (window._posEnrich)     clearInterval(window._posEnrich);
     if (window._posSettle)     clearInterval(window._posSettle);
