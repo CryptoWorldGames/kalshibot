@@ -510,7 +510,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 <!-- Active-bot toggle: this is the T1 (front-page) bot. Only one bot runs at a time. -->
 <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
   <div class="activePill" id="pill-T1" onclick="setActiveProfile('T1')"><span class="dot"></span><span id="pillText-T1">Inactive</span></div>
-  <span style="font-size:12px;color:var(--muted)">Scanner bot <b style="color:#ff9416">T1</b> — tap to make this the running bot</span>
+  <span style="font-size:12px;color:var(--muted)">Scanner bot <b style="color:#ff9416">T1</b> — tap to run/stop this bot (can run alongside others)</span>
 </div>
 
 <!-- Inline Coach (always visible on main page) -->
@@ -915,7 +915,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 <div id="tab-lotto" class="tab-pane">
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
     <div class="activePill" id="pill-T2" onclick="setActiveProfile('T2')"><span class="dot"></span><span id="pillText-T2">Inactive</span></div>
-    <span style="font-size:12px;color:var(--muted)">Lotto bot <b style="color:#ff9416">T2</b> — tap to make this the running bot</span>
+    <span style="font-size:12px;color:var(--muted)">Lotto bot <b style="color:#ff9416">T2</b> — tap to run/stop this bot (can run alongside the regular bot)</span>
   </div>
 
   <!-- M1–M5 memory slots (Lotto page ONLY) — like a calculator's memory buttons -->
@@ -944,7 +944,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
         <input type="number" id="L_minProb" min="1" max="99" value="1" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
         <span style="font-size:12px;color:var(--muted)">to</span>
         <input type="number" id="L_maxProb" min="1" max="99" value="15" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
-        <span style="font-size:12px;color:var(--muted)">¢ (price/contract)</span>
+        <span style="font-size:12px;color:var(--muted)">¢ (1–99 ok; default 1–15)</span>
       </div>
     </div>
 
@@ -4708,13 +4708,15 @@ function pushBuySettings(immediate=false) {
 // ── Multi-bot profiles (T1 = Scanner front page, T2 = Lotto tab) ──────────
 // Only ONE profile is active (the running bot) at a time. The LEDs on the tab
 // buttons and the Active pills inside each tab reflect which one.
-let _activeProfile = "T1";
+let _activeProfile = ["T1"];   // list of active bots (multiple may run at once)
 
+// `active` is now a LIST of running bots — multiple can be on at once.
 function updateProfileUI(active) {
-  _activeProfile = active;
+  const list = Array.isArray(active) ? active : (active ? [active] : []);
+  _activeProfile = list;
   [["T1","pill-T1","pillText-T1","led-T1"],
    ["T2","pill-T2","pillText-T2","led-T2"]].forEach(([id,pid,tid,lid]) => {
-    const on = (id === active);
+    const on = list.includes(id);
     const pill = document.getElementById(pid);
     const txt  = document.getElementById(tid);
     const led  = document.getElementById(lid);
@@ -4732,17 +4734,21 @@ async function loadActiveProfile() {
   } catch(e) {}
 }
 
+// Toggle one bot on/off independently (multiple bots may run at the same time).
 async function setActiveProfile(p) {
-  updateProfileUI(p);  // optimistic — instant LED/pill feedback
+  const cur = Array.isArray(_activeProfile) ? _activeProfile : [];
+  const turningOn = !cur.includes(p);
+  // optimistic UI
+  updateProfileUI(turningOn ? [...cur, p] : cur.filter(x => x !== p));
   try {
     const r = await fetch("/api/active-profile", {
       method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({profile:p})
+      body: JSON.stringify({profile:p, on:turningOn})
     });
     const d = await r.json();
     if (d.active) updateProfileUI(d.active);
-    toast(`Bot ${p} is now active`, "ok");
-  } catch(e) { toast("Couldn't switch bot — try again", "err"); loadActiveProfile(); }
+    toast(`Bot ${p} ${turningOn ? "activated" : "deactivated"}`, "ok");
+  } catch(e) { toast("Couldn't change bot — try again", "err"); loadActiveProfile(); }
 }
 
 // ── Lotto (T2) settings: independent form, posts to profile T2 ────────────

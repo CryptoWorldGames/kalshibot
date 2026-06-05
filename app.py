@@ -288,13 +288,19 @@ def _load_profiles():
     try:
         if PROFILES_FILE.exists():
             d = json.loads(PROFILES_FILE.read_text(encoding="utf-8"))
-            prof   = d.get("profiles") or {}
-            sell   = d.get("sell") or {}
-            active = d.get("active") if d.get("active") in PROFILE_IDS else "T1"
-            return prof, sell, active
+            prof = d.get("profiles") or {}
+            sell = d.get("sell") or {}
+            # Multiple profiles can be active at once. Accept the new "active_profiles"
+            # list, or migrate the legacy single "active" string.
+            act = d.get("active_profiles")
+            if not isinstance(act, list):
+                legacy = d.get("active")
+                act = [legacy] if legacy in PROFILE_IDS else ["T1"]
+            act = [p for p in act if p in PROFILE_IDS] or ["T1"]
+            return prof, sell, act
     except Exception as e:
         print(f"[profiles] load failed: {e}")
-    return {}, {}, "T1"
+    return {}, {}, ["T1"]
 
 _DEFAULT_SELL_STRATEGY = {"mode": "resolution", "target_pct": 10.0}
 
@@ -317,7 +323,7 @@ _LOTTO_BUY_DEFAULTS = {
 }
 _LOTTO_SELL_DEFAULTS = {"mode": "resolution", "target_pct": 10.0, "stop_loss_pct": 50.0}
 
-_profiles, _sell_profiles, active_profile = _load_profiles()
+_profiles, _sell_profiles, active_profiles = _load_profiles()
 # Seed buy profiles. T1 inherits the existing live buy_settings (so the current bot
 # is unchanged); T2 (Lotto) seeds with the cheap long-shot preset above.
 _profiles.setdefault("T1", dict(buy_settings))
@@ -329,28 +335,28 @@ _sell_profiles.setdefault("T1", dict(sell_strategy))
 _sell_profiles.setdefault("T2", dict(_LOTTO_SELL_DEFAULTS))
 for _pid in PROFILE_IDS:
     _sell_profiles[_pid] = {**_DEFAULT_SELL_STRATEGY, **_sell_profiles[_pid]}
-# The bot reads the ACTIVE profile — both buy_settings and sell_strategy mirror it.
-buy_settings  = dict(_profiles[active_profile])
-sell_strategy = dict(_sell_profiles[active_profile])
+# The bot reads EACH active profile directly from _profiles/_sell_profiles. The globals
+# below are a legacy mirror of T1 (the front-page bot) used as a fallback by the sell
+# monitor and the endpoints' no-profile default.
+buy_settings  = dict(_profiles["T1"])
+sell_strategy = dict(_sell_profiles["T1"])
 
 def _save_profiles():
     try:
         PROFILES_FILE.write_text(json.dumps(
-            {"active": active_profile, "profiles": _profiles, "sell": _sell_profiles}, indent=2),
+            {"active_profiles": active_profiles, "profiles": _profiles, "sell": _sell_profiles}, indent=2),
             encoding="utf-8")
     except Exception as e:
         print(f"[profiles] save error: {e}")
 
 def _save_buy_settings():
-    """Persist buy_settings (active-profile mirror) so the bot reads them live, and
-    keep the active profile + profiles file in sync."""
+    """Persist the T1 legacy mirror + the profiles file."""
     global _profiles
     try:
         BUY_SETTINGS_FILE.write_text(json.dumps(buy_settings, indent=2), encoding="utf-8")
     except Exception as e:
         print(f"[buy settings] save error: {e}")
-    # Mirror the live settings back into the active profile and persist profiles too.
-    _profiles[active_profile] = dict(buy_settings)
+    _profiles["T1"] = dict(buy_settings)
     _save_profiles()
 
 def _apply_buy_edits(target: dict, data: dict):
@@ -965,10 +971,150 @@ def _save_bot_config(should_run: bool):
     except Exception as e:
         print(f"[bot config] save error: {e}")
 
+def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
+    """One scan+buy pass for a SINGLE profile's settings. Tags buys with `prof` and
+    stamps that profile's sell strategy (`ss`) onto the position. Multiple active
+    profiles each get their own pass per cycle so a Lotto bot and the regular bot can
+    run side by side. Shares the global rate limiter, so total API traffic stays
+    within Kalshi's limits regardless of how many bots are active."""
+    up_on   = bool(bs.get("enable_buy_up"))
+    down_on = bool(bs.get("enable_buy_down"))
+    if not (up_on or down_on):
+        return 0
+
+    up_min,   up_max   = float(bs.get("up_min", 80)),   float(bs.get("up_max", 96))
+    down_min, down_max = float(bs.get("down_min", 80)), float(bs.get("down_max", 96))
+    minutes  = int(bs.get("minutes", 15))
+    buy_amt  = float(bs.get("buy_amount", 0.50))
+    max_scan = int(bs.get("max_per_scan", 3))
+    max_conc = int(bs.get("max_concurrent", 999))
+    max_mkt  = int(bs.get("max_per_market", 1))
+
+    mins_, maxs_ = [], []
+    if up_on:   mins_.append(up_min);   maxs_.append(up_max)
+    if down_on: mins_.append(down_min); maxs_.append(down_max)
+    union_min, union_max = min(mins_), max(maxs_)
+
+    now_utc = datetime.now(timezone.utc)
+    cutoff  = now_utc + timedelta(minutes=minutes)
+
+    no_crypto    = not bs.get("show_crypto", True)
+    no_combo     = not bs.get("show_combo", False)
+    no_sports    = not bs.get("show_sports", False)
+    no_politics  = not bs.get("show_politics", False)
+    no_economics = not bs.get("show_economics", False)
+    good_liq     = bool(bs.get("good_liq", True))
+    hide_multi   = bool(bs.get("hide_multi", True))
+    min_age      = bs.get("min_age_mins")
+    max_age      = bs.get("max_age_mins")
+    no_buy_within = bs.get("no_buy_within_mins")
+
+    CRYPTO_SERIES = ["KXBTC15M","KXETH15M","KXSOL15M","KXHYPE15M","KXDOGE15M","KXBNB15M","KXXRP15M",
+                     "KXBTC30M","KXETH30M","KXSOL30M","KXBTC1H","KXETH1H","KXSOL1H",
+                     "KXBTC","KXBTCD","KXBTCW","KXBTCM","KXETH","KXETHUSD","KXETHD",
+                     "KXSOL","KXSOLD","KXDOGE","KXXRP"]
+    ECON_SERIES   = ["INX","INXD","INXW","KXNDAQ","KXNDAQD","NDX","KXDJIA","DJI",
+                     "KXFED","KXCPI","KXPCE","KXUNEMP"]
+    SPORTS_SERIES = ["NBAG","KXNBA","NBA","MLBG","KXMLB","MLB","NFLG","KXNFL","NFL",
+                     "KXNHL","NHL","KXSOCCER"]
+    series_list = []
+    if bs.get("show_crypto", True):     series_list += CRYPTO_SERIES
+    if bs.get("show_economics", False): series_list += ECON_SERIES
+    if bs.get("show_sports", False):    series_list += SPORTS_SERIES
+
+    with _lock:
+        open_now = sum(1 for p in tracked.values() if p.get("status") == "open")
+
+    candidates = []  # (ticker, side, price_cents, market)
+    for st in series_list:
+        if len(candidates) >= max_scan * 4:
+            break
+        if time.time() - cycle_start > 12:  # per-profile time budget
+            break
+        try:
+            time.sleep(0.35)  # rate limit (shared limiter keeps us within policy)
+            d = kalshi_get("/markets", {"series_ticker": st, "status": "open", "limit": 200})
+            for m in d.get("markets", []):
+                hit = _apply_market_filters(
+                    m, now_utc, cutoff, union_min, union_max,
+                    no_crypto, no_combo, no_sports, no_politics, no_economics, good_liq, 10,
+                    min_age_mins=min_age, max_age_mins=max_age,
+                    no_buy_within_mins=no_buy_within, crypto_times=None, hide_multi=hide_multi)
+                if not hit:
+                    continue
+                ticker = m.get("ticker", "")
+                yes_p = _market_price(m, "yes")
+                no_p  = _market_price(m, "no")
+                if up_on and yes_p is not None and up_min <= yes_p < up_max:
+                    candidates.append((ticker, "yes", yes_p, m))
+                elif down_on and no_p is not None and down_min <= no_p < down_max:
+                    candidates.append((ticker, "no", no_p, m))
+        except Exception:
+            pass
+
+    bought = 0
+    with _lock:
+        for ticker, side, price_c, m in candidates:
+            if bought >= max_scan or open_now >= max_conc:
+                break
+            held = sum(1 for t, p in tracked.items()
+                       if t == ticker and p.get("status") == "open")
+            if held >= max_mkt:
+                continue
+            pc = int(math.ceil(price_c))
+            if pc <= 0 or pc > 99:
+                continue
+            contracts = math.floor(buy_amt / (pc / 100))
+            if contracts < 1:
+                continue
+            order_body = {
+                "ticker": ticker,
+                "client_order_id": str(uuid.uuid4()),
+                "action": "buy",
+                "side": side,
+                "type": "market",
+                "count": contracts,
+            }
+            if side == "yes": order_body["yes_price"] = pc
+            else:             order_body["no_price"]  = pc
+            try:
+                result = kalshi_post("/portfolio/orders", order_body)
+                order = result.get("order", result)
+                if order.get("status") != "rejected":
+                    tracked[ticker] = {
+                        "title":  _event_title(m.get("event_ticker", "")) or m.get("title", ticker),
+                        "category": m.get("category", ""),
+                        "side":   side,
+                        "count":  contracts,
+                        "buy_price":     pc,
+                        "current_price": pc,
+                        "profit_pct":    0.0,
+                        "strategy":      ss.get("mode", "resolution"),
+                        "target_pct":    ss.get("target_pct"),
+                        "target_dollars": ss.get("target_dollars"),
+                        "target_price_cents": ss.get("target_price_cents"),
+                        "stop_loss_pct": ss.get("stop_loss_pct"),
+                        "status": "open",
+                        "bought_at": datetime.now(timezone.utc).isoformat(),
+                        "bot_bought": True,
+                        "profile": prof,  # which tab's bot bought it (T1/T2/…)
+                    }
+                    _save_tracked()
+                    _balance_cache["ts"] = 0
+                    open_now += 1
+                    bought += 1
+                    print(f"[bot:{prof}] Auto-bought {side.upper()} {ticker}: {contracts} @ {pc}¢")
+            except Exception as e:
+                print(f"[bot:{prof}] Buy {ticker} failed: {e}")
+    if bought:
+        print(f"[bot:{prof}] cycle: bought {bought} ({len(candidates)} candidates, {open_now} open)")
+    return bought
+
+
 def _bot_thread():
-    """Scan markets and auto-buy every 15s, respecting the sell strategy.
-    Runs independent of browser; start/stop via /api/bot/start and /api/bot/stop.
-    Checks the persisted config file to know if it should be running."""
+    """Scan markets and auto-buy every 15s for EACH active profile, respecting each
+    profile's own sell strategy. Runs independent of browser; start/stop via
+    /api/bot/start and /api/bot/stop."""
     global _bot_running, _bot_start_time, _bot_thread_id
 
     # Register this thread so all its scan-time Kalshi GETs are auto-deprioritized,
@@ -993,146 +1139,13 @@ def _bot_thread():
 
         try:
             cycle_start = time.time()
-            bs = dict(buy_settings)  # snapshot the LIVE UI settings for this cycle
-
-            up_on   = bool(bs.get("enable_buy_up"))
-            down_on = bool(bs.get("enable_buy_down"))
-            if not (up_on or down_on):
-                continue  # neither side enabled — nothing to do
-
-            up_min,   up_max   = float(bs.get("up_min", 80)),   float(bs.get("up_max", 96))
-            down_min, down_max = float(bs.get("down_min", 80)), float(bs.get("down_max", 96))
-            minutes  = int(bs.get("minutes", 15))
-            buy_amt  = float(bs.get("buy_amount", 0.50))
-            max_scan = int(bs.get("max_per_scan", 3))
-            max_conc = int(bs.get("max_concurrent", 999))
-            max_mkt  = int(bs.get("max_per_market", 1))
-
-            # Union range — passes the category/liquidity/time gate; we re-check each
-            # side's specific range below so UP and DOWN can have different bands.
-            mins_, maxs_ = [], []
-            if up_on:   mins_.append(up_min);   maxs_.append(up_max)
-            if down_on: mins_.append(down_min); maxs_.append(down_max)
-            union_min, union_max = min(mins_), max(maxs_)
-
-            now_utc = datetime.now(timezone.utc)
-            cutoff  = now_utc + timedelta(minutes=minutes)
-
-            no_crypto    = not bs.get("show_crypto", True)
-            no_combo     = not bs.get("show_combo", False)
-            no_sports    = not bs.get("show_sports", False)
-            no_politics  = not bs.get("show_politics", False)
-            no_economics = not bs.get("show_economics", False)
-            good_liq     = bool(bs.get("good_liq", True))
-            hide_multi   = bool(bs.get("hide_multi", True))
-            min_age      = bs.get("min_age_mins")
-            max_age      = bs.get("max_age_mins")
-            no_buy_within = bs.get("no_buy_within_mins")
-
-            # Probe only the series for enabled categories (keeps the cycle fast).
-            CRYPTO_SERIES = ["KXBTC15M","KXETH15M","KXSOL15M","KXHYPE15M","KXDOGE15M","KXBNB15M","KXXRP15M",
-                             "KXBTC30M","KXETH30M","KXSOL30M","KXBTC1H","KXETH1H","KXSOL1H",
-                             "KXBTC","KXBTCD","KXBTCW","KXBTCM","KXETH","KXETHUSD","KXETHD",
-                             "KXSOL","KXSOLD","KXDOGE","KXXRP"]
-            ECON_SERIES   = ["INX","INXD","INXW","KXNDAQ","KXNDAQD","NDX","KXDJIA","DJI",
-                             "KXFED","KXCPI","KXPCE","KXUNEMP"]
-            SPORTS_SERIES = ["NBAG","KXNBA","NBA","MLBG","KXMLB","MLB","NFLG","KXNFL","NFL",
-                             "KXNHL","NHL","KXSOCCER"]
-            series_list = []
-            if bs.get("show_crypto", True):    series_list += CRYPTO_SERIES
-            if bs.get("show_economics", False): series_list += ECON_SERIES
-            if bs.get("show_sports", False):    series_list += SPORTS_SERIES
-
-            # Current open-position count (concurrency cap)
-            with _lock:
-                open_now = sum(1 for p in tracked.values() if p.get("status") == "open")
-
-            # ── Find candidates ──────────────────────────────────────────────
-            candidates = []  # (ticker, side, price_cents, market)
-            for st in series_list:
-                if len(candidates) >= max_scan * 4:
-                    break
-                if time.time() - cycle_start > 12:  # time budget — keep cycles bounded
-                    break
-                try:
-                    time.sleep(0.35)  # rate limit
-                    d = kalshi_get("/markets", {"series_ticker": st, "status": "open", "limit": 200})
-                    for m in d.get("markets", []):
-                        hit = _apply_market_filters(
-                            m, now_utc, cutoff, union_min, union_max,
-                            no_crypto, no_combo, no_sports, no_politics, no_economics, good_liq, 10,
-                            min_age_mins=min_age, max_age_mins=max_age,
-                            no_buy_within_mins=no_buy_within, crypto_times=None, hide_multi=hide_multi)
-                        if not hit:
-                            continue
-                        ticker = m.get("ticker", "")
-                        yes_p = _market_price(m, "yes")
-                        no_p  = _market_price(m, "no")
-                        if up_on and yes_p is not None and up_min <= yes_p < up_max:
-                            candidates.append((ticker, "yes", yes_p, m))
-                        elif down_on and no_p is not None and down_min <= no_p < down_max:
-                            candidates.append((ticker, "no", no_p, m))
-                except Exception:
-                    pass
-
-            # ── Place buys ───────────────────────────────────────────────────
-            bought = 0
-            with _lock:
-                for ticker, side, price_c, m in candidates:
-                    if bought >= max_scan or open_now >= max_conc:
-                        break
-                    held = sum(1 for t, p in tracked.items()
-                               if t == ticker and p.get("status") == "open")
-                    if held >= max_mkt:
-                        continue
-                    pc = int(math.ceil(price_c))
-                    if pc <= 0 or pc > 99:
-                        continue
-                    contracts = math.floor(buy_amt / (pc / 100))
-                    if contracts < 1:
-                        continue
-                    order_body = {
-                        "ticker": ticker,
-                        "client_order_id": str(uuid.uuid4()),
-                        "action": "buy",
-                        "side": side,
-                        "type": "market",
-                        "count": contracts,
-                    }
-                    if side == "yes": order_body["yes_price"] = pc
-                    else:             order_body["no_price"]  = pc
-                    try:
-                        result = kalshi_post("/portfolio/orders", order_body)
-                        order = result.get("order", result)
-                        if order.get("status") != "rejected":
-                            tracked[ticker] = {
-                                "title":  _event_title(m.get("event_ticker", "")) or m.get("title", ticker),
-                                "category": m.get("category", ""),
-                                "side":   side,
-                                "count":  contracts,
-                                "buy_price":     pc,
-                                "current_price": pc,
-                                "profit_pct":    0.0,
-                                "strategy":      sell_strategy.get("mode", "resolution"),
-                                "target_pct":    sell_strategy.get("target_pct"),
-                                "target_dollars": sell_strategy.get("target_dollars"),
-                                "target_price_cents": sell_strategy.get("target_price_cents"),
-                                "stop_loss_pct": sell_strategy.get("stop_loss_pct"),
-                                "status": "open",
-                                "bought_at": datetime.now(timezone.utc).isoformat(),
-                                "bot_bought": True,
-                                "profile": active_profile,  # which tab's bot bought it (T1/T2)
-                            }
-                            _save_tracked()
-                            _balance_cache["ts"] = 0
-                            open_now += 1
-                            bought += 1
-                            print(f"[bot] Auto-bought {side.upper()} {ticker}: {contracts} @ {pc}¢")
-                    except Exception as e:
-                        print(f"[bot] Buy {ticker} failed: {e}")
-            if bought:
-                print(f"[bot] cycle: bought {bought} ({len(candidates)} candidates, {open_now} open)")
-
+            # Run a scan+buy pass for EACH active profile (multiple bots can run at
+            # once — e.g. the regular bot + the Lotto bot). Each uses its own settings.
+            for prof in list(active_profiles):
+                bs = dict(_profiles.get(prof) or {})
+                ss = dict(_sell_profiles.get(prof) or {})
+                if bs:
+                    _scan_and_buy_for_profile(prof, bs, ss, cycle_start)
         except Exception as e:
             print(f"[bot] Scan cycle error: {e}")
 
@@ -2697,14 +2710,15 @@ def pnl_history():
 @app.route("/api/strategy", methods=["GET", "POST"])
 def set_strategy():
     global sell_strategy
-    # Which profile's SELL strategy? Default = active (old clients keep working).
+    # Which profile's SELL strategy? Default = T1 (the front-page bot). The bot reads
+    # each active profile's own sell strategy directly; the global `sell_strategy` is a
+    # T1 mirror used only as a fallback by the monitor.
     req_profile = (request.args.get("profile")
                    or (request.get_json(silent=True) or {}).get("profile"))
-    target = req_profile if req_profile in PROFILE_IDS else active_profile
+    target = req_profile if req_profile in PROFILE_IDS else "T1"
 
     if request.method == "GET":
-        src = sell_strategy if target == active_profile else _sell_profiles.get(target, sell_strategy)
-        return jsonify(src)
+        return jsonify(_sell_profiles.get(target, sell_strategy))
 
     data = request.get_json(silent=True) or {}
     mode = data.get("mode", "resolution")
@@ -2735,7 +2749,7 @@ def set_strategy():
         return jsonify({"error": "Invalid numeric values"}), 400
 
     # Edit a working copy of the target profile's sell strategy.
-    strat = dict(sell_strategy) if target == active_profile else dict(_sell_profiles.get(target, _DEFAULT_SELL_STRATEGY))
+    strat = dict(_sell_profiles.get(target, _DEFAULT_SELL_STRATEGY))
     strat["mode"] = mode
     if pct is not None: strat["target_pct"] = pct
     if dol is not None: strat["target_dollars"] = dol
@@ -2746,12 +2760,12 @@ def set_strategy():
         strat["stop_loss_pct"] = slp
 
     _sell_profiles[target] = strat
-    if target == active_profile:
-        sell_strategy = strat   # mirror so the live bot/monitor uses it immediately
+    if target == "T1":
+        sell_strategy = strat   # keep the legacy T1 mirror current
         try: STRATEGY_FILE.write_text(json.dumps(sell_strategy), encoding="utf-8")
         except Exception: pass
     _save_profiles()
-    return jsonify({"ok": True, "profile": target, "active": active_profile, "strategy": strat})
+    return jsonify({"ok": True, "profile": target, "active": active_profiles, "strategy": strat})
 
 
 @app.route("/api/saved-strategies", methods=["GET"])
@@ -2799,53 +2813,57 @@ def buy_settings_endpoint():
     values live every cycle. Unknown keys are ignored; types are coerced safely.
     """
     global buy_settings
-    # Which profile's settings are we reading/writing? Default = the active one, so
-    # an old client that never sends `profile` keeps working exactly as before.
+    # Which profile's settings are we reading/writing? Default = T1 (front page). The
+    # bot reads each active profile's settings directly from _profiles.
     req_profile = (request.args.get("profile")
                    or (request.get_json(silent=True) or {}).get("profile"))
-    target = req_profile if req_profile in PROFILE_IDS else active_profile
+    target = req_profile if req_profile in PROFILE_IDS else "T1"
 
     if request.method == "GET":
-        # Return the requested profile (active mirror if it's the active one).
-        src = buy_settings if target == active_profile else _profiles.get(target, buy_settings)
-        return jsonify(src)
+        return jsonify(_profiles.get(target, buy_settings))
 
     data = request.get_json(silent=True) or {}
-    # Edit a working copy of the target profile, then commit to the right place.
-    work = dict(buy_settings) if target == active_profile else dict(_profiles.get(target, _DEFAULT_BUY_SETTINGS))
+    work = dict(_profiles.get(target, _DEFAULT_BUY_SETTINGS))
     _apply_buy_edits(work, data)
-
-    if target == active_profile:
-        buy_settings = work
-        _save_buy_settings()        # writes live mirror + syncs active profile to disk
+    _profiles[target] = work
+    if target == "T1":
+        buy_settings = work          # keep the legacy T1 mirror current
+        _save_buy_settings()         # writes T1 mirror + profiles to disk
     else:
-        _profiles[target] = work    # edit an inactive profile only — bot untouched
         _save_profiles()
-    return jsonify({"ok": True, "profile": target, "active": active_profile, "settings": work})
+    return jsonify({"ok": True, "profile": target, "active": active_profiles, "settings": work})
 
 
 @app.route("/api/active-profile", methods=["GET", "POST"])
 def active_profile_endpoint():
-    """GET → which tab's bot is active. POST {profile:'T1'|'T2'} → make it active;
-    the live buy_settings the bot reads becomes that profile's settings (only one
-    profile trades at a time)."""
-    global buy_settings, sell_strategy, active_profile
+    """GET → list of currently-active bots. POST to change which bots run:
+      {"profile":"T2","on":true}   → toggle a single bot on/off
+      {"profiles":["T1","T2"]}     → set the whole active set
+    MULTIPLE bots can run at once (e.g. the regular bot + the Lotto bot). Each trades
+    with its own profile's settings; they share the rate limiter so total API/order
+    traffic stays within Kalshi's limits."""
+    global active_profiles
     if request.method == "GET":
-        return jsonify({"active": active_profile, "profiles": PROFILE_IDS})
+        return jsonify({"active": active_profiles, "profiles": PROFILE_IDS})
     data = request.get_json(silent=True) or {}
-    p = data.get("profile")
-    if p not in PROFILE_IDS:
-        return jsonify({"ok": False, "error": "bad profile"}), 400
-    # Persist the just-active profile's current live edits (buy + sell) before switching.
-    _profiles[active_profile] = dict(buy_settings)
-    _sell_profiles[active_profile] = dict(sell_strategy)
-    active_profile = p
-    buy_settings  = dict(_profiles[active_profile])
-    sell_strategy = dict(_sell_profiles[active_profile])
-    _save_buy_settings()  # writes live buy mirror + profiles (with new active) to disk
-    try: STRATEGY_FILE.write_text(json.dumps(sell_strategy), encoding="utf-8")  # live sell mirror
-    except Exception: pass
-    return jsonify({"ok": True, "active": active_profile, "settings": buy_settings, "sell": sell_strategy})
+
+    if isinstance(data.get("profiles"), list):
+        new = [p for p in data["profiles"] if p in PROFILE_IDS]
+    else:
+        p = data.get("profile")
+        if p not in PROFILE_IDS:
+            return jsonify({"ok": False, "error": "bad profile"}), 400
+        new = list(active_profiles)
+        on = bool(data.get("on", p not in new))  # default = toggle
+        if on and p not in new:
+            new.append(p)
+        elif not on and p in new:
+            new.remove(p)
+
+    # Keep a stable order (T1, T2, …) and de-dup.
+    active_profiles = [pid for pid in PROFILE_IDS if pid in new]
+    _save_profiles()
+    return jsonify({"ok": True, "active": active_profiles})
 
 
 @app.route("/api/enrich-positions", methods=["GET"])
