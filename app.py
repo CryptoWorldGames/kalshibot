@@ -3198,7 +3198,13 @@ def bot_status():
 
 if __name__ == "__main__":
     print("Open http://localhost:5003")
-    app.run(debug=False, host="0.0.0.0", port=5003)
+    # threaded=True is critical: the scan loop and slow Kalshi API calls can each
+    # tie up a worker for seconds at a time. Single-threaded (the Werkzeug default)
+    # means a phone/laptop page-load (GET /) queues behind that work and times out,
+    # so the browser falls back to its cached "offline copy" snapshot — even though
+    # the bot is running fine. Multi-threaded lets navigation + API + scan run at
+    # once so the UI is always reachable.
+    app.run(debug=False, host="0.0.0.0", port=5003, threaded=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
