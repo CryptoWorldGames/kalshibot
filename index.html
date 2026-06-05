@@ -204,6 +204,17 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 .tab-btn{background:transparent;border:none;border-bottom:3px solid transparent;margin-bottom:-2px;color:#fff;cursor:pointer;font-size:18px;font-weight:600;padding:12px 24px;transition:color .15s;white-space:nowrap}
 .tab-btn:hover{color:#fff}
 .tab-btn.active{border-bottom-color:var(--green);color:#fff}
+/* Little LED on a bot tab: lit orange when that tab's bot is the ACTIVE one,
+   dark when not — visible from any tab so you can see which bot is running. */
+.tabLed{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle;background:#3a3a3a;box-shadow:none;transition:all .2s}
+.tabLed.on{background:#ff9416;box-shadow:0 0 6px 1px #ff9416cc}
+/* Active/Inactive pill shown at the top inside each bot tab. */
+.activePill{display:inline-flex;align-items:center;gap:7px;cursor:pointer;border:1px solid var(--border);border-radius:20px;padding:6px 14px;font-size:13px;font-weight:800;color:var(--muted);background:transparent;user-select:none;transition:all .2s}
+.activePill .dot{width:9px;height:9px;border-radius:50%;background:#3a3a3a}
+.activePill.on{color:#0a0a0a;background:var(--green);border-color:var(--green)}
+.activePill.on .dot{background:#0a0a0a}
+/* Tiny T1/T2 tag showing which bot/tab made a buy. */
+.tabtag{display:inline-block;font-size:10px;font-weight:800;padding:1px 6px;border-radius:4px;background:#ff941622;color:#ff9416;border:1px solid #ff941655}
 .tab-pane{display:none !important;width:100% !important;height:auto !important;margin:0;padding:0}
 .tab-pane.active{display:block !important;width:100% !important;height:auto !important;margin:0;padding:0}
 .pos-badge{background:var(--green);color:#000;border-radius:10px;font-size:10px;font-weight:800;padding:1px 7px;margin-left:5px;vertical-align:middle}
@@ -469,7 +480,8 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 <div class="main">
 
 <div class="tab-nav">
-  <button class="tab-btn active" onclick="switchTab('scanner')">Scanner</button>
+  <button class="tab-btn active" id="tabScanner" onclick="switchTab('scanner')"><span class="tabLed" id="led-T1"></span>Scanner</button>
+  <button class="tab-btn" id="tabLotto" onclick="switchTab('lotto')"><span class="tabLed" id="led-T2"></span>Lotto</button>
   <button class="tab-btn" id="tabPositions" onclick="switchTab('positions')">Positions</button>
   <button class="tab-btn" id="tabSettlements" onclick="switchTab('settlements')">Settled</button>
   <button class="tab-btn" onclick="switchTab('debug')">Debug</button>
@@ -489,6 +501,12 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 </div>
 
 <div id="tab-scanner" class="tab-pane active">
+
+<!-- Active-bot toggle: this is the T1 (front-page) bot. Only one bot runs at a time. -->
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+  <div class="activePill" id="pill-T1" onclick="setActiveProfile('T1')"><span class="dot"></span><span id="pillText-T1">Inactive</span></div>
+  <span style="font-size:12px;color:var(--muted)">Scanner bot <b style="color:#ff9416">T1</b> — tap to make this the running bot</span>
+</div>
 
 <!-- Inline Coach (always visible on main page) -->
 <div id="coachInline" style="background:#0c1612;border:1px solid #1f6045;border-radius:8px;padding:12px 14px;margin-bottom:14px;display:none">
@@ -887,6 +905,72 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 
 </div>
 </div><!-- /tab-scanner -->
+
+<!-- ── Lotto tab (T2 bot) ───────────────────────────────────────── -->
+<div id="tab-lotto" class="tab-pane">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+    <div class="activePill" id="pill-T2" onclick="setActiveProfile('T2')"><span class="dot"></span><span id="pillText-T2">Inactive</span></div>
+    <span style="font-size:12px;color:var(--muted)">Lotto bot <b style="color:#ff9416">T2</b> — tap to make this the running bot</span>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🎟️ Lotto Bot Settings (T2)</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px">A second, independent bot. Set it up however you like — it only trades when <b>T2</b> is the active bot above. Changes save automatically.</div>
+
+    <!-- BUY UP -->
+    <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
+      <label class="check-row" style="font-weight:700;color:var(--green)"><input type="checkbox" id="L_enableBuyUp" onchange="pushLottoSettings()"> 📈 BUY UP (YES) <span style="color:var(--muted);font-weight:400;font-size:12px">— price will go up</span></label>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--muted)">From</span>
+        <input type="number" id="L_minProb" min="1" max="99" value="80" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
+        <span style="font-size:12px;color:var(--muted)">to</span>
+        <input type="number" id="L_maxProb" min="1" max="99" value="96" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
+        <span style="font-size:12px;color:var(--muted)">%</span>
+      </div>
+    </div>
+
+    <!-- BUY DOWN -->
+    <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
+      <label class="check-row" style="font-weight:700;color:var(--red)"><input type="checkbox" id="L_enableBuyDown" onchange="pushLottoSettings()"> 📉 BUY DOWN (NO) <span style="color:var(--muted);font-weight:400;font-size:12px">— price will go down</span></label>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--muted)">From</span>
+        <input type="number" id="L_minProbDown" min="1" max="99" value="80" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
+        <span style="font-size:12px;color:var(--muted)">to</span>
+        <input type="number" id="L_maxProbDown" min="1" max="99" value="96" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
+        <span style="font-size:12px;color:var(--muted)">%</span>
+      </div>
+    </div>
+
+    <!-- Categories -->
+    <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
+      <div style="font-size:12px;color:var(--muted);font-weight:700;margin-bottom:8px">CATEGORIES</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <label class="check-row"><input type="checkbox" id="L_showCrypto" onchange="pushLottoSettings()"> Crypto</label>
+        <label class="check-row"><input type="checkbox" id="L_showSports" onchange="pushLottoSettings()"> Sports</label>
+        <label class="check-row"><input type="checkbox" id="L_showPolitics" onchange="pushLottoSettings()"> Politics</label>
+        <label class="check-row"><input type="checkbox" id="L_showEconomics" onchange="pushLottoSettings()"> Economics</label>
+        <label class="check-row"><input type="checkbox" id="L_showCombo" onchange="pushLottoSettings()"> Combo/Parlay</label>
+      </div>
+      <div style="display:flex;gap:14px;margin-top:8px;flex-wrap:wrap">
+        <label class="check-row"><input type="checkbox" id="L_goodLiq" onchange="pushLottoSettings()"> Active only</label>
+        <label class="check-row"><input type="checkbox" id="L_hideMultiOutcome" onchange="pushLottoSettings()"> Hide multi-outcome</label>
+      </div>
+    </div>
+
+    <!-- Limits -->
+    <div style="border:1px solid var(--border);border-radius:8px;padding:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <label style="font-size:12px;color:var(--muted)">Ends within (min)<br><input type="number" id="L_minutes" min="1" value="15" onchange="pushLottoSettings()"></label>
+        <label style="font-size:12px;color:var(--muted)">Max $ per buy<br><input type="number" id="L_buyAmount" min="0.01" step="0.01" value="0.50" onchange="pushLottoSettings()"></label>
+        <label style="font-size:12px;color:var(--muted)">Max buys / scan<br><input type="number" id="L_autoMaxPerScan" min="1" value="3" onchange="pushLottoSettings()"></label>
+        <label style="font-size:12px;color:var(--muted)">Max open positions<br><input type="number" id="L_autoMaxConcurrent" min="1" value="20" onchange="pushLottoSettings()"></label>
+        <label style="font-size:12px;color:var(--muted)">Max buys / market<br><input type="number" id="L_maxBuysPerMarket" min="1" value="1" onchange="pushLottoSettings()"></label>
+      </div>
+    </div>
+
+    <div id="L_saveStatus" style="font-size:12px;color:var(--green);margin-top:10px;height:16px"></div>
+  </div>
+</div><!-- /tab-lotto -->
 
 <!-- ── Positions tab ────────────────────────────────────────────── -->
 <div id="tab-positions" class="tab-pane">
@@ -1526,7 +1610,7 @@ function renderSettlements(rows) {
       <tr>
         <td class="wrap">${titleHtml}${catTag}</td>
         <td>${badge}</td>
-        <td><span style="font-size:11px;font-weight:700;padding:3px 8px;border-radius:5px;background:${r.sold_by==='Bot Auto-Sell'?'#00d97e22':r.sold_by==='KalshiBot'?'#4f9eff22':'#ffffff11'};color:${r.sold_by==='Bot Auto-Sell'?'var(--green)':r.sold_by==='KalshiBot'?'#4f9eff':'#aaa'}">${r.sold_by||'Kalshi'}</span></td>
+        <td><span style="font-size:11px;font-weight:700;padding:3px 8px;border-radius:5px;background:${r.sold_by==='Bot Auto-Sell'?'#00d97e22':r.sold_by==='KalshiBot'?'#4f9eff22':'#ffffff11'};color:${r.sold_by==='Bot Auto-Sell'?'var(--green)':r.sold_by==='KalshiBot'?'#4f9eff':'#aaa'}">${r.sold_by||'Kalshi'}</span>${r.profile?` <span class="tabtag">${r.profile}</span>`:''}</td>
         <td><span class="badge ${r.side}">${(r.side||"").toUpperCase()}</span></td>
         <td>${(r.count||0).toFixed(2)}</td>
         <td>$${(r.cost||0).toFixed(2)}</td>
@@ -1692,6 +1776,8 @@ window.addEventListener("load", () => {
   // Load bot status (running/stopped) and cash first
   loadBotStatus();
   loadCash();
+  loadActiveProfile();   // light up the correct bot LED/pill from the start
+  loadLottoSettings();   // pre-fill the Lotto (T2) form so it's ready when opened
   // Phase 1 (0-2s): Load positions + balance WITHOUT market enrichment
   loadBalance(false);
 
@@ -3025,6 +3111,7 @@ function renderPositionsTable(positions) {
           <div style="margin-top:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <span class="badge ${side}">${side.toUpperCase()}</span>
             ${p.bot_bought ? '<span class="src-bot">KalshiBot</span>' : '<span class="src-manual">Kalshi</span>'}
+            ${p.profile ? `<span class="tabtag">${p.profile}</span>` : ''}
           </div>
         </td>
         <td style="font-size:13px;font-weight:600;text-align:center" data-label="Shares">${abs}</td>
@@ -4257,6 +4344,10 @@ function switchTab(name) {
   } else {
     if (window._settleTabRefresh) { clearInterval(window._settleTabRefresh); window._settleTabRefresh = null; }
   }
+  if (name === "lotto") {
+    loadLottoSettings();   // pull the T2 profile into the form
+    loadActiveProfile();   // refresh which bot is active (LED/pill)
+  }
   // Hide Start Bot on non-scanner tabs, show Stop Bot everywhere
   const fab = document.getElementById("fab");
   const scanBtn = document.getElementById("scanBtn");
@@ -4524,6 +4615,7 @@ function pushBuySettings(immediate=false) {
       min_age_mins:    optNum("minAgeMins"),
       max_age_mins:    optNum("maxAgeMins"),
       no_buy_within_mins: optNum("noBuyWithinMins"),
+      profile:         "T1",   // the front page edits the T1 (Scanner) bot profile
     };
     fetch("/api/buy-settings", {
       method: "POST",
@@ -4534,6 +4626,98 @@ function pushBuySettings(immediate=false) {
   if (_pushBuyTimer) clearTimeout(_pushBuyTimer);
   if (immediate) { run(); return; }
   _pushBuyTimer = setTimeout(run, 600);  // debounce rapid slider/typing changes
+}
+
+// ── Multi-bot profiles (T1 = Scanner front page, T2 = Lotto tab) ──────────
+// Only ONE profile is active (the running bot) at a time. The LEDs on the tab
+// buttons and the Active pills inside each tab reflect which one.
+let _activeProfile = "T1";
+
+function updateProfileUI(active) {
+  _activeProfile = active;
+  [["T1","pill-T1","pillText-T1","led-T1"],
+   ["T2","pill-T2","pillText-T2","led-T2"]].forEach(([id,pid,tid,lid]) => {
+    const on = (id === active);
+    const pill = document.getElementById(pid);
+    const txt  = document.getElementById(tid);
+    const led  = document.getElementById(lid);
+    if (pill) pill.classList.toggle("on", on);
+    if (txt)  txt.textContent = on ? "Active" : "Inactive";
+    if (led)  led.classList.toggle("on", on);
+  });
+}
+
+async function loadActiveProfile() {
+  try {
+    const r = await fetch("/api/active-profile", {cache:"no-store"});
+    const d = await r.json();
+    if (d.active) updateProfileUI(d.active);
+  } catch(e) {}
+}
+
+async function setActiveProfile(p) {
+  updateProfileUI(p);  // optimistic — instant LED/pill feedback
+  try {
+    const r = await fetch("/api/active-profile", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({profile:p})
+    });
+    const d = await r.json();
+    if (d.active) updateProfileUI(d.active);
+    toast(`Bot ${p} is now active`, "ok");
+  } catch(e) { toast("Couldn't switch bot — try again", "err"); loadActiveProfile(); }
+}
+
+// ── Lotto (T2) settings: independent form, posts to profile T2 ────────────
+let _pushLottoTimer = null;
+function pushLottoSettings() {
+  const chk = id => { const el = document.getElementById(id); return el ? el.checked : false; };
+  const num = (id,d) => { const el = document.getElementById(id); const v = parseFloat(el?.value); return isNaN(v)?d:v; };
+  const payload = {
+    profile: "T2",
+    enable_buy_up:   chk("L_enableBuyUp"),
+    up_min:          num("L_minProb", 80),
+    up_max:          num("L_maxProb", 96),
+    enable_buy_down: chk("L_enableBuyDown"),
+    down_min:        num("L_minProbDown", 80),
+    down_max:        num("L_maxProbDown", 96),
+    minutes:         num("L_minutes", 15),
+    buy_amount:      num("L_buyAmount", 0.50),
+    max_per_scan:    num("L_autoMaxPerScan", 3),
+    max_concurrent:  num("L_autoMaxConcurrent", 20),
+    max_per_market:  num("L_maxBuysPerMarket", 1),
+    show_crypto:     chk("L_showCrypto"),
+    show_combo:      chk("L_showCombo"),
+    show_sports:     chk("L_showSports"),
+    show_politics:   chk("L_showPolitics"),
+    show_economics:  chk("L_showEconomics"),
+    good_liq:        chk("L_goodLiq"),
+    hide_multi:      chk("L_hideMultiOutcome"),
+  };
+  const st = document.getElementById("L_saveStatus");
+  if (st) st.textContent = "Saving…";
+  if (_pushLottoTimer) clearTimeout(_pushLottoTimer);
+  _pushLottoTimer = setTimeout(() => {
+    fetch("/api/buy-settings", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload)})
+      .then(() => { if (st) st.textContent = "Saved ✓"; setTimeout(()=>{ if(st) st.textContent=""; }, 1500); })
+      .catch(() => { if (st) st.textContent = "Save failed — retry"; });
+  }, 500);
+}
+
+async function loadLottoSettings() {
+  try {
+    const r = await fetch("/api/buy-settings?profile=T2", {cache:"no-store"});
+    const s = await r.json();
+    const set = (id,v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+    const chk = (id,v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
+    chk("L_enableBuyUp", s.enable_buy_up);   set("L_minProb", s.up_min);   set("L_maxProb", s.up_max);
+    chk("L_enableBuyDown", s.enable_buy_down); set("L_minProbDown", s.down_min); set("L_maxProbDown", s.down_max);
+    set("L_minutes", s.minutes); set("L_buyAmount", s.buy_amount);
+    set("L_autoMaxPerScan", s.max_per_scan); set("L_autoMaxConcurrent", s.max_concurrent); set("L_maxBuysPerMarket", s.max_per_market);
+    chk("L_showCrypto", s.show_crypto); chk("L_showCombo", s.show_combo); chk("L_showSports", s.show_sports);
+    chk("L_showPolitics", s.show_politics); chk("L_showEconomics", s.show_economics);
+    chk("L_goodLiq", s.good_liq); chk("L_hideMultiOutcome", s.hide_multi);
+  } catch(e) {}
 }
 
 function loadSettings() {

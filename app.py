@@ -275,12 +275,95 @@ except Exception:
     _bs_loaded = {}
 buy_settings = {**_DEFAULT_BUY_SETTINGS, **_bs_loaded}
 
+# ── Strategy profiles (multi-bot tabs) ─────────────────────────────────────
+# Each UI tab is its own bot "profile" with a full settings set. Only ONE profile
+# is ACTIVE at a time (one buy at a time), and the live `buy_settings` the bot reads
+# is always a mirror of the active profile. T1 = the front-page (Scanner) bot, T2 =
+# the Lotto tab bot. Backward compatible: if no profile is given anywhere, everything
+# operates on the active profile, exactly like before this feature existed.
+PROFILES_FILE = HERE / "profiles.json"
+PROFILE_IDS = ["T1", "T2"]
+
+def _load_profiles():
+    try:
+        if PROFILES_FILE.exists():
+            d = json.loads(PROFILES_FILE.read_text(encoding="utf-8"))
+            prof = d.get("profiles") or {}
+            active = d.get("active") if d.get("active") in PROFILE_IDS else "T1"
+            return prof, active
+    except Exception as e:
+        print(f"[profiles] load failed: {e}")
+    return {}, "T1"
+
+_profiles, active_profile = _load_profiles()
+# Seed any missing profile. T1 inherits the existing live buy_settings (so nothing
+# changes for the current bot); T2 starts as a copy of T1 ("copy front-page settings").
+_profiles.setdefault("T1", dict(buy_settings))
+_profiles.setdefault("T2", dict(_profiles["T1"]))
+for _pid in PROFILE_IDS:
+    _profiles[_pid] = {**_DEFAULT_BUY_SETTINGS, **_profiles[_pid]}
+# The bot reads the ACTIVE profile.
+buy_settings = dict(_profiles[active_profile])
+
+def _save_profiles():
+    try:
+        PROFILES_FILE.write_text(json.dumps({"active": active_profile, "profiles": _profiles}, indent=2),
+                                 encoding="utf-8")
+    except Exception as e:
+        print(f"[profiles] save error: {e}")
+
 def _save_buy_settings():
-    """Persist buy_settings so they survive restarts and the bot reads them live."""
+    """Persist buy_settings (active-profile mirror) so the bot reads them live, and
+    keep the active profile + profiles file in sync."""
+    global _profiles
     try:
         BUY_SETTINGS_FILE.write_text(json.dumps(buy_settings, indent=2), encoding="utf-8")
     except Exception as e:
         print(f"[buy settings] save error: {e}")
+    # Mirror the live settings back into the active profile and persist profiles too.
+    _profiles[active_profile] = dict(buy_settings)
+    _save_profiles()
+
+def _apply_buy_edits(target: dict, data: dict):
+    """Coerce + apply a posted settings payload onto `target` (a settings dict).
+    Shared by the buy-settings endpoint for both active and inactive profiles."""
+    def _pct(v, default):
+        try:    return max(1.0, min(99.0, float(v)))
+        except (TypeError, ValueError): return default
+    def _posint(v, default, lo=0):
+        try:    return max(lo, int(float(v)))
+        except (TypeError, ValueError): return default
+    def _optfloat(v):
+        if v in (None, "", "any", "off"): return None
+        try:    return float(v)
+        except (TypeError, ValueError): return None
+
+    for k in ["enable_buy_up", "enable_buy_down", "show_crypto", "show_combo",
+              "show_sports", "show_politics", "show_economics", "good_liq", "hide_multi"]:
+        if k in data:
+            target[k] = bool(data[k])
+    for k in ("up_min", "up_max", "down_min", "down_max"):
+        if k in data:
+            target[k] = _pct(data[k], target.get(k, 80.0))
+    if "minutes" in data:
+        target["minutes"] = _posint(data["minutes"], target.get("minutes", 15), lo=1)
+    if "buy_amount" in data:
+        try:    target["buy_amount"] = max(0.01, float(data["buy_amount"]))
+        except (TypeError, ValueError): pass
+    if "max_per_scan" in data:
+        target["max_per_scan"] = _posint(data["max_per_scan"], target.get("max_per_scan", 3), lo=1)
+    if "max_concurrent" in data:
+        target["max_concurrent"] = _posint(data["max_concurrent"], target.get("max_concurrent", 999), lo=1)
+    if "max_per_market" in data:
+        target["max_per_market"] = _posint(data["max_per_market"], target.get("max_per_market", 1), lo=1)
+    for k in ("min_age_mins", "max_age_mins", "no_buy_within_mins"):
+        if k in data:
+            target[k] = _optfloat(data[k])
+    # Keep min <= max for each side
+    if target.get("up_min", 0) > target.get("up_max", 0):
+        target["up_min"], target["up_max"] = target["up_max"], target["up_min"]
+    if target.get("down_min", 0) > target.get("down_max", 0):
+        target["down_min"], target["down_max"] = target["down_max"], target["down_min"]
 
 print(f"[buy] loaded: up={buy_settings['enable_buy_up']}({buy_settings['up_min']}-{buy_settings['up_max']}) "
       f"down={buy_settings['enable_buy_down']}({buy_settings['down_min']}-{buy_settings['down_max']}) "
@@ -1009,6 +1092,7 @@ def _bot_thread():
                                 "status": "open",
                                 "bought_at": datetime.now(timezone.utc).isoformat(),
                                 "bot_bought": True,
+                                "profile": active_profile,  # which tab's bot bought it (T1/T2)
                             }
                             _save_tracked()
                             _balance_cache["ts"] = 0
@@ -1395,6 +1479,7 @@ def portfolio():
                 "target_pct":     bot_info.get("target_pct") if bot_info else None,
                 "bought_at":      bot_info.get("bought_at") if bot_info else None,
                 "status":         bot_info.get("status", "open") if bot_info else "open",
+                "profile":        bot_info.get("profile") if bot_info else None,
             })
     except Exception as e:
         positions_ok = False
@@ -1494,6 +1579,7 @@ def portfolio():
             "target_pct":     info.get("target_pct"),
             "bought_at":      info.get("bought_at"),
             "status":         info.get("status", "open"),
+            "profile":        info.get("profile"),
         })
         pass  # suppress repeated fallback log spam
 
@@ -1644,6 +1730,7 @@ def _recent_settlements(hours: int = 24) -> list:
                     "settled_time": ts_str,
                     "won":          pnl > 0.001,
                     "sold_by":      _get_sold_by(ticker),
+                    "profile":      (tracked.get(ticker) or {}).get("profile"),
                 })
             if stop:
                 break
@@ -1687,6 +1774,7 @@ def _recent_settlements(hours: int = 24) -> list:
             "settled_time": sold_at,
             "won":          pnl > 0.001,
             "sold_by":      _get_sold_by(tkr),
+            "profile":      pos.get("profile"),
         })
 
     # Sort combined list by settled_time descending
@@ -2666,65 +2754,49 @@ def buy_settings_endpoint():
     values live every cycle. Unknown keys are ignored; types are coerced safely.
     """
     global buy_settings
+    # Which profile's settings are we reading/writing? Default = the active one, so
+    # an old client that never sends `profile` keeps working exactly as before.
+    req_profile = (request.args.get("profile")
+                   or (request.get_json(silent=True) or {}).get("profile"))
+    target = req_profile if req_profile in PROFILE_IDS else active_profile
+
     if request.method == "GET":
-        return jsonify(buy_settings)
+        # Return the requested profile (active mirror if it's the active one).
+        src = buy_settings if target == active_profile else _profiles.get(target, buy_settings)
+        return jsonify(src)
 
     data = request.get_json(silent=True) or {}
+    # Edit a working copy of the target profile, then commit to the right place.
+    work = dict(buy_settings) if target == active_profile else dict(_profiles.get(target, _DEFAULT_BUY_SETTINGS))
+    _apply_buy_edits(work, data)
 
-    def _pct(v, default):
-        try:
-            return max(1.0, min(99.0, float(v)))
-        except (TypeError, ValueError):
-            return default
+    if target == active_profile:
+        buy_settings = work
+        _save_buy_settings()        # writes live mirror + syncs active profile to disk
+    else:
+        _profiles[target] = work    # edit an inactive profile only — bot untouched
+        _save_profiles()
+    return jsonify({"ok": True, "profile": target, "active": active_profile, "settings": work})
 
-    def _posint(v, default, lo=0):
-        try:
-            return max(lo, int(float(v)))
-        except (TypeError, ValueError):
-            return default
 
-    def _optfloat(v):
-        if v in (None, "", "any", "off"):
-            return None
-        try:
-            return float(v)
-        except (TypeError, ValueError):
-            return None
-
-    bool_keys = ["enable_buy_up", "enable_buy_down", "show_crypto", "show_combo",
-                 "show_sports", "show_politics", "show_economics", "good_liq", "hide_multi"]
-    for k in bool_keys:
-        if k in data:
-            buy_settings[k] = bool(data[k])
-
-    for k in ("up_min", "up_max", "down_min", "down_max"):
-        if k in data:
-            buy_settings[k] = _pct(data[k], buy_settings[k])
-    if "minutes" in data:
-        buy_settings["minutes"] = _posint(data["minutes"], buy_settings["minutes"], lo=1)
-    if "buy_amount" in data:
-        try:
-            buy_settings["buy_amount"] = max(0.01, float(data["buy_amount"]))
-        except (TypeError, ValueError):
-            pass
-    if "max_per_scan" in data:
-        buy_settings["max_per_scan"] = _posint(data["max_per_scan"], buy_settings["max_per_scan"], lo=1)
-    if "max_concurrent" in data:
-        buy_settings["max_concurrent"] = _posint(data["max_concurrent"], buy_settings["max_concurrent"], lo=1)
-    if "max_per_market" in data:
-        buy_settings["max_per_market"] = _posint(data["max_per_market"], buy_settings["max_per_market"], lo=1)
-    for k in ("min_age_mins", "max_age_mins", "no_buy_within_mins"):
-        if k in data:
-            buy_settings[k] = _optfloat(data[k])
-
-    # Keep min <= max for each side
-    if buy_settings["up_min"] > buy_settings["up_max"]:
-        buy_settings["up_min"], buy_settings["up_max"] = buy_settings["up_max"], buy_settings["up_min"]
-    if buy_settings["down_min"] > buy_settings["down_max"]:
-        buy_settings["down_min"], buy_settings["down_max"] = buy_settings["down_max"], buy_settings["down_min"]
-
-    _save_buy_settings()
-    return jsonify({"ok": True, "settings": buy_settings})
+@app.route("/api/active-profile", methods=["GET", "POST"])
+def active_profile_endpoint():
+    """GET → which tab's bot is active. POST {profile:'T1'|'T2'} → make it active;
+    the live buy_settings the bot reads becomes that profile's settings (only one
+    profile trades at a time)."""
+    global buy_settings, active_profile
+    if request.method == "GET":
+        return jsonify({"active": active_profile, "profiles": PROFILE_IDS})
+    data = request.get_json(silent=True) or {}
+    p = data.get("profile")
+    if p not in PROFILE_IDS:
+        return jsonify({"ok": False, "error": "bad profile"}), 400
+    # Persist the just-active profile's current live edits before switching away.
+    _profiles[active_profile] = dict(buy_settings)
+    active_profile = p
+    buy_settings = dict(_profiles[active_profile])
+    _save_buy_settings()  # writes live mirror + profiles (with new active) to disk
+    return jsonify({"ok": True, "active": active_profile, "settings": buy_settings})
 
 
 @app.route("/api/enrich-positions", methods=["GET"])
