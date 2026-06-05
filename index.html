@@ -233,15 +233,16 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   /* nav (56) + wallet totals bar (44) = 100px reserved at top */
   body{font-size:16px;padding-top:100px;width:100%;overflow-x:hidden;margin:0;padding-left:0;padding-right:0}
 
-  nav{height:56px;padding:0 6px;width:100%;flex-wrap:nowrap;overflow:visible}
+  nav{height:56px;padding:0 6px;width:100%;flex-wrap:nowrap;overflow:visible;display:flex;align-items:center}
   .nav-logo{font-size:14px;margin-right:6px;flex:0 0 auto}
-  /* The status text ("🟢 Running · 21m 2s · 19 bought") is long and was shoving
-     the ⟳ Update + ⚙️ buttons off the right edge on phones. Let it shrink/truncate
-     so the action buttons always stay on-screen. */
-  #botStatusEl{font-size:10px !important;overflow:hidden;text-overflow:ellipsis;max-width:34vw;flex:0 1 auto}
-  /* Compact, icon-first action buttons that always fit. */
-  #snoozeBtn{margin-left:auto !important;padding:6px 8px !important;font-size:12px !important;flex:0 0 auto}
-  #updateBtn{padding:6px 9px !important;font-size:12px !important;flex:0 0 auto;color:var(--green) !important;border-color:var(--green) !important}
+  /* The status text ("🟢 Running · 443m · 64 bought") is long and was shoving the
+     ⟳ Update + ⚙️ buttons off the right edge (body clips overflow → they vanish).
+     The green "✓ BOT RUNNING" bar + the bottom "✓ Running" pill already show status,
+     so HIDE this nav copy on phones to guarantee the action buttons fit. */
+  #botStatusEl{display:none !important}
+  /* Push the action buttons hard-right and lock them visible — never clipped. */
+  #snoozeBtn{display:none !important}  /* available in ⚙️ Settings; frees space on mobile */
+  #updateBtn{margin-left:auto !important;padding:8px 12px !important;font-size:13px !important;flex:0 0 auto;color:#0a0a0a !important;background:var(--green) !important;border:1px solid var(--green) !important;font-weight:800 !important}
   /* Totals as a fixed strip under the nav. It SWIPES horizontally so you get
      EVERYTHING (Cash, Portfolio, Total, and every P&L column) with zero overlap —
      the first 3 (Cash/Portfolio/Total) are visible, swipe left for the P&L. */
