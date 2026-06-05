@@ -322,7 +322,10 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
      other sticky headers below have the same problem, so neutralize them too. */
   .tab-nav{display:flex;gap:0;border-bottom:1px solid var(--border);overflow-x:auto;scroll-behavior:smooth;-webkit-overflow-scrolling:touch;width:100%;max-width:100%;position:static !important;top:auto;margin-bottom:8px}
   #settlementsHeader,#posFilterHeader{position:static !important;top:auto}
-  .tab-btn{flex:1;min-width:60px;padding:10px 8px;font-size:12px;border:none;background:transparent;border-bottom:2px solid transparent;white-space:nowrap;width:auto}
+  .tab-btn{flex:0 0 auto;min-width:max-content;padding:10px 12px;font-size:12px;border:none;background:transparent;border-bottom:2px solid transparent;white-space:nowrap;width:auto}
+  /* Hide the floating Coach popup on phones — its 300px card overlaps the bottom
+     bar; the Coach tab + inline coach already cover it. */
+  #clippy{display:none !important}
   .tab-btn.active{border-bottom-color:var(--green);color:var(--green)}
 
   /* Mobile: LAYOUT B — tight two-line rows, zero wasted space.
@@ -953,10 +956,10 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
       <label class="check-row" style="font-weight:700;color:var(--red)"><input type="checkbox" id="L_enableBuyDown" onchange="pushLottoSettings()"> 📉 BUY DOWN (NO) <span style="color:var(--muted);font-weight:400;font-size:12px">— price will go down</span></label>
       <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">
         <span style="font-size:12px;color:var(--muted)">From</span>
-        <input type="number" id="L_minProbDown" min="1" max="99" value="80" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
+        <input type="number" id="L_minProbDown" min="1" max="99" value="1" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
         <span style="font-size:12px;color:var(--muted)">to</span>
-        <input type="number" id="L_maxProbDown" min="1" max="99" value="96" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
-        <span style="font-size:12px;color:var(--muted)">%</span>
+        <input type="number" id="L_maxProbDown" min="1" max="99" value="15" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
+        <span style="font-size:12px;color:var(--muted)">¢ (1–99 ok)</span>
       </div>
     </div>
 
@@ -998,20 +1001,28 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   <!-- SELL STRATEGY (T2) — same options as the front page, you set the reasons -->
   <div class="card">
     <div class="card-title">💰 Sell Strategy (T2)</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">When should the Lotto bot sell? Applies to its new buys.</div>
-    <label style="font-size:13px;display:block;margin-bottom:10px">Sell rule:
-      <select id="L_stratMode" onchange="pushLottoStrategy()" style="width:100%;margin-top:4px;padding:8px;background:#111;border:1px solid var(--border);border-radius:7px;color:#fff;font-size:14px">
-        <option value="resolution">⏳ Wait for resolution (hold until the market closes)</option>
-        <option value="profit">📈 Sell at % profit</option>
-        <option value="profit_dollars">💵 Sell at $ profit</option>
-        <option value="target_price">🎯 Sell when price hits a ¢ target</option>
-      </select>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Pick the sell rule with the dot on the left. The values stay editable so you can set whichever one you choose.</div>
+
+    <!-- Each option has its own radio "dot"; inputs stay visible/editable always -->
+    <label class="lottoSellOpt" style="display:flex;align-items:center;gap:10px;padding:9px 4px">
+      <input type="radio" name="lottoSellMode" value="resolution" checked onchange="pushLottoStrategy()" style="accent-color:var(--green);width:18px;height:18px">
+      <span style="font-size:13px">⏳ Wait for resolution <span style="color:var(--muted)">(hold until the market closes)</span></span>
     </label>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
-      <label style="font-size:12px;color:var(--muted)">% profit<br><input type="number" id="L_targetPct" min="1" step="1" value="10" onchange="pushLottoStrategy()"></label>
-      <label style="font-size:12px;color:var(--muted)">$ profit<br><input type="number" id="L_targetDol" min="0.01" step="0.01" value="0.05" onchange="pushLottoStrategy()"></label>
-      <label style="font-size:12px;color:var(--muted)">Sell at ¢<br><input type="number" id="L_targetPrice" min="1" max="99" step="1" value="50" onchange="pushLottoStrategy()"></label>
-    </div>
+    <label class="lottoSellOpt" style="display:flex;align-items:center;gap:10px;padding:9px 4px;flex-wrap:wrap">
+      <input type="radio" name="lottoSellMode" value="profit" onchange="pushLottoStrategy()" style="accent-color:var(--green);width:18px;height:18px">
+      <span style="font-size:13px">📈 Sell at % profit:</span>
+      <input type="number" id="L_targetPct" min="1" step="1" value="10" onclick="_lottoPickMode('profit')" onchange="_lottoPickMode('profit');pushLottoStrategy()" style="width:74px"><span style="color:var(--muted)">%</span>
+    </label>
+    <label class="lottoSellOpt" style="display:flex;align-items:center;gap:10px;padding:9px 4px;flex-wrap:wrap">
+      <input type="radio" name="lottoSellMode" value="profit_dollars" onchange="pushLottoStrategy()" style="accent-color:var(--green);width:18px;height:18px">
+      <span style="font-size:13px">💵 Sell at $ profit:</span>
+      <span style="color:var(--muted)">$</span><input type="number" id="L_targetDol" min="0.01" step="0.01" value="0.05" onclick="_lottoPickMode('profit_dollars')" onchange="_lottoPickMode('profit_dollars');pushLottoStrategy()" style="width:84px">
+    </label>
+    <label class="lottoSellOpt" style="display:flex;align-items:center;gap:10px;padding:9px 4px;flex-wrap:wrap">
+      <input type="radio" name="lottoSellMode" value="target_price" onchange="pushLottoStrategy()" style="accent-color:var(--green);width:18px;height:18px">
+      <span style="font-size:13px">🎯 Sell when price hits:</span>
+      <input type="number" id="L_targetPrice" min="1" max="99" step="1" value="50" onclick="_lottoPickMode('target_price')" onchange="_lottoPickMode('target_price');pushLottoStrategy()" style="width:74px"><span style="color:var(--muted)">¢</span>
+    </label>
     <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
       <label class="check-row" style="font-size:13px">
         <input type="checkbox" id="L_stopLossChk" checked style="accent-color:var(--red)" onchange="pushLottoStrategy()">
@@ -4849,8 +4860,17 @@ async function loadLottoSettings() {
 
 // ── Lotto (T2) SELL strategy: independent, posts to profile T2 ─────────────
 let _pushLottoStratTimer = null;
+function _lottoSellMode() {
+  const r = document.querySelector('input[name="lottoSellMode"]:checked');
+  return r ? r.value : "resolution";
+}
+// Clicking inside an option's input also selects that option's dot.
+function _lottoPickMode(mode) {
+  const r = document.querySelector(`input[name="lottoSellMode"][value="${mode}"]`);
+  if (r && !r.checked) r.checked = true;
+}
 function pushLottoStrategy() {
-  const mode = document.getElementById("L_stratMode")?.value || "resolution";
+  const mode = _lottoSellMode();
   const num = id => { const v = parseFloat(document.getElementById(id)?.value); return isNaN(v)?null:v; };
   const slOn = document.getElementById("L_stopLossChk")?.checked;
   const payload = {
@@ -4876,8 +4896,9 @@ async function loadLottoStrategy() {
     const r = await fetch("/api/strategy?profile=T2", {cache:"no-store"});
     const s = await r.json();
     const set = (id,v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
-    const md = document.getElementById("L_stratMode");
-    if (md) md.value = s.mode || "resolution";
+    // Select the matching radio dot (values always stay visible/editable).
+    const radio = document.querySelector(`input[name="lottoSellMode"][value="${s.mode||'resolution'}"]`);
+    if (radio) radio.checked = true;
     set("L_targetPct", s.target_pct);
     set("L_targetDol", s.target_dollars);
     set("L_targetPrice", s.target_price_cents);
@@ -4894,7 +4915,7 @@ const LOTTO_FIELDS = ["L_enableBuyUp","L_minProb","L_maxProb","L_enableBuyDown",
   "L_minutes","L_buyAmount","L_autoMaxPerScan","L_autoMaxConcurrent","L_maxBuysPerMarket",
   "L_showCrypto","L_showCombo","L_showSports","L_showPolitics","L_showEconomics","L_goodLiq","L_hideMultiOutcome",
   "L_minAgeMins","L_maxAgeMins","L_noBuyWithinMins",
-  "L_stratMode","L_targetPct","L_targetDol","L_targetPrice","L_stopLossChk","L_stopLossPct"];
+  "L_targetPct","L_targetDol","L_targetPrice","L_stopLossChk","L_stopLossPct"];
 let _lottoMemArming = false;
 
 function _lottoSnapshot() {
@@ -4904,6 +4925,7 @@ function _lottoSnapshot() {
     if (!el) return;
     snap[id] = (el.type === "checkbox") ? el.checked : el.value;
   });
+  snap.lottoSellMode = _lottoSellMode();   // the selected sell-rule dot
   return snap;
 }
 function _lottoApply(snap) {
@@ -4913,6 +4935,10 @@ function _lottoApply(snap) {
     if (!el || !(id in snap)) return;
     if (el.type === "checkbox") el.checked = !!snap[id]; else el.value = snap[id];
   });
+  if (snap.lottoSellMode) {
+    const radio = document.querySelector(`input[name="lottoSellMode"][value="${snap.lottoSellMode}"]`);
+    if (radio) radio.checked = true;
+  }
   pushLottoSettings();   // push the recalled buy settings to T2
   pushLottoStrategy();   // and the recalled sell strategy
 }
@@ -4956,7 +4982,7 @@ function seedLottoMemDefaults() {
     L_showCrypto:true, L_showCombo:true, L_showSports:true, L_showPolitics:true, L_showEconomics:true,
     L_goodLiq:false, L_hideMultiOutcome:false,
     L_minAgeMins:"", L_maxAgeMins:"", L_noBuyWithinMins:"",
-    L_stratMode:"resolution", L_targetPct:"10", L_targetDol:"0.05", L_targetPrice:"50",
+    lottoSellMode:"resolution", L_targetPct:"10", L_targetDol:"0.05", L_targetPrice:"50",
     L_stopLossChk:true, L_stopLossPct:"50"
   });
   updateLottoMemUI();
