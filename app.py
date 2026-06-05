@@ -1064,6 +1064,15 @@ def mobile():
     return resp
 
 
+@app.route("/demo")
+def demo_layouts():
+    # Temporary layout-picker page: shows 3 position-row layouts (A/B/C) with
+    # sample data so the design can be chosen on the phone. Never cached.
+    resp = make_response(send_from_directory(HERE, "demo_layouts.html"))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return resp
+
+
 @app.route("/audio/<path:filename>")
 def serve_audio(filename):
     # Serves user-supplied sounds (e.g. audio/chaching.mp3) committed to the repo.
