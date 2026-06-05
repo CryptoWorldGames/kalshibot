@@ -312,6 +312,27 @@ _failed_market_ts: dict = {}  # ticker → timestamp of failure
 # Last good open-positions list — served when a fetch comes back empty while the
 # balance API still shows positions (transient empty / the bot starving the API).
 _last_positions_cache: dict = {"data": [], "value": 0.0, "ts": 0.0}
+# Persist the last-good list to disk so an Update/restart doesn't wipe the fallback
+# (the #1 reason the UI showed a blank "No open positions" right after restarting).
+POSITIONS_CACHE_FILE = HERE / "positions_cache.json"
+
+def _save_positions_cache():
+    try:
+        POSITIONS_CACHE_FILE.write_text(json.dumps(_last_positions_cache), encoding="utf-8")
+    except Exception as e:
+        print(f"[positions-cache] save failed: {e}")
+
+def _load_positions_cache():
+    """Load the disk cache into memory if it's newer/non-empty. Tolerates a missing
+    or corrupt file (returns quietly). Only used as a fallback on an empty fetch."""
+    global _last_positions_cache
+    try:
+        if POSITIONS_CACHE_FILE.exists():
+            d = json.loads(POSITIONS_CACHE_FILE.read_text(encoding="utf-8"))
+            if isinstance(d, dict) and d.get("data"):
+                _last_positions_cache = d
+    except Exception as e:
+        print(f"[positions-cache] load failed: {e}")
 
 def _get_market(ticker: str) -> dict:
     """Fetch market data with 60s cache to reduce Kalshi API calls."""
@@ -1193,21 +1214,40 @@ def portfolio():
     positions = []
     portfolio_value = 0.0
     positions_ok = True  # did Kalshi's live positions fetch succeed this call?
+    # Kalshi's own open-positions value (from the balance endpoint). Computed up
+    # front so the positions fetch below can RETRY when it comes back empty but
+    # Kalshi says we actually hold positions (i.e. the fetch was just starved).
+    api_positions_value = 0.0
     try:
-        # Fetch ALL open positions with cursor pagination
+        _pv_raw = float(bal_data.get("portfolio_value", 0))
+        if _pv_raw > 0:
+            api_positions_value = round(_pv_raw / 100, 2)  # always cents (BUGLOG-001)
+    except Exception:
+        pass
+    try:
+        # Fetch ALL open positions with cursor pagination. If the first attempt
+        # comes back empty WHILE the balance API says we hold open positions, the
+        # fetch was starved by the scan loop — retry a few times (threaded server
+        # lets these run concurrently) so a transient empty never blanks the list.
         raw_positions = []
-        cursor = None
-        pages = 0
-        while pages < 5:  # max 5 pages × 200 = 1000 positions
-            params = {"count": 200}
-            if cursor: params["cursor"] = cursor
-            pos_data = kalshi_get("/portfolio/positions", params)
-            batch = pos_data.get("market_positions", pos_data.get("positions", []))
-            raw_positions.extend(batch)
-            cursor = pos_data.get("cursor")
-            pages += 1
-            if not cursor or len(batch) < 200:
+        for _attempt in range(3):
+            raw_positions = []
+            cursor = None
+            pages = 0
+            while pages < 5:  # max 5 pages × 200 = 1000 positions
+                params = {"count": 200}
+                if cursor: params["cursor"] = cursor
+                pos_data = kalshi_get("/portfolio/positions", params)
+                batch = pos_data.get("market_positions", pos_data.get("positions", []))
+                raw_positions.extend(batch)
+                cursor = pos_data.get("cursor")
+                pages += 1
+                if not cursor or len(batch) < 200:
+                    break
+            # Got data, or Kalshi says we genuinely hold nothing → stop retrying.
+            if raw_positions or api_positions_value <= 0:
                 break
+            time.sleep(0.4)  # brief backoff, then re-fetch (high-priority UI call)
 
         for p in raw_positions:
             ticker = p.get("market_id") or p.get("ticker", "")
@@ -1417,28 +1457,27 @@ def portfolio():
         })
         pass  # suppress repeated fallback log spam
 
-    # Use Kalshi's own portfolio_value (open positions value) from the balance endpoint
-    # as fallback when position-by-position calculation returns 0
-    api_positions_value = 0.0
-    try:
-        pv_raw = float(bal_data.get("portfolio_value", 0))
-        if pv_raw > 0:
-            # portfolio_value is ALWAYS cents (BUGLOG-001) — no `> 200` heuristic.
-            api_positions_value = round(pv_raw / 100, 2)
-    except Exception:
-        pass
+    # (api_positions_value — Kalshi's own open-positions value — was computed up
+    # front, before the positions fetch, so the fetch could retry on a starved empty.)
 
-    # Cache the last good positions list. If THIS fetch came back empty but the
-    # balance API still shows open positions, the positions fetch was just starved
-    # by the bot's API traffic — serve the cached list instead of showing nothing.
+    # Cache the last good positions list (in memory AND on disk). If THIS fetch came
+    # back empty but the balance API still shows open positions, the positions fetch
+    # was just starved by the bot's API traffic — serve the cached list instead of
+    # showing nothing. Persisting to disk means an Update/restart no longer wipes the
+    # fallback, so the user never sees a blank "No open positions" after a restart.
     global _last_positions_cache
     if positions:
         _last_positions_cache = {"data": positions, "value": round(portfolio_value, 2), "ts": time.time()}
-    elif api_positions_value > 0 and _last_positions_cache.get("data"):
-        positions = _last_positions_cache["data"]
-        positions_ok = False  # tell the frontend this is cached, not a fresh empty
-        if portfolio_value == 0.0:
-            portfolio_value = _last_positions_cache.get("value") or api_positions_value
+        _save_positions_cache()
+    else:
+        # Live fetch empty — try in-memory cache, then the disk cache (survives restart).
+        if not _last_positions_cache.get("data"):
+            _load_positions_cache()
+        if api_positions_value > 0 and _last_positions_cache.get("data"):
+            positions = _last_positions_cache["data"]
+            positions_ok = False  # tell the frontend this is cached, not a fresh empty
+            if portfolio_value == 0.0:
+                portfolio_value = _last_positions_cache.get("value") or api_positions_value
 
     if portfolio_value == 0.0:
         portfolio_value = api_positions_value
