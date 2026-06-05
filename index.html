@@ -974,10 +974,35 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
       </div>
     </div>
 
-    <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
-      <button onclick="resetLottoDefaults()" style="background:#ff941622;color:#ff9416;border:1px solid #ff941655;border-radius:7px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer">🎟️ Reset to Lotto defaults</button>
-      <span id="L_saveStatus" style="font-size:12px;color:var(--green);height:16px"></span>
+    <span id="L_saveStatus" style="font-size:12px;color:var(--green);height:16px;display:block;margin-top:8px"></span>
+  </div>
+
+  <!-- SELL STRATEGY (T2) — same options as the front page, you set the reasons -->
+  <div class="card">
+    <div class="card-title">💰 Sell Strategy (T2)</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">When should the Lotto bot sell? Applies to its new buys.</div>
+    <label style="font-size:13px;display:block;margin-bottom:10px">Sell rule:
+      <select id="L_stratMode" onchange="pushLottoStrategy()" style="width:100%;margin-top:4px;padding:8px;background:#111;border:1px solid var(--border);border-radius:7px;color:#fff;font-size:14px">
+        <option value="resolution">⏳ Wait for resolution (hold until the market closes)</option>
+        <option value="profit">📈 Sell at % profit</option>
+        <option value="profit_dollars">💵 Sell at $ profit</option>
+        <option value="target_price">🎯 Sell when price hits a ¢ target</option>
+      </select>
+    </label>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <label style="font-size:12px;color:var(--muted)">% profit<br><input type="number" id="L_targetPct" min="1" step="1" value="10" onchange="pushLottoStrategy()"></label>
+      <label style="font-size:12px;color:var(--muted)">$ profit<br><input type="number" id="L_targetDol" min="0.01" step="0.01" value="0.05" onchange="pushLottoStrategy()"></label>
+      <label style="font-size:12px;color:var(--muted)">Sell at ¢<br><input type="number" id="L_targetPrice" min="1" max="99" step="1" value="50" onchange="pushLottoStrategy()"></label>
     </div>
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+      <label class="check-row" style="font-size:13px">
+        <input type="checkbox" id="L_stopLossChk" style="accent-color:var(--red)" onchange="pushLottoStrategy()">
+        <span style="margin:0 4px">🛑 Cut losses if a position drops</span>
+        <input type="number" id="L_stopLossPct" value="50" min="1" max="99" step="1" style="width:64px;margin:0 6px;border-color:var(--red);color:var(--red)" onchange="pushLottoStrategy()">
+        <span>%</span>
+      </label>
+    </div>
+    <span id="L_sellStatus" style="font-size:12px;color:var(--green);height:16px;display:block;margin-top:8px"></span>
   </div>
 </div><!-- /tab-lotto -->
 
@@ -1796,7 +1821,8 @@ window.addEventListener("load", () => {
   loadBotStatus();
   loadCash();
   loadActiveProfile();   // light up the correct bot LED/pill from the start
-  loadLottoSettings();   // pre-fill the Lotto (T2) form so it's ready when opened
+  loadLottoSettings();   // pre-fill the Lotto (T2) buy form so it's ready when opened
+  loadLottoStrategy();   // pre-fill the Lotto (T2) sell strategy
   // Phase 1 (0-2s): Load positions + balance WITHOUT market enrichment
   loadBalance(false);
 
@@ -4364,7 +4390,8 @@ function switchTab(name) {
     if (window._settleTabRefresh) { clearInterval(window._settleTabRefresh); window._settleTabRefresh = null; }
   }
   if (name === "lotto") {
-    loadLottoSettings();   // pull the T2 profile into the form
+    loadLottoSettings();   // pull the T2 buy profile into the form
+    loadLottoStrategy();   // pull the T2 sell strategy into the form
     loadActiveProfile();   // refresh which bot is active (LED/pill)
   }
   if (name === "lottostats") {
@@ -4707,14 +4734,14 @@ function pushLottoSettings() {
   const payload = {
     profile: "T2",
     enable_buy_up:   chk("L_enableBuyUp"),
-    up_min:          num("L_minProb", 1),
-    up_max:          num("L_maxProb", 15),
+    up_min:          num("L_minProb", 80),
+    up_max:          num("L_maxProb", 96),
     enable_buy_down: chk("L_enableBuyDown"),
-    down_min:        num("L_minProbDown", 1),
-    down_max:        num("L_maxProbDown", 15),
-    minutes:         num("L_minutes", 60),
+    down_min:        num("L_minProbDown", 80),
+    down_max:        num("L_maxProbDown", 96),
+    minutes:         num("L_minutes", 15),
     buy_amount:      num("L_buyAmount", 0.50),
-    max_per_scan:    num("L_autoMaxPerScan", 10),
+    max_per_scan:    num("L_autoMaxPerScan", 3),
     max_concurrent:  num("L_autoMaxConcurrent", 999),
     max_per_market:  num("L_maxBuysPerMarket", 1),
     show_crypto:     chk("L_showCrypto"),
@@ -4755,20 +4782,44 @@ async function loadLottoSettings() {
   } catch(e) {}
 }
 
-// Fill the Lotto form with the cheap-long-shot preset and save it.
-function resetLottoDefaults() {
-  const setV = (id,v) => { const el = document.getElementById(id); if (el) el.value = v; };
-  const setC = (id,v) => { const el = document.getElementById(id); if (el) el.checked = v; };
-  setC("L_enableBuyUp", true);  setV("L_minProb", 1);  setV("L_maxProb", 15);
-  setC("L_enableBuyDown", false); setV("L_minProbDown", 1); setV("L_maxProbDown", 15);
-  setV("L_minutes", 60); setV("L_buyAmount", 0.50);
-  setV("L_autoMaxPerScan", 10); setV("L_autoMaxConcurrent", 999); setV("L_maxBuysPerMarket", 1);
-  setC("L_showCrypto", true); setC("L_showCombo", true); setC("L_showSports", true);
-  setC("L_showPolitics", true); setC("L_showEconomics", true);
-  setC("L_goodLiq", false); setC("L_hideMultiOutcome", false);
-  setV("L_minAgeMins", ""); setV("L_maxAgeMins", ""); setV("L_noBuyWithinMins", "");
-  pushLottoSettings();
-  toast("Lotto reset to cheap-long-shot defaults", "ok");
+// ── Lotto (T2) SELL strategy: independent, posts to profile T2 ─────────────
+let _pushLottoStratTimer = null;
+function pushLottoStrategy() {
+  const mode = document.getElementById("L_stratMode")?.value || "resolution";
+  const num = id => { const v = parseFloat(document.getElementById(id)?.value); return isNaN(v)?null:v; };
+  const slOn = document.getElementById("L_stopLossChk")?.checked;
+  const payload = {
+    profile: "T2",
+    mode,
+    target_pct:         mode === "profit"         ? num("L_targetPct")   : null,
+    target_dollars:     mode === "profit_dollars" ? num("L_targetDol")   : null,
+    target_price_cents: mode === "target_price"   ? num("L_targetPrice") : null,
+    stop_loss_pct:      slOn ? num("L_stopLossPct") : null,
+  };
+  const st = document.getElementById("L_sellStatus");
+  if (st) st.textContent = "Saving…";
+  if (_pushLottoStratTimer) clearTimeout(_pushLottoStratTimer);
+  _pushLottoStratTimer = setTimeout(() => {
+    fetch("/api/strategy", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload)})
+      .then(() => { if (st) st.textContent = "Saved ✓"; setTimeout(()=>{ if(st) st.textContent=""; }, 1500); })
+      .catch(() => { if (st) st.textContent = "Save failed — retry"; });
+  }, 500);
+}
+
+async function loadLottoStrategy() {
+  try {
+    const r = await fetch("/api/strategy?profile=T2", {cache:"no-store"});
+    const s = await r.json();
+    const set = (id,v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+    const md = document.getElementById("L_stratMode");
+    if (md) md.value = s.mode || "resolution";
+    set("L_targetPct", s.target_pct);
+    set("L_targetDol", s.target_dollars);
+    set("L_targetPrice", s.target_price_cents);
+    const slc = document.getElementById("L_stopLossChk");
+    if (slc) slc.checked = (s.stop_loss_pct != null);
+    set("L_stopLossPct", s.stop_loss_pct);
+  } catch(e) {}
 }
 
 // ── Lotto Stats: tracks the T2 bot's far-fetched bets, odds, and wins ──────

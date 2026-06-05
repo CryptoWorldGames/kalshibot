@@ -288,43 +288,38 @@ def _load_profiles():
     try:
         if PROFILES_FILE.exists():
             d = json.loads(PROFILES_FILE.read_text(encoding="utf-8"))
-            prof = d.get("profiles") or {}
+            prof   = d.get("profiles") or {}
+            sell   = d.get("sell") or {}
             active = d.get("active") if d.get("active") in PROFILE_IDS else "T1"
-            return prof, active
+            return prof, sell, active
     except Exception as e:
         print(f"[profiles] load failed: {e}")
-    return {}, "T1"
+    return {}, {}, "T1"
 
-_profiles, active_profile = _load_profiles()
-# Lotto-style default for T2: buy lots of cheap, far-fetched long-shots (low price =
-# low implied probability = big payout if it hits), across all categories, incl.
-# 15-min crypto. Thin + multi-outcome markets allowed — that's where long-shots live.
-_LOTTO_DEFAULTS = {
-    "enable_buy_up":   True,  "up_min":   1.0,  "up_max":   15.0,   # cheap YES long-shots (1¢–15¢)
-    "enable_buy_down": False, "down_min": 1.0,  "down_max": 15.0,
-    "minutes":         60,        # wider net than the front page, still catches 15-min crypto
-    "buy_amount":      0.50,
-    "max_per_scan":    10,        # buy lots per cycle
-    "max_concurrent":  999,
-    "max_per_market":  1,
-    "show_crypto": True, "show_combo": True, "show_sports": True,
-    "show_politics": True, "show_economics": True,   # all categories on
-    "good_liq": False, "hide_multi": False,          # allow thin + multi-outcome long-shots
-    "min_age_mins": None, "max_age_mins": None, "no_buy_within_mins": None,
-}
-# Seed any missing profile. T1 inherits the existing live buy_settings (so nothing
-# changes for the current bot); T2 starts as the Lotto preset ("cheap long-shots").
+_DEFAULT_SELL_STRATEGY = {"mode": "resolution", "target_pct": 10.0}
+
+_profiles, _sell_profiles, active_profile = _load_profiles()
+# Seed buy profiles. T1 inherits the existing live buy_settings (so the current bot
+# is unchanged); T2 (Lotto) starts as a copy of the front-page defaults — the user
+# dials in the Lotto YES/NO ranges and sell rules themselves, just like the front page.
 _profiles.setdefault("T1", dict(buy_settings))
-_profiles.setdefault("T2", dict(_LOTTO_DEFAULTS))
+_profiles.setdefault("T2", dict(_DEFAULT_BUY_SETTINGS))
 for _pid in PROFILE_IDS:
     _profiles[_pid] = {**_DEFAULT_BUY_SETTINGS, **_profiles[_pid]}
-# The bot reads the ACTIVE profile.
-buy_settings = dict(_profiles[active_profile])
+# Seed sell profiles. T1 inherits the existing global sell_strategy; T2 copies it.
+_sell_profiles.setdefault("T1", dict(sell_strategy))
+_sell_profiles.setdefault("T2", dict(sell_strategy))
+for _pid in PROFILE_IDS:
+    _sell_profiles[_pid] = {**_DEFAULT_SELL_STRATEGY, **_sell_profiles[_pid]}
+# The bot reads the ACTIVE profile — both buy_settings and sell_strategy mirror it.
+buy_settings  = dict(_profiles[active_profile])
+sell_strategy = dict(_sell_profiles[active_profile])
 
 def _save_profiles():
     try:
-        PROFILES_FILE.write_text(json.dumps({"active": active_profile, "profiles": _profiles}, indent=2),
-                                 encoding="utf-8")
+        PROFILES_FILE.write_text(json.dumps(
+            {"active": active_profile, "profiles": _profiles, "sell": _sell_profiles}, indent=2),
+            encoding="utf-8")
     except Exception as e:
         print(f"[profiles] save error: {e}")
 
@@ -2681,8 +2676,18 @@ def pnl_history():
     })
 
 
-@app.route("/api/strategy", methods=["POST"])
+@app.route("/api/strategy", methods=["GET", "POST"])
 def set_strategy():
+    global sell_strategy
+    # Which profile's SELL strategy? Default = active (old clients keep working).
+    req_profile = (request.args.get("profile")
+                   or (request.get_json(silent=True) or {}).get("profile"))
+    target = req_profile if req_profile in PROFILE_IDS else active_profile
+
+    if request.method == "GET":
+        src = sell_strategy if target == active_profile else _sell_profiles.get(target, sell_strategy)
+        return jsonify(src)
+
     data = request.get_json(silent=True) or {}
     mode = data.get("mode", "resolution")
 
@@ -2711,18 +2716,24 @@ def set_strategy():
     except (ValueError, TypeError):
         return jsonify({"error": "Invalid numeric values"}), 400
 
-    sell_strategy["mode"] = mode
-    if pct is not None: sell_strategy["target_pct"] = pct
-    if dol is not None: sell_strategy["target_dollars"] = dol
-    if tp is not None: sell_strategy["target_price_cents"] = tp
-    if bip is not None: sell_strategy["buy_in_price_cents"] = bip
-    # Stop-loss lives here (persisted) so the monitor — which reads it from
-    # sell_strategy — actually fires it. Sending null clears it (checkbox off).
+    # Edit a working copy of the target profile's sell strategy.
+    strat = dict(sell_strategy) if target == active_profile else dict(_sell_profiles.get(target, _DEFAULT_SELL_STRATEGY))
+    strat["mode"] = mode
+    if pct is not None: strat["target_pct"] = pct
+    if dol is not None: strat["target_dollars"] = dol
+    if tp is not None: strat["target_price_cents"] = tp
+    if bip is not None: strat["buy_in_price_cents"] = bip
+    # Stop-loss: sending the key with null clears it (checkbox off).
     if "stop_loss_pct" in data:
-        sell_strategy["stop_loss_pct"] = slp
-    try: STRATEGY_FILE.write_text(json.dumps(sell_strategy), encoding="utf-8")
-    except Exception: pass
-    return jsonify({"ok": True, "strategy": sell_strategy})
+        strat["stop_loss_pct"] = slp
+
+    _sell_profiles[target] = strat
+    if target == active_profile:
+        sell_strategy = strat   # mirror so the live bot/monitor uses it immediately
+        try: STRATEGY_FILE.write_text(json.dumps(sell_strategy), encoding="utf-8")
+        except Exception: pass
+    _save_profiles()
+    return jsonify({"ok": True, "profile": target, "active": active_profile, "strategy": strat})
 
 
 @app.route("/api/saved-strategies", methods=["GET"])
@@ -2800,19 +2811,23 @@ def active_profile_endpoint():
     """GET → which tab's bot is active. POST {profile:'T1'|'T2'} → make it active;
     the live buy_settings the bot reads becomes that profile's settings (only one
     profile trades at a time)."""
-    global buy_settings, active_profile
+    global buy_settings, sell_strategy, active_profile
     if request.method == "GET":
         return jsonify({"active": active_profile, "profiles": PROFILE_IDS})
     data = request.get_json(silent=True) or {}
     p = data.get("profile")
     if p not in PROFILE_IDS:
         return jsonify({"ok": False, "error": "bad profile"}), 400
-    # Persist the just-active profile's current live edits before switching away.
+    # Persist the just-active profile's current live edits (buy + sell) before switching.
     _profiles[active_profile] = dict(buy_settings)
+    _sell_profiles[active_profile] = dict(sell_strategy)
     active_profile = p
-    buy_settings = dict(_profiles[active_profile])
-    _save_buy_settings()  # writes live mirror + profiles (with new active) to disk
-    return jsonify({"ok": True, "active": active_profile, "settings": buy_settings})
+    buy_settings  = dict(_profiles[active_profile])
+    sell_strategy = dict(_sell_profiles[active_profile])
+    _save_buy_settings()  # writes live buy mirror + profiles (with new active) to disk
+    try: STRATEGY_FILE.write_text(json.dumps(sell_strategy), encoding="utf-8")  # live sell mirror
+    except Exception: pass
+    return jsonify({"ok": True, "active": active_profile, "settings": buy_settings, "sell": sell_strategy})
 
 
 @app.route("/api/enrich-positions", methods=["GET"])
