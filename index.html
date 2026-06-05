@@ -310,22 +310,26 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   .tab-btn{flex:1;min-width:60px;padding:10px 8px;font-size:12px;border:none;background:transparent;border-bottom:2px solid transparent;white-space:nowrap;width:auto}
   .tab-btn.active{border-bottom-color:var(--green);color:var(--green)}
 
-  /* Mobile: compact labeled cards, one per position, zero wasted space */
+  /* Mobile: ultra-compact position cards. Title row + one tight stats strip
+     (Cost / Now / Max) + sell button. No wasted vertical space. */
   table,tbody{display:block;width:100%;margin:0}
   thead{display:none}
-  tr{display:block;padding:10px 12px;margin-bottom:6px;border:1px solid var(--border);border-radius:8px;background:#1a1a1a;box-sizing:border-box}
-  td{display:none;padding:0;font-size:10px;background:transparent;border:none}
-  /* Show title (col 2) as header row with inline checkbox */
-  td:nth-child(1){display:inline-block;vertical-align:middle;padding-right:6px}
-  td:nth-child(2){display:inline-block;vertical-align:middle;font-size:12px;font-weight:700;width:calc(100% - 30px);margin-bottom:8px}
-  /* Data grid: 2 cols, label above value */
-  td:nth-child(3),td:nth-child(4),td:nth-child(5),td:nth-child(6),td:nth-child(7),td:nth-child(8){display:inline-block;width:calc(50% - 4px);margin:2px;vertical-align:top}
-  td[data-label]:not([data-label=""])::before{content:attr(data-label);display:block;font-size:8px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-bottom:1px}
-  /* Sell button — full width at bottom */
-  td:nth-child(12){display:block;margin-top:8px;width:100%}
-  td:nth-child(12) button{width:100% !important;padding:10px !important;font-size:13px !important}
-  /* Hide everything else (max profit, captured, time, duplicate checkbox) */
-  td:nth-child(9),td:nth-child(10),td:nth-child(11),td:nth-child(13),td:nth-child(14){display:none}
+  tr{display:flex;flex-wrap:wrap;align-items:center;gap:0 8px;padding:8px 10px;margin-bottom:6px;border:1px solid var(--border);border-radius:8px;background:#1a1a1a;box-sizing:border-box}
+  td{display:none;padding:0;border:none;background:transparent}
+  /* Checkbox + title on the top line */
+  td:nth-child(1){display:inline-flex;flex:0 0 auto;margin-right:4px}
+  td:nth-child(2){display:inline-block;flex:1 1 200px;font-size:12px !important;font-weight:700;text-align:left !important;padding:0 !important;line-height:1.25}
+  /* Stats strip: Cost(6), Current Value(7), Max Payout(9) — inline, label above */
+  td:nth-child(6),td:nth-child(7),td:nth-child(9){display:inline-block;flex:1 1 30%;text-align:center !important;font-size:13px !important;font-weight:700 !important;padding:4px 0 !important;margin-top:6px}
+  td:nth-child(6)::before{content:"Cost"}
+  td:nth-child(7)::before{content:"Now"}
+  td:nth-child(9)::before{content:"Max"}
+  td:nth-child(6)::before,td:nth-child(7)::before,td:nth-child(9)::before{display:block;font-size:8px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+  /* Sell button full width */
+  td:nth-child(12){display:block;flex:1 1 100%;margin-top:6px}
+  td:nth-child(12) button{width:100% !important;padding:9px !important;font-size:13px !important}
+  /* Hide everything else */
+  td:nth-child(3),td:nth-child(4),td:nth-child(5),td:nth-child(8),td:nth-child(10),td:nth-child(11),td:nth-child(13),td:nth-child(14){display:none !important}
 
   /* Each total = fixed readable width (no squish). They sit in a row that swipes,
      so 10 boxes never overlap — you scroll to see the P&L ones. */
