@@ -225,10 +225,13 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     white-space:normal;word-wrap:break-word;z-index:1000;
     box-shadow:0 4px 12px rgba(0,0,0,.4)
   }
-  /* Desktop: restore normal sizing */
-  table{font-size:12px}
-  thead th{padding:8px 6px;font-size:11px;white-space:nowrap}
-  td{padding:6px 4px;font-size:11px}
+  /* Desktop: restore table layout */
+  table{display:table;font-size:12px}
+  thead{display:table-header-group}
+  tbody{display:table-row-group}
+  tr{display:table-row}
+  td{display:table-cell;padding:6px 4px;font-size:11px;border:none}
+  thead th{padding:8px 6px;font-size:11px;white-space:nowrap;display:table-cell}
 }
 
 /* ── MOBILE OPTIMIZATIONS (375px-480px) ── */
@@ -305,11 +308,17 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   .tab-btn{flex:1;min-width:60px;padding:10px 8px;font-size:12px;border:none;background:transparent;border-bottom:2px solid transparent;white-space:nowrap;width:auto}
   .tab-btn.active{border-bottom-color:var(--green);color:var(--green)}
 
-  /* Tables - mobile optimized. Reduce font/padding so table fits tighter on screen.
-     Horizontal scroll acceptable on mobile to see all data. */
-  table{font-size:10px;width:100%;max-width:100%;box-sizing:border-box}
-  thead th{padding:5px 3px;font-size:9px;white-space:nowrap}
-  td{padding:4px 2px;font-size:10px;overflow:hidden;text-overflow:ellipsis}
+  /* Tables on mobile: convert to card layout (one position per row/card).
+     Hide the table header, make each row a self-contained card with labels. */
+  table{display:block;width:100%;margin:0}
+  thead{display:none}  /* Hide header row on mobile */
+  tbody{display:flex;flex-direction:column;gap:8px}
+  tr{display:block;border:1px solid var(--border);border-radius:6px;padding:10px;background:#1a1a1a;margin-bottom:0}
+  td{display:inline-block;width:calc(50% - 4px);margin:4px 2px;padding:4px;font-size:10px;border:none;background:transparent}
+  td:nth-child(1){width:100%;font-weight:700;margin:0 0 6px 0;padding:0}  /* MARKET — full width, bold */
+  td:nth-child(odd):not(:first-child){display:inline-block;width:calc(50% - 4px)}  /* QTY, BOUGHT@, etc. — 2 per row */
+  td:nth-child(even){display:inline-block;width:calc(50% - 4px)}  /* Values aligned right */
+  /* Add labels (pseudo-elements won't work easily, so inline styling in HTML covers this) */
 
   /* Each total = fixed readable width (no squish). They sit in a row that swipes,
      so 10 boxes never overlap — you scroll to see the P&L ones. */
