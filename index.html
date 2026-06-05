@@ -230,18 +230,18 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   /* CRITICAL MOBILE FIXES - NO OVERFLOW */
   *{box-sizing:border-box}
   html{width:100%;overflow-x:hidden}
-  /* nav (56) + wallet totals bar (38) = 94px reserved at top */
-  body{font-size:16px;padding-top:94px;width:100%;overflow-x:hidden;margin:0;padding-left:0;padding-right:0}
+  /* nav (56) + wallet totals bar (44) = 100px reserved at top */
+  body{font-size:16px;padding-top:100px;width:100%;overflow-x:hidden;margin:0;padding-left:0;padding-right:0}
 
   nav{height:56px;padding:0 8px;width:100%}
   .nav-logo{font-size:14px;margin-right:8px}
-  /* Show the Cash / Portfolio / Total figures as a compact fixed strip directly
-     under the nav — this is what the user wants visible up top on the phone. */
-  .nav-funds{display:flex !important;flex-direction:row;position:fixed;top:56px;left:0;right:0;height:38px;background:#0f0f0f;border-bottom:1px solid var(--border);z-index:101;gap:0;margin:0;align-items:stretch}
-  /* Hide the P&L columns on phones — !important beats the inline style on the div.
-     Keeps just the 3 core totals (Cash / Portfolio / Portfolio+Cash) so they're
-     wide and readable instead of 10 boxes overlapping. */
-  #navPnlAll{display:none !important}
+  /* Totals as a fixed strip under the nav. It SWIPES horizontally so you get
+     EVERYTHING (Cash, Portfolio, Total, and every P&L column) with zero overlap —
+     the first 3 (Cash/Portfolio/Total) are visible, swipe left for the P&L. */
+  .nav-funds{display:flex !important;flex-direction:row;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none;position:fixed;top:56px;left:0;right:0;height:44px;background:#0f0f0f;border-bottom:1px solid var(--border);z-index:101;gap:0;margin:0;align-items:stretch}
+  .nav-funds::-webkit-scrollbar{display:none}
+  /* Let the P&L group sit inline in the same swipe strip (don't hide it now). */
+  #navPnlAll{display:flex !important;flex:0 0 auto;gap:0;align-items:stretch}
   button.nav-btn{font-size:11px;padding:4px 8px;margin-left:4px}
 
   /* Main content - CRITICAL FIX */
@@ -296,12 +296,12 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   thead th{padding:8px 6px;font-size:11px}
   td{padding:6px 4px;font-size:11px;overflow:hidden;text-overflow:ellipsis}
 
-  /* Wallet total blocks — 3 even columns across the fixed strip, no overflow */
-  .fund-block{display:flex !important;flex:1 1 0;min-width:0;flex-direction:column;align-items:center;justify-content:center;padding:2px 4px;border-right:1px solid var(--border);border-left:none;text-align:center;overflow:hidden}
+  /* Each total = fixed readable width (no squish). They sit in a row that swipes,
+     so 10 boxes never overlap — you scroll to see the P&L ones. */
+  .fund-block{display:flex !important;flex:0 0 auto;min-width:84px;flex-direction:column;align-items:center;justify-content:center;padding:3px 8px;border-right:1px solid var(--border);border-left:none;text-align:center;overflow:hidden}
   .fund-block:first-child{border-left:none}
-  .fund-block:last-child{border-right:none}
-  .fund-amount{font-size:14px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-  .fund-label{font-size:8px;margin-top:0;letter-spacing:.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  .fund-amount{font-size:14px;line-height:1.15;white-space:nowrap}
+  .fund-label{font-size:8px;margin-top:0;letter-spacing:.2px;white-space:nowrap}
   .market-title-tooltip{display:none}
 
   /* Checkboxes and labels */
@@ -345,14 +345,14 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 
 /* Extra small screens (320px-375px) */
 @media(max-width:375px){
-  /* nav (48) + wallet totals bar (34) = 82px reserved at top */
-  body{font-size:13px;padding-top:82px;width:100%;overflow-x:hidden}
+  /* nav (48) + wallet totals bar (40) = 88px reserved at top */
+  body{font-size:13px;padding-top:88px;width:100%;overflow-x:hidden}
   nav{height:48px;padding:0 6px;width:100%}
   .nav-logo{font-size:12px;margin-right:6px}
-  .nav-funds{top:48px;height:34px}
+  .nav-funds{top:48px;height:40px}
+  .fund-block{min-width:76px;padding:3px 6px}
   .fund-amount{font-size:12px}
   .fund-label{font-size:7px}
-  .tab-nav{top:82px}
   .main{padding:4px 6px 80px;width:100%;max-width:100%;overflow-x:hidden}
   h1{font-size:16px;word-wrap:break-word}
 
