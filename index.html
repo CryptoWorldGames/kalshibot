@@ -1342,7 +1342,22 @@ async function loadPositionsFast() {
     if (d.positions_value != null) { const el = document.getElementById("navPositions");  if (el)   el.textContent = "$" + d.positions_value.toFixed(2); }
     if (d.portfolio_value != null) { const el = document.getElementById("navPortfolio");  if (el) { el.textContent = "$" + d.portfolio_value.toFixed(2); el.className = "fund-amount port-val"; } }
     const np = d.positions || [];
-    // Same anti-blank guard: don't wipe a good list if a starved fetch returns empty.
+    // The fast path (enrich=false) has no live prices/titles. Carry them over from
+    // the last enriched render so the 8s refresh doesn't keep wiping CURRENT /
+    // PROFIT NOW back to "—" while the slow enrich fills them in.
+    const _prev = {};
+    (window._lastApiPositions || []).forEach(p => { if (p && p.ticker) _prev[p.ticker] = p; });
+    np.forEach(p => {
+      const q = _prev[p.ticker];
+      if (!q) return;
+      if (p.current_yes == null && q.current_yes != null) p.current_yes = q.current_yes;
+      if (p.current_no  == null && q.current_no  != null) p.current_no  = q.current_no;
+      if ((!p.title || p.title === p.ticker) && q.title && q.title !== q.ticker) p.title = q.title;
+      if (!p.category    && q.category)    p.category    = q.category;
+      if (!p.close_time  && q.close_time)  p.close_time  = q.close_time;
+      if (!p.event_ticker && q.event_ticker) p.event_ticker = q.event_ticker;
+    });
+    // Anti-blank guard: don't wipe a good list if a starved fetch returns empty.
     if (!((d.positions_ok === false) && np.length === 0 && (window._lastApiPositions || []).length > 0)) {
       window._lastApiPositions = np;
       window._haveApiPositions = true;
