@@ -1230,13 +1230,26 @@ def portfolio():
                 except Exception:
                     pass
             else:
-                # Fast mode: use ticker as title, no market data
-                event_ticker = ""
-                market_title = ticker
-                category = ""
-                current_yes = None
-                current_no = None
-                close_time = None
+                # Fast mode: make NO new market call, but REUSE cached market data if
+                # the scan loop already fetched it (it scans these same crypto markets
+                # constantly). Instant live prices with zero extra API hits — so the
+                # CURRENT/PROFIT columns show numbers immediately instead of dashes.
+                _c = _market_cache.get(ticker)
+                if _c and (time.time() - _c["ts"]) < _MARKET_CACHE_TTL:
+                    _m = _c["data"]
+                    event_ticker = _m.get("event_ticker", "")
+                    market_title = _event_title(event_ticker) or _m.get("title", ticker)
+                    category     = _m.get("category", "")
+                    current_yes  = _dollars_to_cents(_m.get("yes_bid_dollars"))
+                    current_no   = _dollars_to_cents(_m.get("no_bid_dollars"))
+                    close_time   = _m.get("close_time") or _m.get("expiration_time")
+                else:
+                    event_ticker = ""
+                    market_title = ticker
+                    category = ""
+                    current_yes = None
+                    current_no = None
+                    close_time = None
 
             # Portfolio value = contracts * current bid price
             side = "yes" if qty > 0 else "no"
@@ -1318,7 +1331,18 @@ def portfolio():
         current_yes  = None
         current_no   = None
 
-        # Only enrich tracked fallback positions if enriching AND < 100 total positions
+        # Reuse cached market prices (from the scan loop) with no new API call, so
+        # tracked positions also show live numbers instantly instead of dashes.
+        _cf = _market_cache.get(ticker)
+        if _cf and (time.time() - _cf["ts"]) < _MARKET_CACHE_TTL:
+            _mf = _cf["data"]
+            event_ticker = _mf.get("event_ticker", "")
+            market_title = _event_title(event_ticker) or _mf.get("title", market_title)
+            category     = _mf.get("category", "")
+            current_yes  = _dollars_to_cents(_mf.get("yes_bid_dollars"))
+            current_no   = _dollars_to_cents(_mf.get("no_bid_dollars"))
+
+        # Only make NEW market calls if enriching AND < 100 total positions
         # (to avoid rate-limit starvation during heavy portfolios)
         if enrich and len(raw_positions) < 100:
             try:

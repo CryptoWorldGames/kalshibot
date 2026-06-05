@@ -1599,7 +1599,10 @@ window.addEventListener("load", () => {
 let _bgBalanceInterval = null, _bgPnlInterval = null;
 function startBackgroundRefresh() {
   if (_bgBalanceInterval) return;
-  _bgBalanceInterval = setInterval(loadBalance, 60000);
+  // Fast (enrich=false) — the heavy per-position price work + settlements now load
+  // via their own dedicated endpoints, so the background refresh stays light and
+  // doesn't starve them. Fast mode still reuses cached prices, so numbers show.
+  _bgBalanceInterval = setInterval(() => loadBalance(false), 60000);
   _bgPnlInterval = setInterval(loadPnl, 300000);
 }
 function stopBackgroundRefresh() {
