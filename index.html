@@ -1464,6 +1464,20 @@ function renderSettlements(rows) {
   // Mark settlements as loaded (even if empty)
   _settlementsLoaded = true;
 
+  // Remember the last NON-empty result per period on disk so a revisit shows it
+  // instantly instead of "Loading…". Key by the current period (_settleHours).
+  if (rows && rows.length) {
+    try { localStorage.setItem("kb_settlements_" + _settleHours, JSON.stringify(rows)); } catch(e) {}
+  } else {
+    // Empty result: if we have a remembered list for this period, keep showing it
+    // (don't flash "No settlements" on a transient/slow fetch). A genuine empty
+    // period just keeps the last good view until real data replaces it.
+    try {
+      const c = JSON.parse(localStorage.getItem("kb_settlements_" + _settleHours) || "[]");
+      if (c.length) { rows = c; }
+    } catch(e) {}
+  }
+
   if (!rows.length) {
     wrap.innerHTML = `<div style="text-align:center;color:var(--muted);padding:24px;font-size:13px">No settlements in this period.</div>`;
     if (sum) sum.textContent = "";
@@ -1583,10 +1597,15 @@ showNavLoading();
 // Auto-hide loading indicator after 15s timeout (safeguard if API is slow/fails)
 setTimeout(() => hideNavLoading(), 15000);
 
-// Show cached positions immediately while API loads
+// Show cached positions + settlements immediately while the API loads, so a
+// revisit/refresh shows the last view instantly instead of blanking.
 try {
   const cached = localStorage.getItem("kb_positions");
   if (cached) renderBotPositions(JSON.parse(cached));
+} catch(e) {}
+try {
+  const cs = JSON.parse(localStorage.getItem("kb_settlements_" + _settleHours) || "[]");
+  if (cs.length) { window._lastSettlements = cs; renderSettlements(cs); }
 } catch(e) {}
 
 // Defer API calls until page is interactive (speeds up hard refresh)
@@ -2778,12 +2797,22 @@ function startPosMon() {
 
 let _lastPositionsHash = "";
 function renderBotPositions(positions) {
+  // NEVER blank a good list on a transient empty fetch. If we're handed an empty
+  // list but we already have real positions in memory, keep showing them instead
+  // of flashing "No open positions". (On page load we first restore the list from
+  // localStorage, so allPositions is already populated before the first fetch —
+  // a starved empty then can't wipe it.) Selling the last position sets the
+  // in-memory list empty BEFORE calling, so a genuine clear still renders empty.
+  if ((!positions || positions.length === 0) && allPositions && allPositions.length) {
+    return;
+  }
   // Skip full re-render if positions data hasn't meaningfully changed (prevents flicker)
   const newHash = positions.map(p => `${p.ticker}:${p.current_yes}:${p.current_no}:${p.quantity}`).join("|");
   const changed = newHash !== _lastPositionsHash;
   _lastPositionsHash = newHash;
   allPositions = positions;
-  try { localStorage.setItem("kb_positions", JSON.stringify(positions)); } catch(e) {}
+  // Only persist NON-empty lists so the disk cache always holds the last good view.
+  if (positions.length) { try { localStorage.setItem("kb_positions", JSON.stringify(positions)); } catch(e) {} }
   const catSel = document.getElementById("posFilterCat");
   if (catSel) {
     const cur  = catSel.value;
