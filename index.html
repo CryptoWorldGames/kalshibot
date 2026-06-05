@@ -1206,8 +1206,9 @@ async function loadBalance(enrich=true) {
   try {
     const enrichParam = enrich ? "true" : "false";
     const controller = new AbortController();
-    // Increase timeout for enriched requests (settlements can be slow from Kalshi API)
-    const timeoutMs = enrich ? 60000 : 15000;  // 60s for enrich, 15s for fast
+    // Enrich loops every position through Kalshi (slow with many positions) + pulls
+    // settlements, so give it plenty of time before aborting. The fast path stays short.
+    const timeoutMs = enrich ? 120000 : 15000;  // 120s for enrich, 15s for fast
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     const r = await fetch(`/api/portfolio?enrich=${enrichParam}&settlement_hours=${_settleHours}`, {signal: controller.signal});
     clearTimeout(timeoutId);
@@ -1263,9 +1264,18 @@ async function loadBalance(enrich=true) {
     });
     // Record the latest API positions so filterPos() can hide stale cached
     // entries that are no longer returned by the API (already sold/closed).
-    window._lastApiPositions = d.positions || [];
-    window._haveApiPositions = true;
-    renderBotPositions(d.positions || []);
+    // BUT: if the live positions fetch FAILED (positions_ok === false) and came
+    // back empty while we already have positions on screen, the fetch was starved
+    // by the bot's API traffic — keep the last good list instead of blanking it.
+    const _newPos = d.positions || [];
+    const _fetchFailed = (d.positions_ok === false);
+    if (_fetchFailed && _newPos.length === 0 && (window._lastApiPositions || []).length > 0) {
+      // keep existing render; just refresh the recently-sold strip
+    } else {
+      window._lastApiPositions = _newPos;
+      window._haveApiPositions = true;
+      renderBotPositions(_newPos);
+    }
     renderRecentlySold();
     window._lastSettlements = d.recent_settlements || [];
     renderSettlements(window._lastSettlements);
@@ -1312,6 +1322,40 @@ async function loadBalance(enrich=true) {
     _loadBalanceInFlight = false;
     hideNavLoading();
   }
+}
+
+// Fast positions render that is NOT blocked by the slow enrich call (separate
+// in-flight flag). Renders positions within seconds so the Positions tab is never
+// blank — even while the bot is hammering the Kalshi API and the enrich call is
+// stuck. The slow enrich call upgrades prices/titles/settlements when it finishes.
+let _posFastInFlight = false;
+async function loadPositionsFast() {
+  if (_posFastInFlight) return;
+  _posFastInFlight = true;
+  try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 15000);
+    const r = await fetch(`/api/portfolio?enrich=false&settlement_hours=${_settleHours}`, {signal: ctrl.signal});
+    clearTimeout(tid);
+    const d = await r.json();
+    if (d.balance != null)         { const el = document.getElementById("navCash");      if (el) { el.textContent = "$" + d.balance.toFixed(2); el.className = "fund-amount cash-val"; } }
+    if (d.positions_value != null) { const el = document.getElementById("navPositions");  if (el)   el.textContent = "$" + d.positions_value.toFixed(2); }
+    if (d.portfolio_value != null) { const el = document.getElementById("navPortfolio");  if (el) { el.textContent = "$" + d.portfolio_value.toFixed(2); el.className = "fund-amount port-val"; } }
+    const np = d.positions || [];
+    // Same anti-blank guard: don't wipe a good list if a starved fetch returns empty.
+    if (!((d.positions_ok === false) && np.length === 0 && (window._lastApiPositions || []).length > 0)) {
+      window._lastApiPositions = np;
+      window._haveApiPositions = true;
+      renderBotPositions(np);
+    }
+    // Settlements come back from cache even on the fast path — show them if present.
+    if (d.recent_settlements && d.recent_settlements.length) {
+      window._lastSettlements = d.recent_settlements;
+      renderSettlements(window._lastSettlements);
+      renderSettlementsTickerTicker();
+    }
+  } catch(e) { /* keep last render — never blank on a transient failure */ }
+  finally { _posFastInFlight = false; }
 }
 
 let _settleSortBy = "recent";
@@ -4014,12 +4058,16 @@ function switchTab(name) {
     if (window._coachRefresh) { clearInterval(window._coachRefresh); window._coachRefresh = null; }
   }
   if (name === "positions") {
-    loadBalanceThrottled(true); // force refresh when switching to Positions tab
-    // Live 10s refresh while viewing positions (only if page is visible)
+    loadPositionsFast();   // instant render — never blank, not blocked by enrich
+    loadBalance(true);     // background enrich upgrades prices + loads settlements
+    // Keep positions fresh fast (8s); run the heavy enrich less often (30s).
     if (window._posTabRefresh) clearInterval(window._posTabRefresh);
-    if (!document.hidden) window._posTabRefresh = setInterval(() => loadBalanceThrottled(true), 10000);
+    if (window._posEnrich)     clearInterval(window._posEnrich);
+    if (!document.hidden) window._posTabRefresh = setInterval(loadPositionsFast, 8000);
+    if (!document.hidden) window._posEnrich     = setInterval(() => loadBalance(true), 30000);
   } else {
     if (window._posTabRefresh) { clearInterval(window._posTabRefresh); window._posTabRefresh = null; }
+    if (window._posEnrich)     { clearInterval(window._posEnrich);     window._posEnrich = null; }
   }
   // Hide Start Bot on non-scanner tabs, show Stop Bot everywhere
   const fab = document.getElementById("fab");

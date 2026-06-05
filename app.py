@@ -1377,17 +1377,24 @@ def portfolio():
 
     total_value = total_account if total_account is not None else round((balance or 0) + portfolio_value, 2)
 
-    # Load settlements only if enriching (skip for fast load)
+    # Settlements: on enrich, refresh (cache-or-fetch). On the FAST path, still
+    # return FRESH cached settlements instantly so they show without waiting on the
+    # slow enrich — but never trigger a slow fetch on the fast path.
+    settle_hours = int(request.args.get("settlement_hours", 24))
     recent_settlements = []
     if enrich:
-        settle_hours = int(request.args.get("settlement_hours", 24))
         recent_settlements = _cached_settlements(hours=settle_hours)
+    else:
+        _c = _settlements_cache.get(settle_hours)
+        if _c:
+            recent_settlements = _c["data"]
 
     return jsonify({
         "balance":            balance,           # spendable cash
         "positions_value":    round(portfolio_value, 2),  # open positions value only
         "portfolio_value":    total_value,       # total account = cash + positions (matches Kalshi)
         "positions":          positions,
+        "positions_ok":       positions_ok,      # did the live Kalshi positions fetch succeed?
         "recent_settlements": recent_settlements,
     })
 
