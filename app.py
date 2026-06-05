@@ -298,17 +298,35 @@ def _load_profiles():
 
 _DEFAULT_SELL_STRATEGY = {"mode": "resolution", "target_pct": 10.0}
 
+# Lotto (T2) starting defaults — set per the user's spec: cheap long-shots priced
+# 1¢–15¢, one buy per market, markets ending within 365 days, hold to resolution
+# with a 50% stop-loss. The user tunes these on the Lotto page (and can store sets
+# in the M1–M5 memory slots there).
+_LOTTO_BUY_DEFAULTS = {
+    "enable_buy_up":   True,  "up_min":   1.0,  "up_max":   15.0,
+    "enable_buy_down": False, "down_min": 1.0,  "down_max": 15.0,
+    "minutes":         525600,    # 365 days
+    "buy_amount":      0.15,       # max cost ~15¢ per contract
+    "max_per_scan":    10,
+    "max_concurrent":  999,
+    "max_per_market":  1,          # max 1 buy per contract
+    "show_crypto": True, "show_combo": True, "show_sports": True,
+    "show_politics": True, "show_economics": True,
+    "good_liq": False, "hide_multi": False,
+    "min_age_mins": None, "max_age_mins": None, "no_buy_within_mins": None,
+}
+_LOTTO_SELL_DEFAULTS = {"mode": "resolution", "target_pct": 10.0, "stop_loss_pct": 50.0}
+
 _profiles, _sell_profiles, active_profile = _load_profiles()
 # Seed buy profiles. T1 inherits the existing live buy_settings (so the current bot
-# is unchanged); T2 (Lotto) starts as a copy of the front-page defaults — the user
-# dials in the Lotto YES/NO ranges and sell rules themselves, just like the front page.
+# is unchanged); T2 (Lotto) seeds with the cheap long-shot preset above.
 _profiles.setdefault("T1", dict(buy_settings))
-_profiles.setdefault("T2", dict(_DEFAULT_BUY_SETTINGS))
+_profiles.setdefault("T2", dict(_LOTTO_BUY_DEFAULTS))
 for _pid in PROFILE_IDS:
     _profiles[_pid] = {**_DEFAULT_BUY_SETTINGS, **_profiles[_pid]}
-# Seed sell profiles. T1 inherits the existing global sell_strategy; T2 copies it.
+# Seed sell profiles. T1 inherits the existing global sell_strategy; T2 = lotto preset.
 _sell_profiles.setdefault("T1", dict(sell_strategy))
-_sell_profiles.setdefault("T2", dict(sell_strategy))
+_sell_profiles.setdefault("T2", dict(_LOTTO_SELL_DEFAULTS))
 for _pid in PROFILE_IDS:
     _sell_profiles[_pid] = {**_DEFAULT_SELL_STRATEGY, **_sell_profiles[_pid]}
 # The bot reads the ACTIVE profile — both buy_settings and sell_strategy mirror it.

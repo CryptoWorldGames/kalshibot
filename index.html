@@ -215,6 +215,10 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 .activePill.on .dot{background:#0a0a0a}
 /* Tiny T1/T2 tag showing which bot/tab made a buy. */
 .tabtag{display:inline-block;font-size:10px;font-weight:800;padding:1px 6px;border-radius:4px;background:#ff941622;color:#ff9416;border:1px solid #ff941655}
+/* Lotto memory slots (M1–M5) */
+.lottoMem{background:#161616;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:13px;font-weight:800;padding:6px 11px;cursor:pointer;min-width:42px}
+.lottoMem.filled{border-color:#ff9416;color:#ff9416;background:#ff94160d}
+#lottoMemSaveBtn.arming{background:#ff9416;color:#0a0a0a;border-color:#ff9416}
 .tab-pane{display:none !important;width:100% !important;height:auto !important;margin:0;padding:0}
 .tab-pane.active{display:block !important;width:100% !important;height:auto !important;margin:0;padding:0}
 .pos-badge{background:var(--green);color:#000;border-radius:10px;font-size:10px;font-weight:800;padding:1px 7px;margin-left:5px;vertical-align:middle}
@@ -914,19 +918,33 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <span style="font-size:12px;color:var(--muted)">Lotto bot <b style="color:#ff9416">T2</b> — tap to make this the running bot</span>
   </div>
 
+  <!-- M1–M5 memory slots (Lotto page ONLY) — like a calculator's memory buttons -->
+  <div class="card" style="margin-bottom:10px">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="font-size:12px;color:var(--muted);font-weight:700">MEMORY</span>
+      <button id="lottoMemSaveBtn" onclick="toggleLottoMemSave()" style="background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:12px;font-weight:700;padding:6px 10px;cursor:pointer">💾 Save</button>
+      <button class="lottoMem" id="lottoMem1" onclick="lottoMemClick(1)">M1</button>
+      <button class="lottoMem" id="lottoMem2" onclick="lottoMemClick(2)">M2</button>
+      <button class="lottoMem" id="lottoMem3" onclick="lottoMemClick(3)">M3</button>
+      <button class="lottoMem" id="lottoMem4" onclick="lottoMemClick(4)">M4</button>
+      <button class="lottoMem" id="lottoMem5" onclick="lottoMemClick(5)">M5</button>
+      <span id="lottoMemHint" style="font-size:11px;color:var(--muted)">tap to recall</span>
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-title">🎟️ Lotto Bot Settings (T2)</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:14px">A second, independent bot. Set it up however you like — it only trades when <b>T2</b> is the active bot above. Changes save automatically.</div>
 
     <!-- BUY UP -->
     <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
-      <label class="check-row" style="font-weight:700;color:var(--green)"><input type="checkbox" id="L_enableBuyUp" onchange="pushLottoSettings()"> 📈 BUY UP (YES) <span style="color:var(--muted);font-weight:400;font-size:12px">— price will go up</span></label>
+      <label class="check-row" style="font-weight:700;color:var(--green)"><input type="checkbox" id="L_enableBuyUp" checked onchange="pushLottoSettings()"> 📈 BUY UP (YES) <span style="color:var(--muted);font-weight:400;font-size:12px">— price will go up</span></label>
       <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">
         <span style="font-size:12px;color:var(--muted)">From</span>
-        <input type="number" id="L_minProb" min="1" max="99" value="80" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
+        <input type="number" id="L_minProb" min="1" max="99" value="1" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
         <span style="font-size:12px;color:var(--muted)">to</span>
-        <input type="number" id="L_maxProb" min="1" max="99" value="96" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
-        <span style="font-size:12px;color:var(--muted)">%</span>
+        <input type="number" id="L_maxProb" min="1" max="99" value="15" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
+        <span style="font-size:12px;color:var(--muted)">¢ (price/contract)</span>
       </div>
     </div>
 
@@ -946,11 +964,11 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
       <div style="font-size:12px;color:var(--muted);font-weight:700;margin-bottom:8px">CATEGORIES</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-        <label class="check-row"><input type="checkbox" id="L_showCrypto" onchange="pushLottoSettings()"> Crypto</label>
-        <label class="check-row"><input type="checkbox" id="L_showSports" onchange="pushLottoSettings()"> Sports</label>
-        <label class="check-row"><input type="checkbox" id="L_showPolitics" onchange="pushLottoSettings()"> Politics</label>
-        <label class="check-row"><input type="checkbox" id="L_showEconomics" onchange="pushLottoSettings()"> Economics</label>
-        <label class="check-row"><input type="checkbox" id="L_showCombo" onchange="pushLottoSettings()"> Combo/Parlay</label>
+        <label class="check-row"><input type="checkbox" id="L_showCrypto" checked onchange="pushLottoSettings()"> Crypto</label>
+        <label class="check-row"><input type="checkbox" id="L_showSports" checked onchange="pushLottoSettings()"> Sports</label>
+        <label class="check-row"><input type="checkbox" id="L_showPolitics" checked onchange="pushLottoSettings()"> Politics</label>
+        <label class="check-row"><input type="checkbox" id="L_showEconomics" checked onchange="pushLottoSettings()"> Economics</label>
+        <label class="check-row"><input type="checkbox" id="L_showCombo" checked onchange="pushLottoSettings()"> Combo/Parlay</label>
       </div>
       <div style="display:flex;gap:14px;margin-top:8px;flex-wrap:wrap">
         <label class="check-row"><input type="checkbox" id="L_goodLiq" onchange="pushLottoSettings()"> Active only</label>
@@ -961,10 +979,10 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <!-- Limits -->
     <div style="border:1px solid var(--border);border-radius:8px;padding:12px">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <label style="font-size:12px;color:var(--muted)">Ends within (min)<br><input type="number" id="L_minutes" min="1" value="15" onchange="pushLottoSettings()"></label>
-        <label style="font-size:12px;color:var(--muted)">Max $ per buy<br><input type="number" id="L_buyAmount" min="0.01" step="0.01" value="0.50" onchange="pushLottoSettings()"></label>
-        <label style="font-size:12px;color:var(--muted)">Max buys / scan<br><input type="number" id="L_autoMaxPerScan" min="1" value="3" onchange="pushLottoSettings()"></label>
-        <label style="font-size:12px;color:var(--muted)">Max open positions<br><input type="number" id="L_autoMaxConcurrent" min="1" value="20" onchange="pushLottoSettings()"></label>
+        <label style="font-size:12px;color:var(--muted)">Ends within (min) <span style="color:#555">365d=525600</span><br><input type="number" id="L_minutes" min="1" value="525600" onchange="pushLottoSettings()"></label>
+        <label style="font-size:12px;color:var(--muted)">Max $ per buy<br><input type="number" id="L_buyAmount" min="0.01" step="0.01" value="0.15" onchange="pushLottoSettings()"></label>
+        <label style="font-size:12px;color:var(--muted)">Max buys / scan<br><input type="number" id="L_autoMaxPerScan" min="1" value="10" onchange="pushLottoSettings()"></label>
+        <label style="font-size:12px;color:var(--muted)">Max open positions<br><input type="number" id="L_autoMaxConcurrent" min="1" value="999" onchange="pushLottoSettings()"></label>
         <label style="font-size:12px;color:var(--muted)">Max buys / market<br><input type="number" id="L_maxBuysPerMarket" min="1" value="1" onchange="pushLottoSettings()"></label>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px">
@@ -996,7 +1014,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     </div>
     <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
       <label class="check-row" style="font-size:13px">
-        <input type="checkbox" id="L_stopLossChk" style="accent-color:var(--red)" onchange="pushLottoStrategy()">
+        <input type="checkbox" id="L_stopLossChk" checked style="accent-color:var(--red)" onchange="pushLottoStrategy()">
         <span style="margin:0 4px">🛑 Cut losses if a position drops</span>
         <input type="number" id="L_stopLossPct" value="50" min="1" max="99" step="1" style="width:64px;margin:0 6px;border-color:var(--red);color:var(--red)" onchange="pushLottoStrategy()">
         <span>%</span>
@@ -1823,6 +1841,7 @@ window.addEventListener("load", () => {
   loadActiveProfile();   // light up the correct bot LED/pill from the start
   loadLottoSettings();   // pre-fill the Lotto (T2) buy form so it's ready when opened
   loadLottoStrategy();   // pre-fill the Lotto (T2) sell strategy
+  seedLottoMemDefaults();// preload M1 with the cheap long-shot preset (if empty)
   // Phase 1 (0-2s): Load positions + balance WITHOUT market enrichment
   loadBalance(false);
 
@@ -4393,6 +4412,7 @@ function switchTab(name) {
     loadLottoSettings();   // pull the T2 buy profile into the form
     loadLottoStrategy();   // pull the T2 sell strategy into the form
     loadActiveProfile();   // refresh which bot is active (LED/pill)
+    seedLottoMemDefaults();// ensure M1 preset + memory slot highlights
   }
   if (name === "lottostats") {
     // Pull fresh positions + settlements, then render the T2 odds tracker.
@@ -4820,6 +4840,81 @@ async function loadLottoStrategy() {
     if (slc) slc.checked = (s.stop_loss_pct != null);
     set("L_stopLossPct", s.stop_loss_pct);
   } catch(e) {}
+}
+
+// ── Lotto memory slots M1–M5 (THIS PAGE ONLY) — like calculator memory ────
+// Each slot stores a full snapshot of the Lotto (T2) buy + sell form. Tap a slot
+// to recall it (loads + saves to T2). Tap 💾 Save first, then a slot, to store.
+const LOTTO_FIELDS = ["L_enableBuyUp","L_minProb","L_maxProb","L_enableBuyDown","L_minProbDown","L_maxProbDown",
+  "L_minutes","L_buyAmount","L_autoMaxPerScan","L_autoMaxConcurrent","L_maxBuysPerMarket",
+  "L_showCrypto","L_showCombo","L_showSports","L_showPolitics","L_showEconomics","L_goodLiq","L_hideMultiOutcome",
+  "L_minAgeMins","L_maxAgeMins","L_noBuyWithinMins",
+  "L_stratMode","L_targetPct","L_targetDol","L_targetPrice","L_stopLossChk","L_stopLossPct"];
+let _lottoMemArming = false;
+
+function _lottoSnapshot() {
+  const snap = {};
+  LOTTO_FIELDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    snap[id] = (el.type === "checkbox") ? el.checked : el.value;
+  });
+  return snap;
+}
+function _lottoApply(snap) {
+  if (!snap) return;
+  LOTTO_FIELDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el || !(id in snap)) return;
+    if (el.type === "checkbox") el.checked = !!snap[id]; else el.value = snap[id];
+  });
+  pushLottoSettings();   // push the recalled buy settings to T2
+  pushLottoStrategy();   // and the recalled sell strategy
+}
+function _lottoMemKey(n){ return "lotto_mem_" + n; }
+function _lottoMemGet(n){ try { return JSON.parse(localStorage.getItem(_lottoMemKey(n)) || "null"); } catch(e){ return null; } }
+function _lottoMemSet(n, snap){ try { localStorage.setItem(_lottoMemKey(n), JSON.stringify(snap)); } catch(e){} }
+
+function updateLottoMemUI() {
+  for (let n=1; n<=5; n++) {
+    const btn = document.getElementById("lottoMem"+n);
+    if (btn) btn.classList.toggle("filled", !!_lottoMemGet(n));
+  }
+  const save = document.getElementById("lottoMemSaveBtn");
+  if (save) save.classList.toggle("arming", _lottoMemArming);
+  const hint = document.getElementById("lottoMemHint");
+  if (hint) hint.textContent = _lottoMemArming ? "now tap a slot to SAVE into it" : "tap to recall";
+}
+function toggleLottoMemSave() { _lottoMemArming = !_lottoMemArming; updateLottoMemUI(); }
+function lottoMemClick(n) {
+  if (_lottoMemArming) {
+    _lottoMemSet(n, _lottoSnapshot());
+    _lottoMemArming = false;
+    updateLottoMemUI();
+    toast("Saved current Lotto settings to M"+n, "ok");
+  } else {
+    const snap = _lottoMemGet(n);
+    if (!snap) { toast("M"+n+" is empty — tap 💾 Save then M"+n+" to store", "err"); return; }
+    _lottoApply(snap);
+    toast("Recalled M"+n, "ok");
+  }
+}
+// Preload M1 with the user's cheap long-shot preset (1¢–15¢, 1/market, 365d, 50% stop)
+// so it's one tap away even on an existing profile. Only if M1 is empty.
+function seedLottoMemDefaults() {
+  if (_lottoMemGet(1)) { updateLottoMemUI(); return; }
+  _lottoMemSet(1, {
+    L_enableBuyUp:true, L_minProb:"1", L_maxProb:"15",
+    L_enableBuyDown:false, L_minProbDown:"1", L_maxProbDown:"15",
+    L_minutes:"525600", L_buyAmount:"0.15", L_autoMaxPerScan:"10",
+    L_autoMaxConcurrent:"999", L_maxBuysPerMarket:"1",
+    L_showCrypto:true, L_showCombo:true, L_showSports:true, L_showPolitics:true, L_showEconomics:true,
+    L_goodLiq:false, L_hideMultiOutcome:false,
+    L_minAgeMins:"", L_maxAgeMins:"", L_noBuyWithinMins:"",
+    L_stratMode:"resolution", L_targetPct:"10", L_targetDol:"0.05", L_targetPrice:"50",
+    L_stopLossChk:true, L_stopLossPct:"50"
+  });
+  updateLottoMemUI();
 }
 
 // ── Lotto Stats: tracks the T2 bot's far-fetched bets, odds, and wins ──────
