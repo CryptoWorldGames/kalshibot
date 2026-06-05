@@ -100,25 +100,40 @@ def _headers(method: str, path: str, body: str = "") -> dict:
 # and let a single 429 fail outright. Now: a smaller base gap between calls PLUS real
 # 429 backoff+retry — faster in the common case and actually robust when throttled.
 _last_api_call = {"time": 0}
+_last_hipri_call = {"time": 0}   # timestamp of the last USER-facing (high-priority) call
 _rate_limit_delay = 0.5   # base seconds between API calls (was 2.0)
 _max_retries = 4
 _api_lock = threading.Lock()
 
-def _rate_limit_wait():
-    """Space out API calls. Holds the lock only briefly — NOT during 429 backoff."""
+def _rate_limit_wait(low_priority: bool = False):
+    """Space out API calls. Holds the lock only briefly — NOT during 429 backoff.
+
+    PRIORITY: the scan/buy loop calls with low_priority=True. If a user-facing
+    (high-priority) request — positions, settlements, balance, save, sell — happened
+    in the last ~1.5s, low-priority callers YIELD so the user's request gets the API
+    first and never gets starved behind the constant scan traffic. After the user's
+    burst goes quiet, the scan loop resumes."""
+    if low_priority:
+        waited = 0.0
+        while (time.time() - _last_hipri_call["time"]) < 1.5 and waited < 8.0:
+            time.sleep(0.1)
+            waited += 0.1
     with _api_lock:
         now = time.time()
         elapsed = now - _last_api_call["time"]
         if elapsed < _rate_limit_delay:
             time.sleep(_rate_limit_delay - elapsed)
         _last_api_call["time"] = time.time()
+        if not low_priority:
+            _last_hipri_call["time"] = time.time()
 
 def _kalshi_request(method: str, endpoint: str, params: dict = None,
-                    body: dict = None, retry_on_timeout: bool = True) -> dict:
+                    body: dict = None, retry_on_timeout: bool = True,
+                    low_priority: bool = False) -> dict:
     path = API_PREFIX + endpoint
     last_exc = None
     for attempt in range(_max_retries):
-        _rate_limit_wait()
+        _rate_limit_wait(low_priority=low_priority)
         try:
             if method == "GET":
                 r = req.get(BASE_URL + path, headers=_headers("GET", path),
@@ -154,8 +169,15 @@ def _kalshi_request(method: str, endpoint: str, params: dict = None,
         raise last_exc
     raise RuntimeError(f"Kalshi {method} {endpoint}: still rate-limited after {_max_retries} tries")
 
-def kalshi_get(endpoint: str, params: dict = None) -> dict:
-    return _kalshi_request("GET", endpoint, params=params)
+# Thread id of the headless bot loop. Any Kalshi GET made from inside that thread is
+# automatically LOW priority, so the constant scan traffic yields to user-facing
+# requests (positions / settlements / saves) without marking every call by hand.
+_bot_thread_id = None
+
+def kalshi_get(endpoint: str, params: dict = None, low_priority: bool = None) -> dict:
+    if low_priority is None:
+        low_priority = (_bot_thread_id is not None and threading.get_ident() == _bot_thread_id)
+    return _kalshi_request("GET", endpoint, params=params, low_priority=low_priority)
 
 def kalshi_post(endpoint: str, body: dict) -> dict:
     # POST = order placement. Retry 429 (rejected before processing, and the
@@ -775,7 +797,11 @@ def _bot_thread():
     """Scan markets and auto-buy every 15s, respecting the sell strategy.
     Runs independent of browser; start/stop via /api/bot/start and /api/bot/stop.
     Checks the persisted config file to know if it should be running."""
-    global _bot_running, _bot_start_time
+    global _bot_running, _bot_start_time, _bot_thread_id
+
+    # Register this thread so all its scan-time Kalshi GETs are auto-deprioritized,
+    # letting user-facing requests (positions/settlements/saves) cut ahead.
+    _bot_thread_id = threading.get_ident()
 
     scan_interval = 15  # seconds between scans
     last_scan = 0

@@ -1875,11 +1875,16 @@ async function pushStrategy() {
   console.log(`[pushStrategy] Sending mode=${stratMode}, pct=${pct}, dol=${dol}, tp=${tpCents}, stopLoss=${slPct}`);
 
   try {
+    // Timeout so a busy server (mid-scan) can't make the save hang forever.
+    const _ctrl = new AbortController();
+    const _tid = setTimeout(() => _ctrl.abort(), 8000);
     // Send the ACTUAL frontend stratMode (not converted) so backend knows exactly which strategy was selected
     const resp = await fetch("/api/strategy", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({mode: stratMode, target_pct: pct, target_dollars: dol, target_price_cents: tpCents, buy_in_price_cents: buyInCents, stop_loss_pct: slPct}),
+      signal: _ctrl.signal,
     });
+    clearTimeout(_tid);
 
     if (!resp.ok) {
       const errData = await resp.json().catch(() => ({}));
@@ -3945,38 +3950,38 @@ function updateBotControlBar() {
 }
 
 async function saveBtnClick(btn) {
-  console.log("saveBtnClick: Starting save...");
-  // Save to localStorage first (synchronous)
-  saveSettings();
-  console.log("saveBtnClick: Settings saved to localStorage");
-
-  // Also push strategy to server (async)
-  try {
-    console.log(`saveBtnClick: Pushing strategy mode=${stratMode} to server...`);
-    await pushStrategy();
-    console.log("saveBtnClick: Strategy pushed to server successfully");
-  } catch (e) {
-    toast("Failed to save strategy to server", "err");
-    console.error("saveBtnClick: pushStrategy failed", e);
-    return; // Don't show "Saved!" if server save failed
-  }
-
-  const pcText = btn.querySelector(".save-text-pc");
+  const pcText     = btn.querySelector(".save-text-pc");
   const mobileText = btn.querySelector(".save-text-mobile");
-  const oldPc = pcText?.textContent;
-  const oldMobile = mobileText?.textContent;
-
-  // Save original styles to restore them after feedback
-  const origColor = btn.style.color;
-  const origBg = btn.style.background;
+  const oldPc      = pcText?.textContent;
+  const oldMobile  = mobileText?.textContent;
+  const origColor  = btn.style.color;
+  const origBg     = btn.style.background;
   const origWeight = btn.style.fontWeight;
+  const setLabel = (pc, mob) => { if (pcText) pcText.textContent = pc; if (mobileText) mobileText.textContent = mob; };
 
-  // Show "Saved!" only AFTER the server confirms it's saved (3 second feedback)
-  btn.style.color = "#000";  // Black text on green is more readable than white
-  btn.style.fontWeight = "700";
-  btn.style.background = "var(--green)";
-  if (pcText) pcText.textContent = "✓ Saved!";
-  if (mobileText) mobileText.textContent = "✓";
+  // INSTANT feedback the moment you click — you always see it's working, even if
+  // the server is mid-scan and slow to answer.
+  btn.style.color = "#000"; btn.style.fontWeight = "700"; btn.style.background = "var(--green)";
+  setLabel("Saving…", "…");
+
+  // 1) Save locally + push the BUY filters to the server immediately (these are what
+  //    the bot actually trades — the important ones). 2) Push the sell strategy.
+  saveSettings();
+  try { pushBuySettings(true); } catch(_) {}
+
+  let ok = true;
+  try { await pushStrategy(); } catch (e) { ok = false; console.error("saveBtnClick: strategy push failed", e); }
+
+  if (ok) {
+    btn.style.background = "var(--green)";
+    setLabel("✓ Saved!", "✓");
+  } else {
+    // Buy filters + everything still saved on-device and pushed; only the strategy
+    // round-trip didn't confirm (server busy). Tell the truth, don't fail silently.
+    btn.style.background = "#e0a800";
+    setLabel("✓ Saved (sync pending)", "✓");
+    toast("Saved. Server was busy — strategy will sync on the next cycle.", "err");
+  }
 
   setTimeout(() => {
     btn.style.color = origColor;
@@ -3984,7 +3989,7 @@ async function saveBtnClick(btn) {
     btn.style.background = origBg;
     if (pcText) pcText.textContent = oldPc;
     if (mobileText) mobileText.textContent = oldMobile;
-  }, 3000);
+  }, 2500);
 }
 
 function handleBotButtonClick() {

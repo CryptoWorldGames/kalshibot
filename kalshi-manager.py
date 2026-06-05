@@ -155,7 +155,7 @@ def auto_restart_monitor():
             print("[manager] Flask crashed! Auto-restarting...")
             start_flask()
 
-AUTO_UPDATE_INTERVAL = 900  # 15 minutes — how often to auto-pull new code from GitHub
+AUTO_UPDATE_INTERVAL = 300  # 5 minutes — how often to auto-pull new code from GitHub
 
 def auto_update_monitor():
     """Every AUTO_UPDATE_INTERVAL seconds, run `git pull`. If new code arrived,
