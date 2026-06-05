@@ -310,24 +310,25 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   .tab-btn{flex:1;min-width:60px;padding:10px 8px;font-size:12px;border:none;background:transparent;border-bottom:2px solid transparent;white-space:nowrap;width:auto}
   .tab-btn.active{border-bottom-color:var(--green);color:var(--green)}
 
-  /* Mobile: ultra-compact position cards. Title row + one tight stats strip
-     (Cost / Now / Max) + sell button. No wasted vertical space. */
+  /* Mobile: two-line compact rows. Line 1 = full title. Line 2 = Cost · Now · Max
+     · Sell, all inline. Minimal padding, no wasted space. */
   table,tbody{display:block;width:100%;margin:0}
   thead{display:none}
-  tr{display:flex;flex-wrap:wrap;align-items:center;gap:0 8px;padding:8px 10px;margin-bottom:6px;border:1px solid var(--border);border-radius:8px;background:#1a1a1a;box-sizing:border-box}
-  td{display:none;padding:0;border:none;background:transparent}
-  /* Checkbox + title on the top line */
-  td:nth-child(1){display:inline-flex;flex:0 0 auto;margin-right:4px}
-  td:nth-child(2){display:inline-block;flex:1 1 200px;font-size:12px !important;font-weight:700;text-align:left !important;padding:0 !important;line-height:1.25}
-  /* Stats strip: Cost(6), Current Value(7), Max Payout(9) — inline, label above */
-  td:nth-child(6),td:nth-child(7),td:nth-child(9){display:inline-block;flex:1 1 30%;text-align:center !important;font-size:13px !important;font-weight:700 !important;padding:4px 0 !important;margin-top:6px}
-  td:nth-child(6)::before{content:"Cost"}
-  td:nth-child(7)::before{content:"Now"}
-  td:nth-child(9)::before{content:"Max"}
-  td:nth-child(6)::before,td:nth-child(7)::before,td:nth-child(9)::before{display:block;font-size:8px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
-  /* Sell button full width */
-  td:nth-child(12){display:block;flex:1 1 100%;margin-top:6px}
-  td:nth-child(12) button{width:100% !important;padding:9px !important;font-size:13px !important}
+  tr{display:flex;flex-wrap:wrap;align-items:center;gap:2px 6px;padding:6px 8px;margin-bottom:4px;border:1px solid var(--border);border-radius:6px;background:#1a1a1a;box-sizing:border-box}
+  td{display:none;padding:0;border:none;background:transparent;margin:0}
+  /* Line 1: checkbox + full title */
+  td:nth-child(1){display:inline-flex;flex:0 0 auto}
+  td:nth-child(2){display:inline-block;flex:1 1 200px;font-size:11px !important;font-weight:700;text-align:left !important;padding:0 !important;line-height:1.2}
+  /* Line 2: Cost(6) · Now(7) · Max(9) inline with tiny inline labels */
+  td:nth-child(6),td:nth-child(7),td:nth-child(9){display:inline-block;flex:0 0 auto;text-align:left !important;font-size:12px !important;font-weight:700 !important;padding:0 !important;white-space:nowrap}
+  td:nth-child(6)::before{content:"Cost "}
+  td:nth-child(7)::before{content:"Now "}
+  td:nth-child(9)::before{content:"Max "}
+  td:nth-child(6)::before,td:nth-child(7)::before,td:nth-child(9)::before{font-size:9px;color:#888;font-weight:600}
+  /* Sell button — compact, right side of line 2 */
+  td:nth-child(12){display:inline-block;flex:0 0 auto;margin-left:auto}
+  td:nth-child(12) button{padding:5px 12px !important;font-size:12px !important;white-space:nowrap}
+  td:nth-child(12) button br,td:nth-child(12) button span{display:none !important}
   /* Hide everything else */
   td:nth-child(3),td:nth-child(4),td:nth-child(5),td:nth-child(8),td:nth-child(10),td:nth-child(11),td:nth-child(13),td:nth-child(14){display:none !important}
 
