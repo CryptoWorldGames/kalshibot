@@ -233,8 +233,15 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   /* nav (56) + wallet totals bar (44) = 100px reserved at top */
   body{font-size:16px;padding-top:100px;width:100%;overflow-x:hidden;margin:0;padding-left:0;padding-right:0}
 
-  nav{height:56px;padding:0 8px;width:100%}
-  .nav-logo{font-size:14px;margin-right:8px}
+  nav{height:56px;padding:0 6px;width:100%;flex-wrap:nowrap;overflow:visible}
+  .nav-logo{font-size:14px;margin-right:6px;flex:0 0 auto}
+  /* The status text ("🟢 Running · 21m 2s · 19 bought") is long and was shoving
+     the ⟳ Update + ⚙️ buttons off the right edge on phones. Let it shrink/truncate
+     so the action buttons always stay on-screen. */
+  #botStatusEl{font-size:10px !important;overflow:hidden;text-overflow:ellipsis;max-width:34vw;flex:0 1 auto}
+  /* Compact, icon-first action buttons that always fit. */
+  #snoozeBtn{margin-left:auto !important;padding:6px 8px !important;font-size:12px !important;flex:0 0 auto}
+  #updateBtn{padding:6px 9px !important;font-size:12px !important;flex:0 0 auto;color:var(--green) !important;border-color:var(--green) !important}
   /* Totals as a fixed strip under the nav. It SWIPES horizontally so you get
      EVERYTHING (Cash, Portfolio, Total, and every P&L column) with zero overlap —
      the first 3 (Cash/Portfolio/Total) are visible, swipe left for the P&L. */
@@ -1117,10 +1124,40 @@ let _waitForCashAmt = 1.0;
 let _cashPauseTimer = null;
 let _recentlySold = []; // {title, ticker, side, profit, soldAt, kalshi_url}
 
+// ── Connectivity watchdog ─────────────────────────────────────────────
+// On phones, if the Flask server can't answer a page-load fast enough (busy
+// mid-scan, or a brief Wi-Fi/Tailscale hiccup), Chrome shows a frozen "offline
+// copy" snapshot of the last good load. JS still runs in that snapshot, but its
+// network calls fail. We detect that here: count consecutive failed pings, show
+// a banner, and the MOMENT a ping succeeds again, hard-reload to the live page
+// so the user never has to manually pull-to-refresh.
+let _connFails = 0;
+let _wasOffline = false;
+function _setOfflineBanner(show) {
+  let b = document.getElementById("connBanner");
+  if (show) {
+    if (!b) {
+      b = document.createElement("div");
+      b.id = "connBanner";
+      b.style.cssText = "position:fixed;bottom:0;left:0;right:0;z-index:99999;background:#b91c1c;color:#fff;font-size:13px;font-weight:700;text-align:center;padding:10px 12px;box-shadow:0 -2px 10px rgba(0,0,0,.4)";
+      b.innerHTML = "⚠️ Lost connection to bot — reconnecting… <span style='text-decoration:underline;cursor:pointer' onclick='location.reload()'>Reload now</span>";
+      document.body.appendChild(b);
+    }
+    b.style.display = "block";
+  } else if (b) {
+    b.style.display = "none";
+  }
+}
+
 async function loadBotStatus() {
   try {
-    const r = await fetch("/api/bot/status");
+    const r = await fetch("/api/bot/status", {cache: "no-store"});
     const d = await r.json();
+    // Reachable again. If we were showing the offline snapshot, reload to the
+    // real live page (the snapshot's other data is stale/frozen).
+    if (_wasOffline) { location.reload(); return; }
+    _connFails = 0;
+    _setOfflineBanner(false);
     const el = document.getElementById("botStatusEl");
     if (!el) return;
 
@@ -1144,7 +1181,14 @@ async function loadBotStatus() {
       try { syncFabButtons(); } catch(_) {}
     }
   } catch(e) {
-    // Silently fail — bot backend may not be responding yet
+    // Ping failed — server unreachable (busy, restarting, or network blip). After
+    // a couple of consecutive misses, flag offline + show the reconnect banner.
+    // The next SUCCESSFUL ping (above) will auto-reload back to the live page.
+    _connFails++;
+    if (_connFails >= 2) {
+      _wasOffline = true;
+      _setOfflineBanner(true);
+    }
   }
 }
 
