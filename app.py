@@ -289,6 +289,45 @@ print(f"[buy] loaded: up={buy_settings['enable_buy_up']}({buy_settings['up_min']
 # In-memory cache of event_ticker → clean title
 _event_cache: dict = {}
 
+# Persistent ticker → pretty (human-readable) title cache. Titles never change, so
+# once we've resolved one (via enrichment), remember it on disk and reuse it on
+# EVERY load — including the fast path — so positions always show the readable name
+# instead of the raw ticker, with zero waiting for enrichment.
+_title_cache: dict = {}
+TITLE_CACHE_FILE = HERE / "title_cache.json"
+
+def _load_title_cache():
+    global _title_cache
+    try:
+        if TITLE_CACHE_FILE.exists():
+            d = json.loads(TITLE_CACHE_FILE.read_text(encoding="utf-8"))
+            if isinstance(d, dict):
+                _title_cache = d
+    except Exception as e:
+        print(f"[title-cache] load failed: {e}")
+
+def _save_title_cache():
+    try:
+        TITLE_CACHE_FILE.write_text(json.dumps(_title_cache), encoding="utf-8")
+    except Exception as e:
+        print(f"[title-cache] save failed: {e}")
+
+def _remember_title(ticker: str, title: str):
+    """Store a resolved pretty title (only if it's actually pretty, not the ticker)."""
+    if ticker and title and title != ticker and _title_cache.get(ticker) != title:
+        _title_cache[ticker] = title
+        _save_title_cache()
+
+def _pretty_title(ticker: str, resolved: str) -> str:
+    """Best available title: a freshly-resolved pretty one, else the disk cache,
+    else the ticker. Also remembers a freshly-resolved pretty title for next time."""
+    if resolved and resolved != ticker:
+        _remember_title(ticker, resolved)
+        return resolved
+    return _title_cache.get(ticker, ticker)
+
+_load_title_cache()
+
 # Settlements cache — shared between stats, coach, portfolio (avoids 3x duplicate queries)
 _settlements_cache: dict = {}  # hours → {"data": [...], "ts": float}
 _SETTLEMENTS_CACHE_TTL = 120.0  # 2 minutes
@@ -1297,7 +1336,7 @@ def portfolio():
                 try:
                     mkt          = _get_market(ticker)
                     event_ticker = mkt.get("event_ticker", "")
-                    market_title = _event_title(event_ticker) or mkt.get("title", ticker)
+                    market_title = _pretty_title(ticker, _event_title(event_ticker) or mkt.get("title", ticker))
                     category     = mkt.get("category", "")
                     current_yes  = _dollars_to_cents(mkt.get("yes_bid_dollars"))
                     current_no   = _dollars_to_cents(mkt.get("no_bid_dollars"))
@@ -1313,14 +1352,14 @@ def portfolio():
                 if _c and (time.time() - _c["ts"]) < _MARKET_CACHE_TTL:
                     _m = _c["data"]
                     event_ticker = _m.get("event_ticker", "")
-                    market_title = _event_title(event_ticker) or _m.get("title", ticker)
+                    market_title = _pretty_title(ticker, _event_title(event_ticker) or _m.get("title", ticker))
                     category     = _m.get("category", "")
                     current_yes  = _dollars_to_cents(_m.get("yes_bid_dollars"))
                     current_no   = _dollars_to_cents(_m.get("no_bid_dollars"))
                     close_time   = _m.get("close_time") or _m.get("expiration_time")
                 else:
                     event_ticker = ""
-                    market_title = ticker
+                    market_title = _title_cache.get(ticker, ticker)  # use remembered pretty title
                     category = ""
                     current_yes = None
                     current_no = None
@@ -1401,7 +1440,8 @@ def portfolio():
                 _save_tracked()
                 continue
         event_ticker = ""
-        market_title = info.get("title", ticker)
+        # Prefer the remembered pretty title over the tracked title or raw ticker.
+        market_title = _title_cache.get(ticker) or info.get("title", ticker)
         category     = ""
         current_yes  = None
         current_no   = None
@@ -1412,7 +1452,7 @@ def portfolio():
         if _cf and (time.time() - _cf["ts"]) < _MARKET_CACHE_TTL:
             _mf = _cf["data"]
             event_ticker = _mf.get("event_ticker", "")
-            market_title = _event_title(event_ticker) or _mf.get("title", market_title)
+            market_title = _pretty_title(ticker, _event_title(event_ticker) or _mf.get("title", market_title))
             category     = _mf.get("category", "")
             current_yes  = _dollars_to_cents(_mf.get("yes_bid_dollars"))
             current_no   = _dollars_to_cents(_mf.get("no_bid_dollars"))
@@ -2719,7 +2759,7 @@ def enrich_positions():
             event_ticker = mkt.get("event_ticker", "")
             result[ticker] = {
                 "event_ticker": event_ticker,
-                "title": _event_title(event_ticker) or mkt.get("title", ticker),
+                "title": _pretty_title(ticker, _event_title(event_ticker) or mkt.get("title", ticker)),
                 "category": mkt.get("category", ""),
                 "current_yes": _dollars_to_cents(mkt.get("yes_bid_dollars")),
                 "current_no": _dollars_to_cents(mkt.get("no_bid_dollars")),

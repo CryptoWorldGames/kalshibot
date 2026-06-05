@@ -34,3 +34,4 @@ updates.json
 .DS_Store
 Thumbs.db
 positions_cache.json
+title_cache.json
