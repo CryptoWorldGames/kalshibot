@@ -225,11 +225,15 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     white-space:normal;word-wrap:break-word;z-index:1000;
     box-shadow:0 4px 12px rgba(0,0,0,.4)
   }
-  /* Desktop: restore all hidden columns */
-  th:nth-child(n+6),td:nth-child(n+6){display:table-cell !important}
-  table{font-size:12px}
-  thead th{padding:8px 6px;font-size:11px}
-  td{padding:6px 4px;font-size:11px}
+  /* Desktop: restore table layout */
+  thead{display:table-header-group}
+  tbody{display:table-row-group}
+  tr{display:table-row;grid-template-columns:unset;gap:unset;padding:unset;margin-bottom:unset;border:unset;background:unset}
+  td{display:table-cell;padding:6px 4px;font-size:11px;border:unset}
+  td::before{display:none}
+  td:nth-child(1),td:nth-child(2),td:nth-child(n+14){display:table-cell}
+  table{font-size:12px;margin:unset}
+  thead th{display:table-cell;padding:8px 6px;font-size:11px}
 }
 
 /* ── MOBILE OPTIMIZATIONS (375px-480px) ── */
@@ -306,15 +310,16 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   .tab-btn{flex:1;min-width:60px;padding:10px 8px;font-size:12px;border:none;background:transparent;border-bottom:2px solid transparent;white-space:nowrap;width:auto}
   .tab-btn.active{border-bottom-color:var(--green);color:var(--green)}
 
-  /* Tables on mobile: show CHECKBOX, MARKET, QTY, BOUGHT@, CURRENT only.
-     Hide columns 6-12 (SPENT, VALUE, PROFIT, MAX, CAPTURED, TIME, etc).
-     Sell button in col 13 stays visible via horizontal scroll. */
-  table{font-size:10px;width:100%;box-sizing:border-box}
-  thead th{padding:5px 3px;font-size:8px}
-  td{padding:3px 2px;font-size:9px}
-  /* Hide non-essential columns 6-12 on mobile */
-  th:nth-child(n+6):not(:nth-child(13)),td:nth-child(n+6):not(:nth-child(13)){display:none}
-  th:nth-child(14),td:nth-child(14){display:none}  /* Hide right checkbox */
+  /* Tables on mobile: render as cards with labels. Each row becomes a full-width card. */
+  table{font-size:10px;width:100%;margin:0;border-collapse:collapse}
+  thead{display:none}  /* Hide header on mobile */
+  tbody{display:block}
+  tr{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px;margin-bottom:8px;border:1px solid var(--border);border-radius:6px;background:#1a1a1a;width:100%;box-sizing:border-box}
+  td{display:block;padding:4px;font-size:9px;background:transparent;border:none}
+  td[data-label]::before{content:attr(data-label);display:block;font-size:8px;color:#888;font-weight:600;margin-bottom:2px}
+  td:nth-child(1){grid-column:1;grid-row:auto}  /* Checkbox */
+  td:nth-child(2){grid-column:1 / -1;grid-row:auto;font-size:11px;font-weight:700}  /* Title — full width */
+  td:nth-child(n+14){display:none}  /* Hide right checkbox and beyond */
 
   /* Each total = fixed readable width (no squish). They sit in a row that swipes,
      so 10 boxes never overlap — you scroll to see the P&L ones. */
@@ -2967,25 +2972,25 @@ function renderPositionsTable(positions) {
 
     return `
       <tr ${trBg}>
-        <td style="padding:10px 6px;width:28px"><input type="checkbox" ${chk} style="accent-color:var(--green);width:15px;height:15px;cursor:pointer" onchange="updatePosCheck('${safeT}',this.checked)"></td>
-        <td style="white-space:normal;line-height:1.5;font-size:14px;vertical-align:top;padding:12px 12px;width:100%">
+        <td style="padding:10px 6px;width:28px" data-label=""><input type="checkbox" ${chk} style="accent-color:var(--green);width:15px;height:15px;cursor:pointer" onchange="updatePosCheck('${safeT}',this.checked)"></td>
+        <td style="white-space:normal;line-height:1.5;font-size:14px;vertical-align:top;padding:12px 12px;width:100%" data-label="Title">
           <div style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${titleHtml}${catTag}</div>
           <div style="margin-top:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <span class="badge ${side}">${side.toUpperCase()}</span>
             ${p.bot_bought ? '<span class="src-bot">KalshiBot</span>' : '<span class="src-manual">Kalshi</span>'}
           </div>
         </td>
-        <td style="font-size:13px;font-weight:600;text-align:center">${abs}</td>
-        <td style="font-size:13px;font-weight:600;text-align:right">${p.buy_price != null ? p.buy_price + "¢" : "—"}</td>
-        <td style="font-size:13px;font-weight:600;text-align:right;color:${cur == null ? '#fff' : cur > (p.buy_price || 0) ? 'var(--green)' : cur < (p.buy_price || 0) ? 'var(--red)' : '#fff'}">${cur != null ? cur + "¢" : "—"}</td>
-        <td style="font-size:13px;font-weight:600;text-align:right">${spent != null ? "$" + spent.toFixed(2) : "—"}</td>
-        <td style="font-size:13px;font-weight:700;color:${valNow == null ? '#fff' : spent == null ? '#fff' : valNow > spent + 0.001 ? 'var(--green)' : valNow < spent - 0.001 ? 'var(--red)' : '#fff'};text-align:right">${valNow != null ? "$" + valNow.toFixed(2) : "—"}</td>
-        <td style="font-size:14px;font-weight:800;color:${pnlDol == null ? '#555' : pnlDol > 0.001 ? 'var(--green)' : pnlDol < -0.001 ? 'var(--red)' : '#888'};text-align:right">${pnlDol != null ? (pnlDol >= 0 ? '+' : '') + '$' + pnlDol.toFixed(2) : '—'}</td>
-        <td style="font-size:13px;color:${maxWin != null && maxWin > 0 ? 'var(--green)' : '#aaa'};font-weight:600;text-align:right">${maxWin != null ? (maxWin >= 0 ? '+' : '') + '$' + maxWin.toFixed(2) : '—'}</td>
-        <td style="white-space:nowrap;text-align:center;font-size:12px">${captured != null ? capturedBadge(captured) : '—'}</td>
-        <td style="font-size:12px;white-space:nowrap;text-align:right">${p.close_time ? fmtTimeLeft(p.close_time) : '—'}</td>
-        <td style="padding:8px">${sellBtnHtml}</td>
-        <td style="padding:10px 6px;width:28px"><input type="checkbox" ${chk} style="accent-color:var(--green);width:15px;height:15px;cursor:pointer" onchange="updatePosCheck('${safeT}',this.checked)"></td>
+        <td style="font-size:13px;font-weight:600;text-align:center" data-label="Shares">${abs}</td>
+        <td style="font-size:13px;font-weight:600;text-align:right" data-label="Cost/Share">${p.buy_price != null ? p.buy_price + "¢" : "—"}</td>
+        <td style="font-size:13px;font-weight:600;text-align:right;color:${cur == null ? '#fff' : cur > (p.buy_price || 0) ? 'var(--green)' : cur < (p.buy_price || 0) ? 'var(--red)' : '#fff'}" data-label="Current">${cur != null ? cur + "¢" : "—"}</td>
+        <td style="font-size:13px;font-weight:600;text-align:right" data-label="Total Invested">${spent != null ? "$" + spent.toFixed(2) : "—"}</td>
+        <td style="font-size:13px;font-weight:700;color:${valNow == null ? '#fff' : spent == null ? '#fff' : valNow > spent + 0.001 ? 'var(--green)' : valNow < spent - 0.001 ? 'var(--red)' : '#fff'};text-align:right" data-label="Current Value">${valNow != null ? "$" + valNow.toFixed(2) : "—"}</td>
+        <td style="font-size:14px;font-weight:800;color:${pnlDol == null ? '#555' : pnlDol > 0.001 ? 'var(--green)' : pnlDol < -0.001 ? 'var(--red)' : '#888'};text-align:right" data-label="P&L Now">${pnlDol != null ? (pnlDol >= 0 ? '+' : '') + '$' + pnlDol.toFixed(2) : '—'}</td>
+        <td style="font-size:13px;color:${maxWin != null && maxWin > 0 ? 'var(--green)' : '#aaa'};font-weight:600;text-align:right" data-label="Max Payout">${maxWin != null ? (maxWin >= 0 ? '+' : '') + '$' + maxWin.toFixed(2) : '—'}</td>
+        <td style="white-space:nowrap;text-align:center;font-size:12px" data-label="Captured">${captured != null ? capturedBadge(captured) : '—'}</td>
+        <td style="font-size:12px;white-space:nowrap;text-align:right" data-label="Time Left">${p.close_time ? fmtTimeLeft(p.close_time) : '—'}</td>
+        <td style="padding:8px" data-label="Action">${sellBtnHtml}</td>
+        <td style="padding:10px 6px;width:28px" data-label=""><input type="checkbox" ${chk} style="accent-color:var(--green);width:15px;height:15px;cursor:pointer" onchange="updatePosCheck('${safeT}',this.checked)"></td>
       </tr>`;
   }).join("");
 
