@@ -6,6 +6,7 @@ Run: python app.py   →   open http://localhost:5000
 
 import base64
 import json
+import socket
 import math
 import os
 import sys
@@ -1074,6 +1075,9 @@ def _save_bot_config(should_run: bool):
     except Exception as e:
         print(f"[bot config] save error: {e}")
 
+_buy_cooldown: dict = {}   # profile -> epoch time until which buying is paused (out of cash)
+_BUY_COOLDOWN_SECS = 60    # after an insufficient_balance, wait this long before trying again
+
 def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
     """One scan+buy pass for a SINGLE profile's settings. Tags buys with `prof` and
     stamps that profile's sell strategy (`ss`) onto the position. Multiple active
@@ -1083,6 +1087,11 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
     up_on   = bool(bs.get("enable_buy_up"))
     down_on = bool(bs.get("enable_buy_down"))
     if not (up_on or down_on):
+        return 0
+
+    # Out-of-cash cooldown: after an insufficient_balance we pause THIS profile's buying
+    # for a full minute so we don't keep hammering Kalshi (and tripping 429s) while broke.
+    if time.time() < _buy_cooldown.get(prof, 0):
         return 0
 
     up_min,   up_max   = float(bs.get("up_min", 80)),   float(bs.get("up_max", 96))
@@ -1164,6 +1173,11 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
                        if t == ticker and p.get("status") == "open")
             if held >= max_mkt:
                 continue
+            # Never buy the OPPOSITE side of a market we already hold — that just
+            # hedges away (cancels out) our own position for no reason.
+            _existing = tracked.get(ticker)
+            if _existing and _existing.get("status") == "open" and _existing.get("side") not in (None, side):
+                continue
             pc = int(math.ceil(price_c))
             if pc <= 0 or pc > 99:
                 continue
@@ -1217,7 +1231,8 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
                     try: _body = _resp.text or ""
                     except Exception: _body = ""
                 if "insufficient_balance" in (_body + " " + str(e)).lower():
-                    print(f"[bot:{prof}] out of cash — pausing buys for this scan cycle")
+                    _buy_cooldown[prof] = time.time() + _BUY_COOLDOWN_SECS
+                    print(f"[bot:{prof}] out of cash — pausing buys for {_BUY_COOLDOWN_SECS}s")
                     break
                 print(f"[bot:{prof}] Buy {ticker} failed: {e}")
     if bought:
@@ -3554,7 +3569,33 @@ def bot_status():
     })
 
 
+def _already_running(port: int = 5003) -> bool:
+    """True if another KalshiBot is already serving on this port. Prevents the
+    duplicate-instance problem (two bots double the API traffic and trip 429s).
+    T1 + T2 (and other profiles) still run together inside this ONE process —
+    this only blocks a SECOND terminal/process."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(0.4)
+    try:
+        s.connect(("127.0.0.1", port))
+        return True
+    except OSError:
+        return False
+    finally:
+        s.close()
+
 if __name__ == "__main__":
+    if _already_running(5003):
+        print("=" * 60)
+        print("KalshiBot is ALREADY RUNNING (port 5003 is in use).")
+        print("This window will close — use the one that's already open,")
+        print("or open http://localhost:5003 in your browser.")
+        print("=" * 60)
+        try:
+            input("Press Enter to close...")
+        except EOFError:
+            pass
+        sys.exit(0)
     print("Open http://localhost:5003")
     # threaded=True is critical: the scan loop and slow Kalshi API calls can each
     # tie up a worker for seconds at a time. Single-threaded (the Werkzeug default)
