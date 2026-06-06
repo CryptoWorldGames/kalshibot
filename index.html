@@ -933,7 +933,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
         <label class="check-row"><input type="checkbox" id="L_showEconomics" checked onchange="pushLottoSettings()"> Economics</label>
         <label class="check-row"><input type="checkbox" id="L_showCombo" checked onchange="pushLottoSettings()"> Combo/Parlay</label>
       </div>
-      <div style="display:flex;gap:14px;margin-top:8px;flex-wrap:wrap">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">
         <label class="check-row"><input type="checkbox" id="L_goodLiq" onchange="pushLottoSettings()"> Active only (skip thin)<span class="rec off" onclick="showRec(event,'lotto_liquidity_off')" title="Why we recommend this">★ <u>leave off</u> ⓘ</span></label>
         <label class="check-row"><input type="checkbox" id="L_hideMultiOutcome" onchange="pushLottoSettings()"> Hide multi-outcome</label>
       </div>
