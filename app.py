@@ -57,19 +57,58 @@ CRYPTO_KEYWORDS = {
 
 CREDS_DIR = Path(os.environ.get("KALSHI_CREDS_DIR", HERE.parent / "kalshi-keys"))
 
+# Accept several filenames so you're never stuck with one exact name. The API key
+# is a plain-text UUID; the private key is an RSA/EC PEM file. The old setup used
+# the confusing name "test2.txt" for the private key — still accepted, but you can
+# now use the clearer "kalshi_private_key.pem" instead.
+_API_KEY_NAMES = ["kalshi_api_key", "kalshi_api_key.txt"]
+_PRIV_KEY_NAMES = ["kalshi_private_key.pem", "kalshi_private_key", "kalshi_private_key.txt", "test2.txt"]
+
+def _find_cred_file(names: list) -> Path:
+    """Return the first existing file from `names` inside CREDS_DIR, else None."""
+    for n in names:
+        p = CREDS_DIR / n
+        if p.exists():
+            return p
+    return None
+
 def _load_creds():
-    key = (CREDS_DIR / "kalshi_api_key").read_text(encoding="utf-8").lstrip("﻿").strip()
-    pem = (CREDS_DIR / "test2.txt").read_bytes()
+    key_file = _find_cred_file(_API_KEY_NAMES)
+    if key_file is None:
+        raise FileNotFoundError(
+            f"Kalshi API key file not found.\n"
+            f"  Looked in folder : {CREDS_DIR}\n"
+            f"  Expected one of  : {', '.join(_API_KEY_NAMES)}\n"
+            f"  Fix: create that folder (next to the bot folder) and save your\n"
+            f"       Kalshi API key UUID into a plain-text file named 'kalshi_api_key'."
+        )
+    priv_file = _find_cred_file(_PRIV_KEY_NAMES)
+    if priv_file is None:
+        raise FileNotFoundError(
+            f"Kalshi private key file not found.\n"
+            f"  Looked in folder : {CREDS_DIR}\n"
+            f"  Expected one of  : {', '.join(_PRIV_KEY_NAMES)}\n"
+            f"  Fix: save your Kalshi RSA private key (PEM) into that folder as\n"
+            f"       'kalshi_private_key.pem'."
+        )
+
+    key = key_file.read_text(encoding="utf-8").lstrip("﻿").strip()
+    pem = priv_file.read_bytes()
     pk = serialization.load_pem_private_key(pem, password=None, backend=default_backend())
-    return key, pk
+    return key, pk, key_file, priv_file
 
 try:
-    API_KEY, PRIVATE_KEY = _load_creds()
+    API_KEY, PRIVATE_KEY, _key_file, _priv_file = _load_creds()
     key_type = "RSA" if isinstance(PRIVATE_KEY, RSAPrivateKey) else "EC" if isinstance(PRIVATE_KEY, EllipticCurvePrivateKey) else type(PRIVATE_KEY).__name__
     print(f"Credentials loaded OK. Key prefix: {API_KEY[:8]}... len={len(API_KEY)} | Private key type: {key_type}")
-    print(f"Creds dir: {CREDS_DIR}")
+    print(f"Creds dir   : {CREDS_DIR}")
+    print(f"API key file: {_key_file.name}  |  Private key file: {_priv_file.name}")
 except Exception as e:
-    print(f"ERROR loading credentials: {e}")
+    print("=" * 70)
+    print("ERROR loading Kalshi credentials:")
+    print(e)
+    print(f"\nPut your two key files in this exact folder:\n  {CREDS_DIR}")
+    print("=" * 70)
     raise
 
 # ---------------------------------------------------------------------------

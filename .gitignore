@@ -37,3 +37,12 @@ positions_cache.json
 title_cache.json
 profiles.json
 buy_settings.json
+
+# Secrets — never commit
+.env
+.env.*
+kalshi-keys/
+*.pem
+kalshi_api_key
+kalshi_private_key
+test2.txt

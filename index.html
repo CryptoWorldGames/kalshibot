@@ -222,6 +222,13 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 .lottoSellOpt input[type=radio]{cursor:pointer}
 /* Tiny T1/T2 tag showing which bot/tab made a buy. */
 .tabtag{display:inline-block;font-size:10px;font-weight:800;padding:1px 6px;border-radius:4px;background:#ff941622;color:#ff9416;border:1px solid #ff941655}
+/* "★ recommended" badge — click to see why. Green = recommended on; yellow = leave off. */
+.rec{display:inline-block;margin-left:6px;font-size:11px;font-weight:700;color:var(--green);cursor:pointer;white-space:nowrap;vertical-align:middle}
+.rec u{text-underline-offset:2px}
+.rec:hover{filter:brightness(1.15)}
+.rec.off{color:var(--yellow)}
+.rec-pop{position:fixed;z-index:2000;max-width:300px;background:#1c1c1c;border:1px solid var(--green);border-radius:8px;padding:11px 13px;font-size:12px;line-height:1.5;color:#eee;box-shadow:0 12px 34px rgba(0,0,0,.55)}
+.rec-pop .rec-pop-h{font-weight:800;color:var(--green);margin-bottom:5px;font-size:12px}
 /* Lotto memory slots (M1–M5) */
 .lottoMem{background:#161616;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:13px;font-weight:800;padding:6px 11px;cursor:pointer;min-width:42px}
 .lottoMem.filled{border-color:#ff9416;color:#ff9416;background:#ff94160d}
@@ -640,7 +647,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
         </div>
         <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px">
           <label class="check-row" title="Requires ≥10 open interest. Skips thin markets.">
-            <input type="checkbox" id="goodLiq" checked onchange="saveSettings()"> Active only (skip thin) <span style="color:var(--green);font-size:11px;margin-left:4px">✓</span>
+            <input type="checkbox" id="goodLiq" checked onchange="saveSettings()"> Active only (skip thin) <span class="rec" onclick="showRec(event,'scanner_liquidity_on')" title="Why we recommend this">★ <u>recommended</u> ⓘ</span>
           </label>
         </div>
       </div>
@@ -926,7 +933,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
         <label class="check-row"><input type="checkbox" id="L_showCombo" checked onchange="pushLottoSettings()"> Combo/Parlay</label>
       </div>
       <div style="display:flex;gap:14px;margin-top:8px;flex-wrap:wrap">
-        <label class="check-row"><input type="checkbox" id="L_goodLiq" onchange="pushLottoSettings()"> Active only</label>
+        <label class="check-row"><input type="checkbox" id="L_goodLiq" onchange="pushLottoSettings()"> Active only (skip thin)<span class="rec off" onclick="showRec(event,'lotto_liquidity_off')" title="Why we recommend this">★ <u>leave off</u> ⓘ</span></label>
         <label class="check-row"><input type="checkbox" id="L_hideMultiOutcome" onchange="pushLottoSettings()"> Hide multi-outcome</label>
       </div>
     </div>
@@ -959,6 +966,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <label class="lottoSellOpt" style="display:flex;align-items:center;gap:10px;padding:9px 4px">
       <input type="radio" name="lottoSellMode" value="resolution" checked onchange="pushLottoStrategy()" style="accent-color:var(--green);width:18px;height:18px">
       <span style="font-size:13px">⏳ Wait for resolution <span style="color:var(--muted)">(hold until the market closes)</span></span>
+      <span class="rec" onclick="showRec(event,'lotto_resolution')" title="Why we recommend this">★ <u>recommended</u> ⓘ</span>
     </label>
     <label class="lottoSellOpt" style="display:flex;align-items:center;gap:10px;padding:9px 4px;flex-wrap:wrap">
       <input type="radio" name="lottoSellMode" value="profit" onchange="pushLottoStrategy()" style="accent-color:var(--green);width:18px;height:18px">
@@ -1028,9 +1036,10 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <select id="posFilterSource" class="filter-sel" onchange="filterPos()">
-        <option value="">All Sources</option>
-        <option value="bot">KalshiBot</option>
-        <option value="kalshi">Kalshi</option>
+        <option value="">All Bots</option>
+        <option value="T1">Scanner (T1)</option>
+        <option value="T2">Lotto (T2)</option>
+        <option value="manual">Manual (Kalshi)</option>
       </select>
       <select id="posFilterCat" class="filter-sel" onchange="filterPos()">
         <option value="">All Categories</option>
@@ -2942,6 +2951,43 @@ function renderBotPositions(positions) {
   }
 }
 
+// ── "★ recommended" badges: click a badge to see WHY it's recommended ──────
+// Each setting that has a sensible default carries a small badge (green = keep,
+// yellow = leave off). Clicking it pops a short explanation. You can still set
+// it however you want — the badge only advises.
+const REC_REASONS = {
+  lotto_resolution: {
+    h: "Hold to resolution — recommended",
+    b: "Cheap long-shots win at <b>settlement</b>: Kalshi pays $1.00 per contract if the event happens, with no buyer needed. Holding to resolution is what makes the long-shot math work. Selling early needs liquidity these thin markets often don't have."
+  },
+  lotto_liquidity_off: {
+    h: "Leave “Active only” OFF — recommended for Lotto",
+    b: "Cheap long-shots are thin <i>by nature</i> — that thinness is why they pay 20×–50×. Leaving this <b>off</b> lets the bot buy the biggest-payout markets. Turn it on only if you want to actively sell early — it filters most long-shots out."
+  },
+  scanner_liquidity_on: {
+    h: "Skip thin markets — recommended for Scanner",
+    b: "The Scanner flips markets <b>for profit</b>, so every position must be sellable. Requiring real depth (≥10 open interest + a tight spread) keeps an exit available so you can take profit or cut losses. Leave this on unless you know why you're turning it off."
+  },
+};
+function closeRec(){ const p = document.getElementById("_recPop"); if (p) p.remove(); }
+function showRec(ev, key){
+  ev.preventDefault(); ev.stopPropagation();
+  closeRec();
+  const r = REC_REASONS[key]; if (!r) return;
+  const pop = document.createElement("div");
+  pop.className = "rec-pop"; pop.id = "_recPop";
+  pop.innerHTML = `<div class="rec-pop-h">${r.h}</div><div>${r.b}</div>`;
+  document.body.appendChild(pop);
+  const rect = ev.currentTarget.getBoundingClientRect();
+  let left = Math.min(rect.left, window.innerWidth  - pop.offsetWidth  - 12);
+  if (left < 8) left = 8;
+  let top = rect.bottom + 8;
+  if (top + pop.offsetHeight > window.innerHeight - 8) top = Math.max(8, rect.top - pop.offsetHeight - 8);
+  pop.style.left = left + "px"; pop.style.top = top + "px";
+  // Close on the next click anywhere (defer so this same click doesn't close it).
+  setTimeout(() => document.addEventListener("click", closeRec, { once: true }), 0);
+}
+
 function filterPos() {
   const src  = document.getElementById("posFilterSource")?.value || "";
   const cat  = document.getElementById("posFilterCat")?.value   || "";
@@ -2976,8 +3022,10 @@ function filterPos() {
       if (closeTime < now) return false;  // Market closed/resolved, hide it
     }
 
-    if (src === "bot"    && !p.bot_bought) return false;
-    if (src === "kalshi" &&  p.bot_bought) return false;
+    // T1 also catches legacy bot buys made before profile-tagging (the front page WAS the Scanner).
+    if (src === "T1"     && !(p.profile === "T1" || (p.bot_bought && !p.profile))) return false;
+    if (src === "T2"     && p.profile !== "T2") return false;
+    if (src === "manual" && p.bot_bought)       return false;
     if (cat && p.category !== cat)         return false;
     if (hideSmall && Math.abs(qty) < 1.0) return false;
     // Hide positions with 95%+ loss
@@ -3217,8 +3265,10 @@ function toggleAllPos(checked) {
   const src = document.getElementById("posFilterSource")?.value || "";
   const cat = document.getElementById("posFilterCat")?.value   || "";
   allPositions.filter(p => {
-    if (src === "bot"    && !p.bot_bought) return false;
-    if (src === "kalshi" &&  p.bot_bought) return false;
+    // T1 also catches legacy bot buys made before profile-tagging (the front page WAS the Scanner).
+    if (src === "T1"     && !(p.profile === "T1" || (p.bot_bought && !p.profile))) return false;
+    if (src === "T2"     && p.profile !== "T2") return false;
+    if (src === "manual" && p.bot_bought)       return false;
     if (cat && p.category !== cat)         return false;
     return true;
   }).forEach(p => checked ? selectedPosTickers.add(p.ticker) : selectedPosTickers.delete(p.ticker));
