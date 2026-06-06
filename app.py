@@ -475,13 +475,42 @@ def _remember_title(ticker: str, title: str):
         _title_cache[ticker] = title
         _save_title_cache()
 
+_COIN_NAMES = {
+    "BTC": "Bitcoin", "ETH": "Ethereum", "SOL": "Solana", "XRP": "XRP",
+    "DOGE": "Dogecoin", "ADA": "Cardano", "AVAX": "Avalanche", "LINK": "Chainlink",
+    "BNB": "BNB", "LTC": "Litecoin", "MATIC": "Polygon", "DOT": "Polkadot",
+    "SHIB": "Shiba Inu", "PEPE": "Pepe", "TRX": "Tron", "ATOM": "Cosmos",
+}
+
+def _humanize_ticker(ticker: str) -> str:
+    """Last-resort readable label when no real title is available — so the UI shows
+    something human instead of a raw code like 'KXBTC-26JUN1217-B64250'.
+    Recognizes crypto price markets (KX<COIN>-<date>-<B/T><strike>); otherwise
+    returns the ticker unchanged (no worse than before)."""
+    if not ticker:
+        return ticker
+    parts = ticker.upper().split("-")
+    head = parts[0]
+    if head.startswith("KX") and len(parts) >= 3:
+        coin = head[2:]                       # KXBTC -> BTC
+        name = _COIN_NAMES.get(coin, coin)
+        strike = "".join(ch for ch in parts[-1] if ch.isdigit())
+        if strike:
+            try:
+                return f"{name} ${int(strike):,}"   # 'Bitcoin $64,250'
+            except ValueError:
+                pass
+        return name
+    return ticker
+
 def _pretty_title(ticker: str, resolved: str) -> str:
     """Best available title: a freshly-resolved pretty one, else the disk cache,
-    else the ticker. Also remembers a freshly-resolved pretty title for next time."""
+    else a humanized version of the ticker (never the raw code if we can help it).
+    Also remembers a freshly-resolved pretty title for next time."""
     if resolved and resolved != ticker:
         _remember_title(ticker, resolved)
         return resolved
-    return _title_cache.get(ticker, ticker)
+    return _title_cache.get(ticker) or _humanize_ticker(ticker)
 
 _load_title_cache()
 
@@ -566,21 +595,21 @@ def _get_sold_by(ticker: str) -> str:
     return "Human"
 
 def _kalshi_url(event_ticker: str, ticker: str) -> str:
-    """Build Kalshi market URL.
+    """Build a PUBLIC Kalshi URL (viewable without logging in).
 
-    Kalshi URLs use format: https://kalshi.com/markets/{slug}
-    where slug is typically the market title slugified (lowercase + hyphens).
-    Since we don't have the slug from the API, use event_ticker in lowercase as fallback.
+    The old version used the full event ticker (e.g. 'kxbtc-26jun1217') as the
+    slug — that is NOT a valid Kalshi page, so it 404'd / hit the login wall.
+    Kalshi's per-market slug isn't exposed by the API, but the SERIES page IS a
+    real public page. Series = the first dash-segment of the ticker
+    ('KXBTC-26JUN1217-B64250' -> 'KXBTC' -> https://kalshi.com/markets/kxbtc).
     """
-    evt = event_ticker or ""
-    if not evt and ticker:
-        # Derive event_ticker: everything up to but not including the last '-segment'
-        parts = ticker.rsplit("-", 1)
-        evt = parts[0] if len(parts) == 2 else ticker
-    if evt:
-        # Use event_ticker lowercase as slug (e.g., "KXBTCRESERVE" -> "kxbtcreserve")
-        return f"https://kalshi.com/markets/{evt.lower()}"
-    return ""
+    base = (ticker or event_ticker or "").strip()
+    if not base:
+        return ""
+    series = base.split("-", 1)[0]   # first segment = the series ticker
+    if not series:
+        return ""
+    return f"https://kalshi.com/markets/{series.lower()}"
 
 def _event_title(event_ticker: str) -> str:
     """Fetch the human-readable event title from Kalshi's events endpoint (cached)."""
