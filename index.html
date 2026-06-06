@@ -5434,7 +5434,7 @@ setInterval(async () => {
   if (!autoModeOn) { _hideBotDownAlert(); return; }
   try {
     const ctrl = new AbortController(), t = setTimeout(() => ctrl.abort(), 2000);
-    await fetch("/api/stats", {signal: ctrl.signal});
+    await fetch("/api/bot/status", {signal: ctrl.signal});  // cheap liveness ping (no Kalshi call)
     clearTimeout(t);
     _hideBotDownAlert();
   } catch(e) {
