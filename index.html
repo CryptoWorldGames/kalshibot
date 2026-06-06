@@ -155,6 +155,10 @@ thead th{background:#181818;color:#fff;font-size:16px;font-weight:700;letter-spa
 tbody tr{border-top:1px solid var(--border);transition:background .1s}
 tbody tr:hover{background:var(--hover)}
 td{padding:12px 10px;vertical-align:middle;white-space:nowrap;color:#fff;font-size:18px;border-right:1px solid var(--border)}
+/* Small inline tables (Lotto Stats, API Log) must NOT inherit the main table's
+   sticky header — that made the header float below row 1 ("results above header"). */
+.flat-tbl thead, .flat-tbl thead th{position:static !important;top:auto !important;box-shadow:none !important}
+.flat-tbl thead th{background:transparent}
 td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:14px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 
 .badge{display:inline-block;border-radius:5px;font-size:12px;font-weight:700;letter-spacing:.5px;padding:4px 10px}
@@ -946,7 +950,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <!-- Limits -->
     <div style="border:1px solid var(--border);border-radius:8px;padding:12px">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <label style="font-size:12px;color:var(--muted)">Ends within (min) <button type="button" onclick="document.getElementById('L_minutes').value=525600;pushLottoSettings()" style="font-size:10px;font-weight:700;padding:2px 8px;border:1px solid var(--border);border-radius:5px;background:#161616;color:var(--green);cursor:pointer;margin-left:4px">Show all</button><br><input type="number" id="L_minutes" min="1" value="525600" onchange="pushLottoSettings()"></label>
+        <label style="font-size:12px;color:var(--muted)">Ends within (min) <button type="button" onclick="document.getElementById('L_minutes').value=525600;pushLottoSettings()" style="font-size:10px;font-weight:700;padding:2px 8px;border:1px solid var(--border);border-radius:5px;background:#161616;color:var(--green);cursor:pointer;margin-left:4px">Show all</button><br><input type="number" id="L_minutes" min="1" value="525600" onchange="pushLottoSettings()" style="width:64px;min-width:64px"></label>
         <label style="font-size:12px;color:var(--muted)">Max $ per buy<br><input type="number" id="L_buyAmount" min="0.01" step="0.01" value="0.15" onchange="pushLottoSettings()"></label>
         <label style="font-size:12px;color:var(--muted)">Max buys / scan<br><input type="number" id="L_autoMaxPerScan" min="1" value="10" onchange="pushLottoSettings()"></label>
         <label style="font-size:12px;color:var(--muted)">Max open positions<br><input type="number" id="L_autoMaxConcurrent" min="1" value="999" onchange="pushLottoSettings()"></label>
@@ -1156,7 +1160,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <div id="apiLogSummary" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px"></div>
     <div id="apiLogTop" style="font-size:12px;color:var(--muted);margin-bottom:10px"></div>
     <div style="max-height:60vh;overflow:auto;border:1px solid var(--border);border-radius:8px">
-      <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <table class="flat-tbl" style="width:100%;border-collapse:collapse;font-size:12px">
         <thead><tr style="position:sticky;top:0;background:#161616;text-align:left">
           <th style="padding:6px 10px">Time</th><th style="padding:6px 10px">Method</th>
           <th style="padding:6px 10px">Endpoint</th><th style="padding:6px 10px">Status</th>
@@ -5141,7 +5145,7 @@ function renderLottoStats() {
   const centRows = Object.keys(buckets).map(Number).sort((a,b)=>a-b);
   const centTable = centRows.length ? `
     <div style="font-weight:700;margin:18px 0 6px">📊 Win/Loss by 1¢ bet</div>
-    <div style="overflow-x:auto"><table style="width:100%;font-size:12px;border-collapse:collapse">
+    <div style="overflow-x:auto"><table class="flat-tbl" style="width:100%;font-size:12px;border-collapse:collapse">
       <thead><tr style="color:var(--muted);text-align:left">
         <th style="padding:4px">Bet</th><th>Bets</th><th>Invested</th><th>Won</th><th>Win&nbsp;ratio</th><th>P&amp;L</th></tr></thead>
       <tbody>${centRows.map((c,i) => { const b = buckets[c]; const ratio = Math.round(100*b.won/b.n);
@@ -5174,7 +5178,7 @@ function renderLottoStats() {
   const fmtTs = iso => { try { const d=new Date(iso); return d.toLocaleString([], {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}); } catch(e){ return "—"; } };
   const histHtml = hist.length ? `
     <div style="font-weight:700;margin:18px 0 6px">🧾 History — every buy & sell</div>
-    <div style="overflow-x:auto"><table style="width:100%;font-size:11px;border-collapse:collapse">
+    <div style="overflow-x:auto"><table class="flat-tbl" style="width:100%;font-size:11px;border-collapse:collapse">
       <tbody>${hist.slice(0,300).map((h,i) => {
         const bg = i % 2 ? "#141414" : "transparent";
         const pnl = h.pnl == null ? `<span style="color:#888">open</span>` : `<span style="color:${h.pnl>=0?'var(--green)':'var(--red)'};font-weight:700">${h.pnl>=0?'+':''}$${h.pnl.toFixed(2)}</span>`;
@@ -5191,7 +5195,7 @@ function renderLottoStats() {
   const _lf = v => (v < 0 ? "-$" : "$") + Math.abs(v).toFixed(2);
   const liveHtml = openT2.length ? `
     <div style="font-weight:700;margin:6px 0 6px">🎯 Live Lotto bets — sell anytime</div>
-    <div style="overflow-x:auto"><table style="width:100%;font-size:12px;border-collapse:collapse">
+    <div style="overflow-x:auto"><table class="flat-tbl" style="width:100%;font-size:12px;border-collapse:collapse">
       <thead><tr style="color:var(--muted);text-align:left">
         <th style="padding:4px">Status</th><th>Market</th><th>Side</th><th>Qty</th><th>Cost/sh</th><th>Cost</th><th>Value&nbsp;now</th><th>Max</th><th>P&amp;L</th><th></th></tr></thead>
       <tbody>${openT2.map((p,i) => {
