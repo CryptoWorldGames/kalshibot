@@ -508,6 +508,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   <button class="tab-btn" id="tabSettlements" onclick="switchTab('settlements')">Settled</button>
   <button class="tab-btn" onclick="switchTab('debug')">Debug</button>
   <button class="tab-btn" id="tabCoach" onclick="switchTab('coach')">Coach</button>
+  <button class="tab-btn" id="tabApiLog" onclick="switchTab('apilog')">API Log</button>
 </div>
 
 <!-- ── Bot Status Bar (BELOW TABS) ─────────────────────────────────────────────── -->
@@ -1140,6 +1141,28 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     </div>
   </div>
 </div><!-- /tab-coach -->
+
+<!-- ── API Log tab — live view of outbound Kalshi calls (rate-limit watch) ── -->
+<div id="tab-apilog" class="tab-pane">
+  <div class="card">
+    <div class="card-title">📡 API Log (live) — Kalshi calls behind the scenes</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">
+      Every outbound call to Kalshi. Watch <b>Calls/60s</b> and <b>429s</b> to see if we're near the rate limit. Auto-refreshes every 2s while this tab is open.
+    </div>
+    <div id="apiLogSummary" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px"></div>
+    <div id="apiLogTop" style="font-size:12px;color:var(--muted);margin-bottom:10px"></div>
+    <div style="max-height:60vh;overflow:auto;border:1px solid var(--border);border-radius:8px">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="position:sticky;top:0;background:#161616;text-align:left">
+          <th style="padding:6px 10px">Time</th><th style="padding:6px 10px">Method</th>
+          <th style="padding:6px 10px">Endpoint</th><th style="padding:6px 10px">Status</th>
+          <th style="padding:6px 10px">ms</th>
+        </tr></thead>
+        <tbody id="apiLogBody"><tr><td colspan="5" style="padding:14px;color:var(--muted)">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div><!-- /tab-apilog -->
 
 </div><!-- /main -->
 
@@ -3854,6 +3877,41 @@ function renderCoachLotto(d) {
   </div>`;
 }
 
+async function loadApiLog() {
+  try {
+    const r = await fetch("/api/apilog", {cache:"no-store"});
+    const d = await r.json();
+    const chip = (label, val, color) =>
+      `<div style="background:#161616;border:1px solid var(--border);border-radius:8px;padding:8px 14px">
+         <div style="font-size:20px;font-weight:800;color:${color}">${val}</div>
+         <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">${label}</div>
+       </div>`;
+    const rl = d.rate_limited_60s || 0;
+    document.getElementById("apiLogSummary").innerHTML =
+      chip("Calls / 60s", d.calls_60s ?? 0, "#fff") +
+      chip("Errors / 60s", d.errors_60s ?? 0, (d.errors_60s ? "var(--yellow)" : "#fff")) +
+      chip("429 rate-limited / 60s", rl, (rl ? "var(--red)" : "var(--green)"));
+    const top = (d.top_endpoints_60s || []).map(([k,n]) => `${k} <b style="color:#fff">${n}</b>`).join(" · ");
+    document.getElementById("apiLogTop").innerHTML = top ? ("Busiest (60s): " + top) : "";
+    const body = document.getElementById("apiLogBody");
+    const rows = d.recent || [];
+    if (!rows.length) { body.innerHTML = '<tr><td colspan="5" style="padding:14px;color:var(--muted)">No calls yet.</td></tr>'; return; }
+    body.innerHTML = rows.map(e => {
+      const t = new Date(e.ts * 1000).toLocaleTimeString();
+      const col = e.status === 429 ? "var(--red)" : (e.status >= 400 ? "var(--yellow)" : "var(--green)");
+      return `<tr style="border-top:1px solid var(--border)">
+        <td style="padding:5px 10px;color:var(--muted)">${t}</td>
+        <td style="padding:5px 10px">${e.method}</td>
+        <td style="padding:5px 10px">${esc(e.ep)}</td>
+        <td style="padding:5px 10px;color:${col};font-weight:700">${e.status}</td>
+        <td style="padding:5px 10px;color:var(--muted)">${e.ms}</td></tr>`;
+    }).join("");
+  } catch(e) {
+    document.getElementById("apiLogBody").innerHTML =
+      '<tr><td colspan="5" style="padding:14px;color:var(--red)">Bot not reachable (is it running?)</td></tr>';
+  }
+}
+
 async function loadCoach() {
   try {
     // Send current filter settings to Coach for analysis
@@ -4436,6 +4494,13 @@ function switchTab(name) {
     if (!document.hidden) window._coachRefresh = setInterval(loadCoach, 60000);
   } else {
     if (window._coachRefresh) { clearInterval(window._coachRefresh); window._coachRefresh = null; }
+  }
+  if (name === "apilog") {
+    loadApiLog();
+    if (window._apiLogRefresh) clearInterval(window._apiLogRefresh);
+    if (!document.hidden) window._apiLogRefresh = setInterval(loadApiLog, 2000);
+  } else {
+    if (window._apiLogRefresh) { clearInterval(window._apiLogRefresh); window._apiLogRefresh = null; }
   }
   if (name === "positions") {
     // Staged: list (fast) -> top-10 biggest positions' prices -> the rest -> settlements.

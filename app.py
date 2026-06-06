@@ -142,6 +142,17 @@ def _headers(method: str, path: str, body: str = "") -> dict:
 _last_api_call = {"time": 0}
 _last_hipri_call = {"time": 0}   # timestamp of the last USER-facing (high-priority) call
 _rate_limit_delay = 0.5   # base seconds between API calls (was 2.0)
+
+# ── API activity log — every OUTBOUND Kalshi call, for the "API Log" tab so you can
+# see how busy the bot is behind the scenes and spot rate-limiting (429s).
+from collections import deque
+_api_log = deque(maxlen=500)   # each: {ts, method, ep, status, ms}
+def _log_api(method, ep, status, ms):
+    try:
+        _api_log.append({"ts": time.time(), "method": method,
+                         "ep": ep, "status": status, "ms": round(ms)})
+    except Exception:
+        pass
 _max_retries = 4
 _api_lock = threading.Lock()
 
@@ -174,6 +185,7 @@ def _kalshi_request(method: str, endpoint: str, params: dict = None,
     last_exc = None
     for attempt in range(_max_retries):
         _rate_limit_wait(low_priority=low_priority)
+        _t0 = time.time()
         try:
             if method == "GET":
                 r = req.get(BASE_URL + path, headers=_headers("GET", path),
@@ -182,6 +194,7 @@ def _kalshi_request(method: str, endpoint: str, params: dict = None,
                 body_str = json.dumps(body, separators=(',', ':'))
                 r = req.post(BASE_URL + path, headers=_headers("POST", path),
                              data=body_str, timeout=15)
+            _log_api(method, endpoint, r.status_code, (time.time() - _t0) * 1000)
             if r.status_code == 429:
                 ra = r.headers.get("Retry-After")
                 try: wait = float(ra) if ra else 0
@@ -1173,10 +1186,13 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
                        if t == ticker and p.get("status") == "open")
             if held >= max_mkt:
                 continue
-            # Never buy the OPPOSITE side of a market we already hold — that just
-            # hedges away (cancels out) our own position for no reason.
+            # Never buy the OPPOSITE side of this exact contract — even if our first
+            # side was already sold this session. Buying both sides of one market just
+            # cancels out (a guaranteed loss on the spread). Applies to ALL bots
+            # (Scanner T1, Lotto T2, …) since they share this buy loop. Crypto tickers
+            # are unique per 15-min window, so this is effectively per-session there.
             _existing = tracked.get(ticker)
-            if _existing and _existing.get("status") == "open" and _existing.get("side") not in (None, side):
+            if _existing and _existing.get("side") not in (None, side):
                 continue
             pc = int(math.ceil(price_c))
             if pc <= 0 or pc > 99:
@@ -3545,6 +3561,27 @@ def bot_stop():
     print("[bot] Trading loop stopped")
     return jsonify({"ok": True, "status": "stopped"})
 
+
+@app.route("/api/apilog", methods=["GET"])
+def api_log():
+    """Recent OUTBOUND Kalshi API calls + a 60s summary, for the API Log tab so you
+    can watch how busy the bot is and see rate-limiting (429s) as it happens."""
+    now = time.time()
+    rows = list(_api_log)
+    last60 = [e for e in rows if now - e["ts"] <= 60]
+    by_ep = {}
+    for e in last60:
+        key = f'{e["method"]} {e["ep"].split("?")[0]}'
+        by_ep[key] = by_ep.get(key, 0) + 1
+    top = sorted(by_ep.items(), key=lambda kv: -kv[1])[:8]
+    return jsonify({
+        "now": now,
+        "calls_60s": len(last60),
+        "errors_60s": sum(1 for e in last60 if e["status"] >= 400),
+        "rate_limited_60s": sum(1 for e in last60 if e["status"] == 429),
+        "top_endpoints_60s": top,
+        "recent": rows[-120:][::-1],   # newest first
+    })
 
 @app.route("/api/bot/status", methods=["GET"])
 def bot_status():
