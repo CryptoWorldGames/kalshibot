@@ -5,6 +5,20 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>KalshiBot</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%23000' width='100' height='100'/%3E%3Ctext x='50' y='70' font-size='70' font-weight='bold' fill='%2300d97e' text-anchor='middle' font-family='system-ui'>KB%3C/text%3E%3C/svg%3E">
+<!-- PWA: installable app (icon + standalone window) -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0a0a0a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="KalshiBot">
+<link rel="apple-touch-icon" href="/icons/kb-192.png">
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    });
+  }
+</script>
 <style>
 :root {
   --bg:       #0a0a0a;
@@ -932,7 +946,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <!-- Limits -->
     <div style="border:1px solid var(--border);border-radius:8px;padding:12px">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <label style="font-size:12px;color:var(--muted)">Ends within (min) <span style="color:#555">365d=525600</span><br><input type="number" id="L_minutes" min="1" value="525600" onchange="pushLottoSettings()"></label>
+        <label style="font-size:12px;color:var(--muted)">Ends within (min) <button type="button" onclick="document.getElementById('L_minutes').value=525600;pushLottoSettings()" style="font-size:10px;font-weight:700;padding:2px 8px;border:1px solid var(--border);border-radius:5px;background:#161616;color:var(--green);cursor:pointer;margin-left:4px">Show all</button><br><input type="number" id="L_minutes" min="1" value="525600" onchange="pushLottoSettings()"></label>
         <label style="font-size:12px;color:var(--muted)">Max $ per buy<br><input type="number" id="L_buyAmount" min="0.01" step="0.01" value="0.15" onchange="pushLottoSettings()"></label>
         <label style="font-size:12px;color:var(--muted)">Max buys / scan<br><input type="number" id="L_autoMaxPerScan" min="1" value="10" onchange="pushLottoSettings()"></label>
         <label style="font-size:12px;color:var(--muted)">Max open positions<br><input type="number" id="L_autoMaxConcurrent" min="1" value="999" onchange="pushLottoSettings()"></label>

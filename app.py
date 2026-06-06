@@ -1385,6 +1385,22 @@ def serve_photos(filename):
     return send_from_directory(HERE / "photos", filename)
 
 
+# ── PWA: makes KalshiBot installable as a standalone app (icon + own window) ──
+@app.route("/manifest.json")
+def pwa_manifest():
+    return send_from_directory(HERE, "manifest.json", mimetype="application/manifest+json")
+
+@app.route("/sw.js")
+def pwa_sw():
+    resp = make_response(send_from_directory(HERE, "sw.js", mimetype="application/javascript"))
+    resp.headers["Service-Worker-Allowed"] = "/"
+    return resp
+
+@app.route("/icons/<path:filename>")
+def serve_icons(filename):
+    return send_from_directory(HERE / "icons", filename)
+
+
 @app.route("/api/debug")
 def debug():
     data = kalshi_get("/markets", {"status": "open", "limit": 3})
