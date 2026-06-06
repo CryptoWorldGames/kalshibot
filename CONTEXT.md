@@ -145,6 +145,12 @@ git push
 - Portfolio refreshes every 60s (throttled)
 - Monitor runs every 45s (backend, always on while Flask running)
 - GitHub primary source of truth; OneDrive backup only
+- **⚠️ MERGE RULE — ALWAYS warn before merging any branch/PR:** state plainly
+  whether the merge will (a) ADD new code, (b) OVERWRITE/replace existing code, or
+  (c) bring in OLDER code that would delete current features. Say which files get
+  overwritten and whether the incoming code is newer or older than main. Never
+  merge silently — the user has been burned by un-warned merges. Wait for explicit
+  OK after presenting consequences.
 
 ---
 
