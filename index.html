@@ -624,29 +624,18 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
           <span class="label-sm" style="margin:0;font-size:14px;font-weight:700;color:var(--green)">📊 Show Categories</span>
           <button class="pill sm" onclick="toggleAllCategories()" style="font-size:12px;padding:4px 12px">Select All</button>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px 16px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px">
           <label class="check-row"><input type="checkbox" id="showCrypto" checked onchange="saveSettings()"> Crypto</label>
           <label class="check-row"><input type="checkbox" id="showSports" checked onchange="saveSettings()"> Sports</label>
-          <label class="check-row"><input type="checkbox" id="showPolitics" checked onchange="saveSettings()"> Politics</label>
-          <label class="check-row"><input type="checkbox" id="showEconomics" checked onchange="saveSettings()"> Economics</label>
-          <label class="check-row"><input type="checkbox" id="showEntertainment" checked onchange="saveSettings()"> Entertainment</label>
-          <label class="check-row"><input type="checkbox" id="showWeather" checked onchange="saveSettings()"> Weather</label>
-          <label class="check-row"><input type="checkbox" id="showNFL" checked onchange="saveSettings()"> NFL</label>
-          <label class="check-row"><input type="checkbox" id="showNBA" checked onchange="saveSettings()"> NBA</label>
-          <label class="check-row"><input type="checkbox" id="showMLB" checked onchange="saveSettings()"> MLB</label>
-          <label class="check-row"><input type="checkbox" id="showNHL" checked onchange="saveSettings()"> NHL</label>
-          <label class="check-row"><input type="checkbox" id="showSoccer" checked onchange="saveSettings()"> Soccer</label>
-          <label class="check-row"><input type="checkbox" id="showGolf" checked onchange="saveSettings()"> Golf</label>
-          <label class="check-row"><input type="checkbox" id="showTennis" checked onchange="saveSettings()"> Tennis</label>
-          <label class="check-row"><input type="checkbox" id="showMMA" checked onchange="saveSettings()"> MMA/UFC</label>
+          <label class="check-row"><input type="checkbox" id="showPolitics" checked onchange="saveSettings()"> Politics / Elections</label>
+          <label class="check-row"><input type="checkbox" id="showEconomics" checked onchange="saveSettings()"> Economics / Finance</label>
           <label class="check-row"><input type="checkbox" id="showCombo" checked onchange="saveSettings()"> Combo/Parlay</label>
         </div>
-        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px">
+        <div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.4px;margin:14px 0 6px;border-top:1px solid var(--border);padding-top:10px">FILTERS <span style="font-weight:400">(not categories — these refine what's shown)</span></div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
           <label class="check-row" title="Hides markets/events with many price-level variants (e.g. BTC range B73500, B73250...). Keeps clean binary YES/NO markets only.">
             <input type="checkbox" id="hideMultiOutcome" checked onchange="saveSettings()"> Hide multi-outcome <span style="color:var(--yellow);font-size:11px;margin-left:4px">✓ rec</span>
           </label>
-        </div>
-        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px">
           <label class="check-row" title="Requires ≥10 open interest. Skips thin markets.">
             <input type="checkbox" id="goodLiq" checked onchange="saveSettings()"> Active only (skip thin) <span class="rec" onclick="showRec(event,'scanner_liquidity_on')" title="Why we recommend this">★ <u>recommended</u> ⓘ</span>
           </label>
@@ -929,11 +918,12 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
         <label class="check-row"><input type="checkbox" id="L_showCrypto" checked onchange="pushLottoSettings()"> Crypto</label>
         <label class="check-row"><input type="checkbox" id="L_showSports" checked onchange="pushLottoSettings()"> Sports</label>
-        <label class="check-row"><input type="checkbox" id="L_showPolitics" checked onchange="pushLottoSettings()"> Politics</label>
-        <label class="check-row"><input type="checkbox" id="L_showEconomics" checked onchange="pushLottoSettings()"> Economics</label>
+        <label class="check-row"><input type="checkbox" id="L_showPolitics" checked onchange="pushLottoSettings()"> Politics / Elections</label>
+        <label class="check-row"><input type="checkbox" id="L_showEconomics" checked onchange="pushLottoSettings()"> Economics / Finance</label>
         <label class="check-row"><input type="checkbox" id="L_showCombo" checked onchange="pushLottoSettings()"> Combo/Parlay</label>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">
+      <div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.4px;margin:14px 0 6px;border-top:1px solid var(--border);padding-top:10px">FILTERS <span style="font-weight:400">(not categories — these refine what's shown)</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
         <label class="check-row"><input type="checkbox" id="L_goodLiq" onchange="pushLottoSettings()"> Active only (skip thin)<span class="rec off" onclick="showRec(event,'lotto_liquidity_off')" title="Why we recommend this">★ <u>leave off</u> ⓘ</span></label>
         <label class="check-row"><input type="checkbox" id="L_hideMultiOutcome" onchange="pushLottoSettings()"> Hide multi-outcome</label>
       </div>
@@ -1917,8 +1907,7 @@ document.addEventListener("visibilitychange", () => {
 // ── Filter pills ──────────────────────────────────────────────────────────
 
 function toggleAllCategories() {
-  const catIds = ["showCrypto","showSports","showPolitics","showEconomics","showEntertainment",
-    "showWeather","showNFL","showNBA","showMLB","showNHL","showSoccer","showGolf","showTennis","showMMA","showCombo"];
+  const catIds = ["showCrypto","showSports","showPolitics","showEconomics","showCombo"];
   const allChecked = catIds.every(id => document.getElementById(id)?.checked);
   catIds.forEach(id => {
     const el = document.getElementById(id);
@@ -2251,7 +2240,7 @@ async function scan() {
   const chk = id => { const el = document.getElementById(id); return el ? el.checked : true; };
   const showCrypto    = chk("showCrypto");
   const showCombo     = chk("showCombo");
-  const showSports    = chk("showSports") || chk("showNFL") || chk("showNBA") || chk("showMLB") || chk("showNHL") || chk("showSoccer") || chk("showGolf") || chk("showTennis") || chk("showMMA");
+  const showSports    = chk("showSports");
   const showPolitics  = chk("showPolitics");
   const showEconomics = chk("showEconomics");
   const goodLiq       = chk("goodLiq");
@@ -4750,8 +4739,7 @@ function loadStratSlot(i) {
 
 const SETTINGS_KEY = "kb_settings_v2";
 const SETTINGS_CHECKBOXES = ["showCrypto","showSports","showPolitics","showEconomics","enableBuyUp","enableBuyDown","hideMultiOutcome",
-  "showEntertainment","showWeather","showNFL","showNBA","showMLB","showNHL",
-  "showSoccer","showGolf","showTennis","showMMA","showCombo","goodLiq",
+  "showCombo","goodLiq",
   "stopLossChk",
   "skipAutoSellNearResolution","hideSmallPositions","hide95LossPositions"];
 const SETTINGS_INPUTS = ["buyAmount","maxBuysPerMarket","autoMaxPerScan","autoMaxConcurrent","posSort",
@@ -4786,8 +4774,7 @@ function pushBuySettings(immediate=false) {
     const num = (id, d) => { const el = document.getElementById(id); const v = parseFloat(el?.value); return isNaN(v) ? d : v; };
     const optNum = id => { const el = document.getElementById(id); return el && el.value !== "" ? parseFloat(el.value) : null; };
     // Mirror scan(): show_sports is true if the umbrella OR any sub-sport is checked
-    const showSports = chk("showSports") || chk("showNFL") || chk("showNBA") || chk("showMLB")
-      || chk("showNHL") || chk("showSoccer") || chk("showGolf") || chk("showTennis") || chk("showMMA");
+    const showSports = chk("showSports");
     const payload = {
       enable_buy_up:   chk("enableBuyUp"),
       up_min:          num("minProb", 80),
@@ -5279,9 +5266,7 @@ async function applyCoachSettings() {
     document.getElementById("buyAmount").value = "1.00";
 
     // All categories on
-    ["showCrypto","showSports","showPolitics","showEconomics","showEntertainment",
-     "showWeather","showNFL","showNBA","showMLB","showNHL","showSoccer","showGolf",
-     "showTennis","showMMA","showCombo"].forEach(id => {
+    ["showCrypto","showSports","showPolitics","showEconomics","showCombo"].forEach(id => {
       const el = document.getElementById(id); if (el) el.checked = true;
     });
 
