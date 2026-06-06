@@ -747,6 +747,41 @@ def _market_bid(m: dict, side: str) -> float | None:
     return None
 
 
+def _mark_price_cents(m: dict, side: str) -> float | None:
+    """Best 'current' price (cents) for a held contract on `side`.
+
+    Prefer the live bid (the real price you'd get selling). When the book has no
+    bid — common for illiquid markets like far-out NBA-draft picks — fall back to
+    the last traded price, then the ask, so the Now / P&L columns show a real mark
+    instead of a blank "—". Returns None only when nothing is known at all.
+    """
+    bid = _market_bid(m, side)
+    if bid is not None and bid > 0:
+        return bid
+
+    # Fall back to last trade. Kalshi's 'last_price' is the YES price; NO = 100 - YES.
+    last = m.get("last_price")
+    if last is None:
+        last = m.get("last_price_dollars")
+    try:
+        if last is not None:
+            yc = float(last)
+            if 0 < yc < 1:        # dollar form like 0.12 -> 12¢
+                yc *= 100
+            if yc >= 1:
+                yc = min(99.0, yc)
+                return round(yc if side == "yes" else 100 - yc, 2)
+    except (TypeError, ValueError):
+        pass
+
+    # Last resort: the ask (what it'd cost to buy back) as a rough mark.
+    v = _dollars_to_cents(m.get(f"{side}_ask_dollars"))
+    if v is not None and v > 0:
+        return v
+
+    return bid  # None or 0
+
+
 def _monitor():
     while True:
         time.sleep(45)
@@ -1455,8 +1490,8 @@ def portfolio():
                     event_ticker = mkt.get("event_ticker", "")
                     market_title = _pretty_title(ticker, _event_title(event_ticker) or mkt.get("title", ticker))
                     category     = mkt.get("category", "")
-                    current_yes  = _dollars_to_cents(mkt.get("yes_bid_dollars"))
-                    current_no   = _dollars_to_cents(mkt.get("no_bid_dollars"))
+                    current_yes  = _mark_price_cents(mkt, "yes")
+                    current_no   = _mark_price_cents(mkt, "no")
                     close_time   = mkt.get("close_time") or mkt.get("expiration_time")
                 except Exception:
                     pass
@@ -1471,8 +1506,8 @@ def portfolio():
                     event_ticker = _m.get("event_ticker", "")
                     market_title = _pretty_title(ticker, _event_title(event_ticker) or _m.get("title", ticker))
                     category     = _m.get("category", "")
-                    current_yes  = _dollars_to_cents(_m.get("yes_bid_dollars"))
-                    current_no   = _dollars_to_cents(_m.get("no_bid_dollars"))
+                    current_yes  = _mark_price_cents(_m, "yes")
+                    current_no   = _mark_price_cents(_m, "no")
                     close_time   = _m.get("close_time") or _m.get("expiration_time")
                 else:
                     event_ticker = ""
@@ -1572,8 +1607,8 @@ def portfolio():
             event_ticker = _mf.get("event_ticker", "")
             market_title = _pretty_title(ticker, _event_title(event_ticker) or _mf.get("title", market_title))
             category     = _mf.get("category", "")
-            current_yes  = _dollars_to_cents(_mf.get("yes_bid_dollars"))
-            current_no   = _dollars_to_cents(_mf.get("no_bid_dollars"))
+            current_yes  = _mark_price_cents(_mf, "yes")
+            current_no   = _mark_price_cents(_mf, "no")
 
         # Only make NEW market calls if enriching AND < 100 total positions
         # (to avoid rate-limit starvation during heavy portfolios)
@@ -1590,8 +1625,8 @@ def portfolio():
                 event_ticker = mkt.get("event_ticker", "")
                 market_title = _event_title(event_ticker) or mkt.get("title", ticker)
                 category     = mkt.get("category", "")
-                current_yes  = _dollars_to_cents(mkt.get("yes_bid_dollars"))
-                current_no   = _dollars_to_cents(mkt.get("no_bid_dollars"))
+                current_yes  = _mark_price_cents(mkt, "yes")
+                current_no   = _mark_price_cents(mkt, "no")
             except Exception:
                 pass
 
@@ -2891,8 +2926,8 @@ def enrich_positions():
                 "event_ticker": event_ticker,
                 "title": _pretty_title(ticker, _event_title(event_ticker) or mkt.get("title", ticker)),
                 "category": mkt.get("category", ""),
-                "current_yes": _dollars_to_cents(mkt.get("yes_bid_dollars")),
-                "current_no": _dollars_to_cents(mkt.get("no_bid_dollars")),
+                "current_yes": _mark_price_cents(mkt, "yes"),
+                "current_no": _mark_price_cents(mkt, "no"),
                 "close_time": mkt.get("close_time") or mkt.get("expiration_time"),
                 "kalshi_url": _kalshi_url(event_ticker, ticker),
             }
@@ -3573,8 +3608,8 @@ def group_exits_analysis():
                 # Get market data
                 try:
                     mkt = _get_market(ticker)
-                    current_yes = _dollars_to_cents(mkt.get("yes_bid_dollars"))
-                    current_no = _dollars_to_cents(mkt.get("no_bid_dollars"))
+                    current_yes = _mark_price_cents(mkt, "yes")
+                    current_no = _mark_price_cents(mkt, "no")
                     close_time = mkt.get("close_time") or mkt.get("expiration_time", "")
                 except Exception:
                     current_yes = None
