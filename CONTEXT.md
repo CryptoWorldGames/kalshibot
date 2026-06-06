@@ -154,6 +154,16 @@ git push
 
 ---
 
+## 🗑️ Trash policy (retire, don't delete)
+- Deprecated files go into `TRASH/` (via `git mv`), **never** hard-deleted. They
+  stay recoverable. See `TRASH/README.md`.
+- **Trash last reviewed: 2026-06-06**
+- **WEEKLY REMINDER:** At the start of any session, if today is more than 7 days
+  after "Trash last reviewed" above, remind the user to review `TRASH/` and
+  permanently clear anything they're sure about — then bump that date.
+
+---
+
 ## 2026-06-03 Session 3 — Settings persistence fixes + portfolio enrichment starvation fix
 
 **Fixed three critical issues:**
