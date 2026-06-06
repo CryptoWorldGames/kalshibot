@@ -145,6 +145,22 @@ git push
 - Portfolio refreshes every 60s (throttled)
 - Monitor runs every 45s (backend, always on while Flask running)
 - GitHub primary source of truth; OneDrive backup only
+- **⚠️ MERGE RULE — ALWAYS warn before merging any branch/PR:** state plainly
+  whether the merge will (a) ADD new code, (b) OVERWRITE/replace existing code, or
+  (c) bring in OLDER code that would delete current features. Say which files get
+  overwritten and whether the incoming code is newer or older than main. Never
+  merge silently — the user has been burned by un-warned merges. Wait for explicit
+  OK after presenting consequences.
+
+---
+
+## 🗑️ Trash policy (retire, don't delete)
+- Deprecated files go into `TRASH/` (via `git mv`), **never** hard-deleted. They
+  stay recoverable. See `TRASH/README.md`.
+- **Trash last reviewed: 2026-06-06**
+- **WEEKLY REMINDER:** At the start of any session, if today is more than 7 days
+  after "Trash last reviewed" above, remind the user to review `TRASH/` and
+  permanently clear anything they're sure about — then bump that date.
 
 ---
 
