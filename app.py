@@ -1208,6 +1208,17 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
                     bought += 1
                     print(f"[bot:{prof}] Auto-bought {side.upper()} {ticker}: {contracts} @ {pc}¢")
             except Exception as e:
+                # Out of cash? Stop trying the rest of this cycle's candidates —
+                # otherwise we hammer Kalshi with dozens of doomed orders and trip
+                # the 429 rate limiter. Resume next cycle (cash may free up).
+                _body = ""
+                _resp = getattr(e, "response", None)
+                if _resp is not None:
+                    try: _body = _resp.text or ""
+                    except Exception: _body = ""
+                if "insufficient_balance" in (_body + " " + str(e)).lower():
+                    print(f"[bot:{prof}] out of cash — pausing buys for this scan cycle")
+                    break
                 print(f"[bot:{prof}] Buy {ticker} failed: {e}")
     if bought:
         print(f"[bot:{prof}] cycle: bought {bought} ({len(candidates)} candidates, {open_now} open)")
