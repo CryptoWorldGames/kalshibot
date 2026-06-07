@@ -1232,9 +1232,9 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
       Live Scan Preview
       <div style="display:flex;gap:6px">
-        <button class="sm ghost" style="font-size:12px;padding:4px 14px" onclick="runDebugScan()">Run Preview</button>
-        <button class="sm ghost" style="font-size:12px;padding:4px 14px;display:none" onclick="copyDebugScan()" id="copyDebugBtn">Copy</button>
-        <button class="sm ghost" style="font-size:12px;padding:4px 14px;background:#1a1a2e;color:#4f9eff;border-color:#4f9eff" onclick="copyDiagnostics()" title="Copy full diagnostic report for Claude">📋 Copy for Claude</button>
+        <button class="sm ghost" style="font-size:12px;padding:4px 14px" onclick="runDebugScan()" title="Fetch the markets the scanner sees RIGHT NOW, with the reason each is included/excluded by your filters">Run Preview</button>
+        <button class="sm ghost" style="font-size:12px;padding:4px 14px;display:none" onclick="copyDebugScan()" id="copyDebugBtn">Copy Preview</button>
+        <button class="sm ghost" style="font-size:12px;padding:4px 14px;background:#1a1a2e;color:#4f9eff;border-color:#4f9eff" onclick="copyDiagnostics()" title="Copy the COMPLETE report (status + diagnostics + this preview + activity) for Claude">📋 Copy for Claude</button>
       </div>
     </div>
     <div style="font-size:12px;color:#666;margin-bottom:10px">Shows what the scanner sees right now — all markets expiring soon, with filter reasons</div>
@@ -1327,8 +1327,10 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 <div id="tab-debug" class="tab-pane">
   <div class="card">
     <div class="card-title">🐛 Debug — Real-time Status</div>
-    <div style="margin-bottom:16px;display:flex;gap:8px">
+    <div style="font-size:12px;color:#666;margin-bottom:12px">One button below grabs EVERYTHING (this report + server diagnostics + scan preview + recent activity) for pasting to Claude.</div>
+    <div style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap">
       <button onclick="generateDebugReport()" style="background:var(--green);color:#000;border:none;border-radius:6px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer">Generate Report Now</button>
+      <button onclick="copyDiagnostics()" style="background:#1a1a2e;color:#4f9eff;border:1px solid #4f9eff;border-radius:6px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer" title="Copy the complete report for Claude">📋 Copy for Claude</button>
       <button onclick="toggleAutoReporting()" id="autoReportBtn" style="background:#444;color:#fff;border:none;border-radius:6px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer">Start Auto Reports (every 1m)</button>
     </div>
     <div id="debugOutput" style="background:#0a0a0a;border:1px solid #333;border-radius:8px;padding:12px;font-family:monospace;font-size:11px;color:#0f0;max-height:70vh;overflow:auto;line-height:1.5;white-space:pre-wrap;word-break:break-all"></div>
@@ -5124,8 +5126,12 @@ async function loadVersion() {
     const r = await fetch("/api/version");
     if (!r.ok) return;
     const d = await r.json();
+    const v = "v" + (d.version || "?");
     const el = document.getElementById("navVersion");
-    if (el) el.textContent = "v" + (d.version || "?");
+    if (el) el.textContent = v;
+    // Keep the footer in sync with the backend version (single source of truth).
+    const fv = document.getElementById("footerVersion");
+    if (fv) fv.textContent = v;
   } catch(e) { /* non-critical */ }
 }
 
@@ -5463,42 +5469,97 @@ function copyDebugScan() {
   copyToClipboard(el.textContent).then(() => toast("Copied!", "ok")).catch(() => toast("Failed to copy", "err"));
 }
 
+// Build ONE comprehensive report from everything already on the page (no slow
+// /api/scan call that can time out) plus a couple of fast endpoints. This is what
+// "📋 Copy for Claude" copies — debug status + server diagnostics + scan preview
+// + recent activity — so there's a single button that grabs the whole picture.
+async function buildFullReport() {
+  const ts = new Date().toLocaleString("en-US", {timeZone: getTimezone(), hour12: true});
+  const L = [];
+  L.push(`════════════════════════════════════════════════════════`);
+  L.push(`  KalshiBot Full Report`);
+  L.push(`  ${ts} (${tzAbbr()})`);
+  L.push(`════════════════════════════════════════════════════════`);
+
+  // Version + header figures (read straight from the rendered UI)
+  const grab = id => (document.getElementById(id)?.textContent || "").trim();
+  L.push(``);
+  L.push(`VERSION: ${grab("navVersion") || "?"}`);
+  L.push(``);
+  L.push(`HEADER:`);
+  L.push(`  Cash:           ${grab("navCash") || "?"}`);
+  L.push(`  Portfolio:      ${grab("navPortfolio") || "?"}`);
+  L.push(`  Bot:            ${autoModeOn ? "RUNNING" : "stopped"} | session bought: ${autoModeBought}`);
+  L.push(`  Open positions: ${allPositions.length} | sells in flight: ${_inFlightSells.size}`);
+
+  // Recent activity (fast endpoint; degrade gracefully on failure)
+  try {
+    const r = await fetch("/api/summary?minutes=60");
+    if (r.ok) {
+      const d = await r.json();
+      const t = d.totals || {};
+      L.push(``);
+      L.push(`ACTIVITY (last 60 min):`);
+      L.push(`  Scans: ${t.scans||0} | Buys: ${t.buys||0} | Sells: ${t.sells||0}` +
+             (t.realized_profit != null ? ` | Realized P&L: ${t.realized_profit>=0?"+":""}$${t.realized_profit.toFixed(2)}` : ``));
+      if (!t.scans) L.push(`  ⚠️ NO SCANS in last hour — bot may be stopped!`);
+    }
+  } catch(e) { L.push(`  (activity unavailable: ${e.message})`); }
+
+  // Open positions detail
+  L.push(``);
+  L.push(`OPEN POSITIONS (${allPositions.length}):`);
+  if (!allPositions.length) {
+    L.push(`  (none)`);
+  } else {
+    allPositions.forEach((p, i) => {
+      const side = _posSide(p);
+      const cur = side === "yes" ? p.current_yes : p.current_no;
+      const pnl = (cur != null && p.buy_price != null) ? cur - p.buy_price : null;
+      const pnlStr = pnl != null ? (pnl>0?`+${pnl}`:`${pnl}`)+"¢" : "?";
+      L.push(`  [${i+1}] ${p.ticker} ${p.quantity} ${side} @ ${p.buy_price}¢ (now ${cur}¢, ${pnlStr})`);
+    });
+  }
+
+  // Server Diagnostics box (whatever is currently rendered)
+  const stats = grab("statsContent");
+  if (stats && stats !== "Loading…") {
+    L.push(``);
+    L.push(`SERVER DIAGNOSTICS:`);
+    L.push(stats.split("\n").map(s => "  " + s).join("\n"));
+  }
+
+  // Debug real-time report box
+  const dbg = grab("debugOutput");
+  if (dbg) {
+    L.push(``);
+    L.push(`DEBUG REPORT:`);
+    L.push(dbg);
+  }
+
+  // Live scan preview box (only if it's been run)
+  const scan = grab("debugScanOut");
+  if (scan && !scan.startsWith("Click \"Run Preview\"")) {
+    L.push(``);
+    L.push(`LIVE SCAN PREVIEW:`);
+    L.push(scan);
+  }
+
+  L.push(``);
+  L.push(`════════════════════════════════════════════════════════`);
+  return L.join("\n");
+}
+
 async function copyDiagnostics() {
   try {
-    const min = parseInt(document.getElementById("scanMin")?.value || 50);
-    const max = parseInt(document.getElementById("scanMax")?.value || 96);
-    const mins = parseInt(document.getElementById("scanTime")?.value || 1440);
-
-    const [portResp, scanResp] = await Promise.all([
-      fetch('/api/portfolio'),
-      fetch(`/api/scan?min_thr=${min}&max_thr=${max}&minutes=${mins}&show_crypto=true&show_combo=true&show_sports=true&show_politics=true&show_economics=true&good_liq=false`)
-    ]);
-
-    if (!portResp.ok) {
-      throw new Error(`Portfolio fetch failed: ${portResp.status} ${portResp.statusText}`);
-    }
-    if (!scanResp.ok) {
-      throw new Error(`Scan fetch failed: ${scanResp.status} ${scanResp.statusText}`);
-    }
-
-    const port = await portResp.json();
-    const scan = await scanResp.json();
-
-    const lines = [
-      `=== KalshiBot Diagnostics ===`,
-      `Cash: $${port.balance} | Portfolio: $${port.portfolio_value} | Total: $${(parseFloat(port.balance||0) + parseFloat(port.portfolio_value||0)).toFixed(2)}`,
-      `Positions: ${(port.positions||[]).length}`,
-      `Scan: min=${min}% max=${max}% window=${mins}min`,
-      `Bot: ${autoModeOn ? 'RUNNING' : 'stopped'} | Bought: ${autoModeBought}`,
-      `Dedup: ${autoModeBoughtSet.size} blocked`,
-      `Results: ${Array.isArray(scan) ? scan.length : 0} found`,
-      Array.isArray(scan) && scan.length ? '\nTop 3:' + scan.slice(0,3).map(m=>`\n  ${m.ticker} ${m.side} ${m.price}¢`).join('') : '',
-    ].filter(Boolean).join('\n');
-    await copyToClipboard(lines);
-    toast("✓ Diagnostics copied!", "ok");
+    // Refresh the debug report box first so the copy includes the latest status.
+    try { await generateDebugReport(); } catch(e) { /* non-fatal */ }
+    const report = await buildFullReport();
+    await copyToClipboard(report);
+    toast("✓ Full report copied — paste it to Claude", "ok");
   } catch(e) {
     console.error("[copyDiagnostics]", e);
-    toast("Error: " + e.message, "err");
+    toast("Copy failed: " + (e.message || "unknown"), "err");
   }
 }
 
@@ -6460,7 +6521,7 @@ function toggleAutoReporting() {
 
 <!-- Version Info -->
 <div style="position:fixed;bottom:0;left:50%;transform:translateX(-50%);font-size:9px;color:#444;font-family:monospace;padding:4px 0;text-align:center;pointer-events:none;white-space:nowrap">
-  <div>v1.2.1 · <span id="lastUpdate">—</span></div>
+  <div><span id="footerVersion">v1.3.0</span> · <span id="lastUpdate">—</span></div>
 </div>
 <script>
 const lastUpdateEl = document.getElementById("lastUpdate");

@@ -41,7 +41,7 @@ API_PREFIX = "/trade-api/v2"
 # Bot identity — shown in the terminal banner/title and the web UI header so you
 # always know which build is running. Bump BOT_VERSION when you ship changes.
 BOT_NAME = "KalshiBot"
-BOT_VERSION = "1.1.0"
+BOT_VERSION = "1.3.0"
 DEBUG_LOGGING = False  # Set to True for verbose logs, False for production — DISABLED FOR PRODUCTION
 
 def _log(msg: str):
