@@ -3012,9 +3012,23 @@ async function sellPos(ticker, side, count, safeId) {
     return;
   }
 
+  // Check if this position already has a pending LIMIT order
+  const limitOrders = JSON.parse(localStorage.getItem("kb_limit_orders") || "{}");
+  const orderKey = `${ticker}_${side}`;
+  const hasPendingOrder = limitOrders[orderKey];
+
+  if (hasPendingOrder) {
+    const pendingPrice = hasPendingOrder.limit_price;
+    const msg = `LIMIT order already pending @ ${pendingPrice}¢\n\nOptions:\n✓ Wait for buyers at ${pendingPrice}¢\n✗ Cancel order and retry at market price\n\nCancel pending order?`;
+    if (!confirm(msg)) return;
+    // Delete the pending order to allow a new sell attempt
+    delete limitOrders[orderKey];
+    localStorage.setItem("kb_limit_orders", JSON.stringify(limitOrders));
+  }
+
   // Show confirmation with current bid price
   const bidPrice = side === "yes" ? prePos.current_yes : prePos.current_no;
-  if (bidPrice != null) {
+  if (bidPrice != null && !hasPendingOrder) {
     const msg = `Sell ${count} ${side.toUpperCase()} @ ${bidPrice}¢?\n\nUsing LIMIT order (locked in price).\nIf no buyers at this price, you can:\n• Retry at lower price (±5¢)\n• Wait for buyers\n• Cancel and hold`;
     if (!confirm(msg)) return;
   }
