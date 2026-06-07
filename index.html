@@ -5189,9 +5189,11 @@ let _summaryMins = parseInt(localStorage.getItem("summaryMins") || "15");
 function renderSummaryRanges() {
   const el = document.getElementById("summaryRanges");
   if (!el) return;
-  // De-dup labels that map to same minutes (60m/1h, 24h/1d) — keep both as the user asked.
+  // De-dup labels that map to same minutes (60m/1h, 24h/1d) — only highlight first occurrence
+  const seen = new Set();
   el.innerHTML = SUMMARY_RANGES.map(r => {
-    const active = (r.mins === _summaryMins);
+    const active = (r.mins === _summaryMins && !seen.has(r.mins));
+    seen.add(r.mins);
     return `<button onclick="setSummaryRange(${r.mins})"
       style="padding:5px 11px;font-size:12px;font-weight:700;border-radius:6px;cursor:pointer;
              border:1px solid ${active ? 'var(--green)' : 'var(--border)'};
