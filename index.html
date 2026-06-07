@@ -580,59 +580,62 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <!-- BUY UP / BUY DOWN range sections -->
     <div class="col" style="gap:0">
 
-      <!-- BUY UP -->
-      <div style="border:2px solid #fff;border-radius:8px;padding:12px 14px;margin-bottom:10px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <label class="check-row" style="font-size:14px;font-weight:700;color:var(--green)">
-            <input type="checkbox" id="enableBuyUp" checked onchange="saveSettings()"> 📈 BUY UP (YES)
-          </label>
-          <span style="font-size:11px;color:#666">buy YES contracts — price will go up</span>
+      <!-- BUY UP & BUY DOWN (SIDE-BY-SIDE) -->
+      <div style="display:flex;gap:12px;margin-bottom:10px">
+        <!-- BUY UP -->
+        <div style="flex:1;border:2px solid #fff;border-radius:8px;padding:12px 14px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+            <label class="check-row" style="font-size:14px;font-weight:700;color:var(--green)">
+              <input type="checkbox" id="enableBuyUp" checked onchange="saveSettings()"> 📈 BUY UP (YES)
+            </label>
+            <span style="font-size:11px;color:#666">price up</span>
+          </div>
+          <div class="btn-group" id="probGroupUp" style="margin-bottom:8px;flex-wrap:wrap">
+            <button class="pill" onclick="setRangeUp(1,98)">1–98%</button>
+            <button class="pill" onclick="setRangeUp(25,75)">25–75%</button>
+            <button class="pill" onclick="setRangeUp(40,60)">40–60%</button>
+            <button class="pill" onclick="setRangeUp(50,96)">50–96%</button>
+            <button class="pill active" onclick="setRangeUp(80,96)">80–96%</button>
+            <button class="pill" onclick="setRangeUp(90,96)">90–96%</button>
+            <button class="pill" id="customUpPill" onclick="document.getElementById('minProb').focus();setStrategy && activatePills('probGroupUp','Custom')">Custom</button>
+          </div>
+          <div class="inline" style="gap:6px;flex-wrap:wrap">
+            <span style="font-size:13px;color:#aaa">From</span>
+            <input type="number" id="minProb" value="80" min="1" max="99" style="width:60px" oninput="onProbInput()">
+            <span style="font-size:13px;color:#aaa">to</span>
+            <input type="number" id="maxProb" value="96" min="1" max="99" style="width:60px" oninput="onProbInput()">
+            <span style="font-size:13px;color:#aaa">% &nbsp;±</span>
+            <input type="number" id="spreadUp" value="" min="0" max="49" placeholder="0" style="width:55px" title="±spread: type 5 to make 45% into 40–50%" oninput="applySpread('up')">
+            <span style="font-size:11px;color:#555">spread</span>
+          </div>
         </div>
-        <div class="btn-group" id="probGroupUp" style="margin-bottom:8px;flex-wrap:wrap">
-          <button class="pill" onclick="setRangeUp(1,98)">1–98%</button>
-          <button class="pill" onclick="setRangeUp(25,75)">25–75%</button>
-          <button class="pill" onclick="setRangeUp(40,60)">40–60%</button>
-          <button class="pill" onclick="setRangeUp(50,96)">50–96%</button>
-          <button class="pill active" onclick="setRangeUp(80,96)">80–96%</button>
-          <button class="pill" onclick="setRangeUp(90,96)">90–96%</button>
-          <button class="pill" id="customUpPill" onclick="document.getElementById('minProb').focus();setStrategy && activatePills('probGroupUp','Custom')">Custom</button>
-        </div>
-        <div class="inline" style="gap:6px;flex-wrap:wrap">
-          <span style="font-size:13px;color:#aaa">From</span>
-          <input type="number" id="minProb" value="80" min="1" max="99" style="width:60px" oninput="onProbInput()">
-          <span style="font-size:13px;color:#aaa">to</span>
-          <input type="number" id="maxProb" value="96" min="1" max="99" style="width:60px" oninput="onProbInput()">
-          <span style="font-size:13px;color:#aaa">% &nbsp;±</span>
-          <input type="number" id="spreadUp" value="" min="0" max="49" placeholder="0" style="width:55px" title="±spread: type 5 to make 45% into 40–50%" oninput="applySpread('up')">
-          <span style="font-size:11px;color:#555">spread</span>
-        </div>
-      </div>
 
-      <!-- BUY DOWN -->
-      <div style="border:2px solid #fff;border-radius:8px;padding:12px 14px;margin-bottom:10px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <label class="check-row" style="font-size:14px;font-weight:700;color:var(--red)">
-            <input type="checkbox" id="enableBuyDown" onchange="saveSettings()"> 📉 BUY DOWN (NO)
-          </label>
-          <span style="font-size:11px;color:#666">buy NO contracts — price will go down</span>
-        </div>
-        <div class="btn-group" id="probGroupDown" style="margin-bottom:8px;flex-wrap:wrap">
-          <button class="pill" onclick="setRangeDown(1,98)">1–98%</button>
-          <button class="pill" onclick="setRangeDown(25,75)">25–75%</button>
-          <button class="pill" onclick="setRangeDown(40,60)">40–60%</button>
-          <button class="pill" onclick="setRangeDown(50,96)">50–96%</button>
-          <button class="pill active" onclick="setRangeDown(80,96)">80–96%</button>
-          <button class="pill" onclick="setRangeDown(90,96)">90–96%</button>
-          <button class="pill" onclick="document.getElementById('minProbDown').focus();activatePills('probGroupDown','Custom')">Custom</button>
-        </div>
-        <div class="inline" style="gap:6px;flex-wrap:wrap">
-          <span style="font-size:13px;color:#aaa">From</span>
-          <input type="number" id="minProbDown" value="80" min="1" max="99" style="width:60px" oninput="onProbDownInput()">
-          <span style="font-size:13px;color:#aaa">to</span>
-          <input type="number" id="maxProbDown" value="96" min="1" max="99" style="width:60px" oninput="onProbDownInput()">
-          <span style="font-size:13px;color:#aaa">% &nbsp;±</span>
-          <input type="number" id="spreadDown" value="" min="0" max="49" placeholder="0" style="width:55px" title="±spread" oninput="applySpread('down')">
-          <span style="font-size:11px;color:#555">spread</span>
+        <!-- BUY DOWN -->
+        <div style="flex:1;border:2px solid #fff;border-radius:8px;padding:12px 14px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+            <label class="check-row" style="font-size:14px;font-weight:700;color:var(--red)">
+              <input type="checkbox" id="enableBuyDown" onchange="saveSettings()"> 📉 BUY DOWN (NO)
+            </label>
+            <span style="font-size:11px;color:#666">price down</span>
+          </div>
+          <div class="btn-group" id="probGroupDown" style="margin-bottom:8px;flex-wrap:wrap">
+            <button class="pill" onclick="setRangeDown(1,98)">1–98%</button>
+            <button class="pill" onclick="setRangeDown(25,75)">25–75%</button>
+            <button class="pill" onclick="setRangeDown(40,60)">40–60%</button>
+            <button class="pill" onclick="setRangeDown(50,96)">50–96%</button>
+            <button class="pill active" onclick="setRangeDown(80,96)">80–96%</button>
+            <button class="pill" onclick="setRangeDown(90,96)">90–96%</button>
+            <button class="pill" onclick="document.getElementById('minProbDown').focus();activatePills('probGroupDown','Custom')">Custom</button>
+          </div>
+          <div class="inline" style="gap:6px;flex-wrap:wrap">
+            <span style="font-size:13px;color:#aaa">From</span>
+            <input type="number" id="minProbDown" value="80" min="1" max="99" style="width:60px" oninput="onProbDownInput()">
+            <span style="font-size:13px;color:#aaa">to</span>
+            <input type="number" id="maxProbDown" value="96" min="1" max="99" style="width:60px" oninput="onProbDownInput()">
+            <span style="font-size:13px;color:#aaa">% &nbsp;±</span>
+            <input type="number" id="spreadDown" value="" min="0" max="49" placeholder="0" style="width:55px" title="±spread" oninput="applySpread('down')">
+            <span style="font-size:11px;color:#555">spread</span>
+          </div>
         </div>
       </div>
 
@@ -906,27 +909,30 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <div class="card-title">🎟️ Lotto Bot Settings (T2)</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:14px">A second, independent bot. Set it up however you like — it only trades when its switch above is <b>ON</b> (it can run at the same time as the Scanner bot). Changes save automatically.</div>
 
-    <!-- BUY UP -->
-    <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
-      <label class="check-row" style="font-weight:700;color:var(--green)"><input type="checkbox" id="L_enableBuyUp" checked onchange="pushLottoSettings()"> 📈 BUY UP (YES) <span style="color:var(--muted);font-weight:400;font-size:12px">— price will go up</span></label>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">
-        <span style="font-size:12px;color:var(--muted)">From</span>
-        <input type="number" id="L_minProb" min="1" max="99" value="1" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
-        <span style="font-size:12px;color:var(--muted)">to</span>
-        <input type="number" id="L_maxProb" min="1" max="99" value="15" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
-        <span style="font-size:12px;color:var(--muted)">¢ (1–99 ok; default 1–15)</span>
+    <!-- BUY UP & BUY DOWN (SIDE-BY-SIDE) -->
+    <div style="display:flex;gap:12px;margin-bottom:10px">
+      <!-- BUY UP -->
+      <div style="flex:1;border:1px solid var(--border);border-radius:8px;padding:12px">
+        <label class="check-row" style="font-weight:700;color:var(--green);display:block;margin-bottom:8px"><input type="checkbox" id="L_enableBuyUp" checked onchange="pushLottoSettings()"> 📈 BUY UP (YES)</label>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="font-size:12px;color:var(--muted)">From</span>
+          <input type="number" id="L_minProb" min="1" max="99" value="1" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
+          <span style="font-size:12px;color:var(--muted)">to</span>
+          <input type="number" id="L_maxProb" min="1" max="99" value="15" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
+          <span style="font-size:12px;color:var(--muted)">¢</span>
+        </div>
       </div>
-    </div>
 
-    <!-- BUY DOWN -->
-    <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
-      <label class="check-row" style="font-weight:700;color:var(--red)"><input type="checkbox" id="L_enableBuyDown" onchange="pushLottoSettings()"> 📉 BUY DOWN (NO) <span style="color:var(--muted);font-weight:400;font-size:12px">— price will go down</span></label>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">
-        <span style="font-size:12px;color:var(--muted)">From</span>
-        <input type="number" id="L_minProbDown" min="1" max="99" value="1" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
-        <span style="font-size:12px;color:var(--muted)">to</span>
-        <input type="number" id="L_maxProbDown" min="1" max="99" value="15" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
-        <span style="font-size:12px;color:var(--muted)">¢ (1–99 ok)</span>
+      <!-- BUY DOWN -->
+      <div style="flex:1;border:1px solid var(--border);border-radius:8px;padding:12px">
+        <label class="check-row" style="font-weight:700;color:var(--red);display:block;margin-bottom:8px"><input type="checkbox" id="L_enableBuyDown" onchange="pushLottoSettings()"> 📉 BUY DOWN (NO)</label>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="font-size:12px;color:var(--muted)">From</span>
+          <input type="number" id="L_minProbDown" min="1" max="99" value="1" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
+          <span style="font-size:12px;color:var(--muted)">to</span>
+          <input type="number" id="L_maxProbDown" min="1" max="99" value="15" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
+          <span style="font-size:12px;color:var(--muted)">¢</span>
+        </div>
       </div>
     </div>
 
