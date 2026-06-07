@@ -2845,27 +2845,20 @@ def sell():
             print(f"[sell] {ticker}: {count} contracts (fractional < 1, error)")
             return jsonify({"error": f"Can't sell {count} contracts — less than 1. Position will resolve at expiry."}), 400
 
-        # MARKET sell with a protective price floor = current bid.
-        # Market orders execute immediately against the best available bid and
-        # never "rest" on the book. A resting (unfilled) limit order was the cause
-        # of the "it shows sold then comes back a minute later" bug: the old code
-        # marked the position sold and hid it for ~2 min while the limit just sat
-        # unfilled, so it reappeared when the hide expired. The price field below
-        # guarantees we won't accept worse than the bid the user saw; if the bid
-        # moved away, Kalshi cancels the order (handled below) instead of filling
-        # at a bad price.
+        # TRUE MARKET SELL — executes immediately at best available bid/ask.
+        # No protective floor: market orders execute at market price right now.
+        # This ensures orders either fill instantly or cancel immediately, preventing
+        # the "stuck in selling" issue that happens with limit orders that sit pending.
         order_payload = {
             "ticker": ticker,
             "client_order_id": str(uuid.uuid4()),  # Required by Kalshi API
             "action": "sell",
             "side":   side,
-            "type":   "market",
+            "type":   "market",  # TRUE MARKET: executes at market price with no floor
             "count":  count_int,
         }
-        price_key = "yes_price" if side == "yes" else "no_price"
-        order_payload[price_key] = bid_cents  # protective floor (cents, integer)
 
-        print(f"[sell] {ticker} {side} × {count_int} MARKET (floor {bid_cents}¢)")
+        print(f"[sell] {ticker} {side} × {count_int} MARKET (at {bid_cents}¢)")
         result = kalshi_post("/portfolio/orders", order_payload)
         order_status = result.get("order", {}).get("status", "")
 
