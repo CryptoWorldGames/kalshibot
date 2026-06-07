@@ -1891,9 +1891,23 @@ def portfolio():
                 current_no = None
                 close_time = None
 
+            # If market data didn't have live prices (common for illiquid markets),
+            # use buy_price as estimate so positions don't show as null in UI
+            if buy_price is not None:
+                if current_yes is None:
+                    current_yes = buy_price
+                if current_no is None:
+                    current_no = buy_price
+
             # Portfolio value = contracts * current bid price
             side = "yes" if qty > 0 else "no"
             bid  = current_yes if side == "yes" else current_no
+
+            # If current price is unavailable, use buy_price as fallback for display
+            # (this is a position mark estimate when the API doesn't return live prices)
+            if bid is None and buy_price is not None:
+                bid = buy_price
+
             if bid:
                 portfolio_value += abs(qty) * bid / 100
 
