@@ -2964,6 +2964,13 @@ async function sellPos(ticker, side, count, safeId) {
     return;
   }
 
+  // Show confirmation with current bid price
+  const bidPrice = side === "yes" ? prePos.current_yes : prePos.current_no;
+  if (bidPrice != null) {
+    const msg = `Sell ${count} ${side.toUpperCase()} @ ${bidPrice}¢?\n\nUsing MARKET order with protective floor.\nIf bid moves away, order will cancel.`;
+    if (!confirm(msg)) return;
+  }
+
   const btn = document.getElementById(safeId);
   if (btn) { btn.disabled = true; btn.textContent = "Selling…"; }
 
