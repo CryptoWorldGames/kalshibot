@@ -5332,11 +5332,12 @@ function switchTab(name) {
   } else {
     if (window._settleRefresh) { clearInterval(window._settleRefresh); window._settleRefresh = null; }
   }
+
   if (name === "lotto") {
-    loadLottoSettings();   // pull the T2 buy profile into the form
-    loadLottoStrategy();   // pull the T2 sell strategy into the form
-    loadActiveProfile();   // refresh which bot is active (LED/pill)
-    seedLottoMemDefaults();// ensure M1 preset + memory slot highlights
+    loadLottoSettings();
+    loadLottoStrategy();
+    loadActiveProfile();
+    seedLottoMemDefaults();
   }
   if (name === "lottostats") {
     // Pull fresh positions + live prices + a wide 30-day settlement history, then render.
