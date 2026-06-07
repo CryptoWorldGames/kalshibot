@@ -719,16 +719,11 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     </div>
   </div>
 
-  <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap;border:2px solid #fff;border-radius:8px;padding:12px;background:#0f1419">
-    <div style="display:flex;align-items:center;gap:6px">
-      <span style="color:#fff;font-size:14px;font-weight:600">Buy up to</span>
-      <input type="number" id="autoMaxPerScan" value="20" min="1" style="width:60px" title="Max games to BUY per scan cycle (scanner always scans everything)" oninput="saveSettings()">
-      <span style="color:#fff;font-size:14px;font-weight:600">markets per scan cycle</span>
-    </div>
-    <div style="display:flex;align-items:center;gap:6px">
-      <span style="color:#fff;font-size:14px;font-weight:600">Hold max</span>
-      <input type="number" id="autoMaxConcurrent" value="20" min="1" style="width:60px" title="Max open positions across all games" oninput="saveSettings()">
-      <span style="color:#fff;font-size:14px;font-weight:600">positions</span>
+  <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:14px;background:#0f1419">
+    <div style="font-size:13px;color:var(--muted);font-weight:700;margin-bottom:12px">BUYING LIMITS</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px">
+      <label style="font-size:13px;color:var(--muted)">Buy up to (per scan)<br><input type="number" id="autoMaxPerScan" value="20" min="1" oninput="saveSettings()" style="width:100%;margin-top:4px;font-size:14px" title="Max games to BUY per scan cycle (scanner always scans everything)"></label>
+      <label style="font-size:13px;color:var(--muted)">Hold max positions<br><input type="number" id="autoMaxConcurrent" value="20" min="1" oninput="saveSettings()" style="width:100%;margin-top:4px;font-size:14px" title="Max open positions across all games"></label>
     </div>
   </div>
 
@@ -744,13 +739,13 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
       <div>
         <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Run until</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <label class="radio-pill active" id="rpTime" onclick="setRunMode('time')"><input type="radio" name="runMode" value="time" checked>
+          <label class="radio-pill" id="rpTime" onclick="setRunMode('time')"><input type="radio" name="runMode" value="time">
             Run for minutes
           </label>
           <label class="radio-pill" id="rpBuys" onclick="setRunMode('buys')"><input type="radio" name="runMode" value="buys">
             Stop after X buys
           </label>
-          <label class="radio-pill" id="rpForever" onclick="setRunMode('forever')"><input type="radio" name="runMode" value="forever">
+          <label class="radio-pill active" id="rpForever" onclick="setRunMode('forever')"><input type="radio" name="runMode" value="forever" checked>
             Until stopped
           </label>
         </div>
@@ -925,25 +920,25 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 
     <!-- Limits -->
     <div style="border:1px solid var(--border);border-radius:8px;padding:12px">
-      <div style="font-size:12px;color:var(--muted);font-weight:700;margin-bottom:10px">⏰ Ends Within</div>
+      <div style="font-size:13px;color:var(--muted);font-weight:700;margin-bottom:12px">⏰ Ends Within</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
-        <button type="button" onclick="setLottoEndsWithin(1)" class="pill" style="font-size:11px">1m</button>
-        <button type="button" onclick="setLottoEndsWithin(5)" class="pill" style="font-size:11px">5m</button>
-        <button type="button" onclick="setLottoEndsWithin(10)" class="pill" style="font-size:11px">10m</button>
-        <button type="button" onclick="setLottoEndsWithin(15)" class="pill active" style="font-size:11px">15m</button>
-        <button type="button" onclick="setLottoEndsWithin(20)" class="pill" style="font-size:11px">20m</button>
-        <button type="button" onclick="setLottoEndsWithin(30)" class="pill" style="font-size:11px">30m</button>
-        <button type="button" onclick="setLottoEndsWithin(60)" class="pill" style="font-size:11px">1h</button>
-        <button type="button" onclick="setLottoEndsWithin(120)" class="pill" style="font-size:11px">2h</button>
-        <button type="button" onclick="setLottoEndsWithin(240)" class="pill" style="font-size:11px">4h</button>
-        <button type="button" onclick="setLottoEndsWithin(360)" class="pill" style="font-size:11px">6h</button>
-        <button type="button" onclick="setLottoEndsWithin(720)" class="pill" style="font-size:11px">12h</button>
-        <button type="button" onclick="setLottoEndsWithin(1440)" class="pill" style="font-size:11px">24h</button>
-        <button type="button" onclick="setLottoEndsWithin(10080)" class="pill" style="font-size:11px">1w</button>
-        <button type="button" onclick="setLottoEndsWithin(20160)" class="pill" style="font-size:11px">2w</button>
-        <button type="button" onclick="setLottoEndsWithin(30240)" class="pill" style="font-size:11px">3w</button>
-        <button type="button" onclick="setLottoEndsWithin(40320)" class="pill" style="font-size:11px">4w</button>
-        <button type="button" onclick="setLottoEndsWithin(525600)" class="pill" style="font-size:11px">Show all</button>
+        <button type="button" onclick="setLottoEndsWithin(1)" class="pill" style="font-size:13px;padding:8px 14px">1m</button>
+        <button type="button" onclick="setLottoEndsWithin(5)" class="pill" style="font-size:13px;padding:8px 14px">5m</button>
+        <button type="button" onclick="setLottoEndsWithin(10)" class="pill" style="font-size:13px;padding:8px 14px">10m</button>
+        <button type="button" onclick="setLottoEndsWithin(15)" class="pill active" style="font-size:13px;padding:8px 14px">15m</button>
+        <button type="button" onclick="setLottoEndsWithin(20)" class="pill" style="font-size:13px;padding:8px 14px">20m</button>
+        <button type="button" onclick="setLottoEndsWithin(30)" class="pill" style="font-size:13px;padding:8px 14px">30m</button>
+        <button type="button" onclick="setLottoEndsWithin(60)" class="pill" style="font-size:13px;padding:8px 14px">1h</button>
+        <button type="button" onclick="setLottoEndsWithin(120)" class="pill" style="font-size:13px;padding:8px 14px">2h</button>
+        <button type="button" onclick="setLottoEndsWithin(240)" class="pill" style="font-size:13px;padding:8px 14px">4h</button>
+        <button type="button" onclick="setLottoEndsWithin(360)" class="pill" style="font-size:13px;padding:8px 14px">6h</button>
+        <button type="button" onclick="setLottoEndsWithin(720)" class="pill" style="font-size:13px;padding:8px 14px">12h</button>
+        <button type="button" onclick="setLottoEndsWithin(1440)" class="pill" style="font-size:13px;padding:8px 14px">24h</button>
+        <button type="button" onclick="setLottoEndsWithin(10080)" class="pill" style="font-size:13px;padding:8px 14px">1w</button>
+        <button type="button" onclick="setLottoEndsWithin(20160)" class="pill" style="font-size:13px;padding:8px 14px">2w</button>
+        <button type="button" onclick="setLottoEndsWithin(30240)" class="pill" style="font-size:13px;padding:8px 14px">3w</button>
+        <button type="button" onclick="setLottoEndsWithin(40320)" class="pill" style="font-size:13px;padding:8px 14px">4w</button>
+        <button type="button" onclick="setLottoEndsWithin(525600)" class="pill" style="font-size:13px;padding:8px 14px">Show all</button>
       </div>
       <input type="hidden" id="L_minutes" value="15">
 
@@ -2522,7 +2517,7 @@ let autoModeBoughtSet = new Set();   // tickers bought during current auto-mode 
 let autoModeCountdown = null;
 let autoModeBought    = 0;
 let autoModeStartVal  = null;   // total portfolio value when auto started
-let autoRunMode       = "time"; // "time" | "buys" | "forever"
+let autoRunMode       = "forever"; // "time" | "buys" | "forever"
 
 
 function setRunMode(mode) {
