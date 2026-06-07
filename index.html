@@ -2104,13 +2104,13 @@ async function loadSettlements() {
   } catch(e) { /* keep whatever's on screen — never blank on a transient failure */ }
 }
 
-window.addEventListener("load", async () => {
+window.addEventListener("load", () => {
   // Show the running build's version in the header, and restore the saved timezone.
   loadVersion();
   const _tzSel = document.getElementById("tzSelect");
   if (_tzSel) _tzSel.value = getTimezone();
   // Load bot status (running/stopped) and cash first
-  await loadBotStatus();  // Wait for bot status to sync before continuing
+  loadBotStatus();
   loadCash();
   loadActiveProfile();   // light up the correct bot LED/pill from the start
   loadLottoSettings();   // pre-fill the Lotto (T2) buy form so it's ready when opened
