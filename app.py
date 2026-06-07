@@ -3432,7 +3432,7 @@ def coach():
     total_pnl  = 0.0
 
     for ticker, pos in snap.items():
-        if pos.get("status") not in ("open","sold"): continue
+        if pos.get("status") != "sold": continue
         cat   = pos.get("category") or "Unknown"
         bp    = pos.get("buy_price")
         side  = pos.get("side") or "yes"
