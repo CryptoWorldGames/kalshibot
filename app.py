@@ -1018,25 +1018,34 @@ def _monitor():
                 should_sell = (hit_pct or hit_dol or hit_price or hit_stop_pct or hit_stop_dol) if strat_mode != "resolution" else (hit_stop_pct or hit_stop_dol)
 
                 if should_sell:
-                    # Build limit sell order with current bid price (Kalshi requires price field)
+                    # Build MARKET sell order with protective floor = current bid price
                     bid_key = "yes_bid_dollars" if pos["side"] == "yes" else "no_bid_dollars"
                     bid_d = m.get(bid_key)
-                    if bid_d is None or float(bid_d or 0) < 0.01:
+                    bid_cents = round(float(bid_d or 0) * 100) if bid_d else 0
+                    if bid_cents < 1:
                         print(f"[monitor] {ticker} bid too low to sell ({bid_d}) — skipping")
                         continue
-                    price_key = "yes_price_dollars" if pos["side"] == "yes" else "no_price_dollars"
                     # Kalshi API only accepts whole numbers - round down fractional quantities
                     count_val = int(pos["count"])
 
+                    price_key = "yes_price" if pos["side"] == "yes" else "no_price"
                     order_body = {
                         "ticker":   ticker,
                         "action":   "sell",
                         "side":     pos["side"],
-                        "type":     "limit",  # LIMIT order with current bid price
+                        "type":     "market",  # MARKET order (matches manual sell behavior)
                         "count":    count_val,
-                        price_key:  str(float(bid_d)),  # Kalshi API requires price as STRING
+                        "client_order_id": str(uuid.uuid4()),  # Required by Kalshi API
+                        price_key:  bid_cents,  # protective floor (cents, integer)
                     }
                     result = kalshi_post("/portfolio/orders", order_body)
+                    order_status = result.get("order", {}).get("status", "")
+
+                    # Check if order was actually filled (not canceled)
+                    if order_status == "canceled":
+                        print(f"[monitor] Auto-sell CANCELED: {pos.get('title', ticker)} | no fill at {bid_cents}¢")
+                        continue
+
                     with _lock:
                         if ticker in tracked:
                             tracked[ticker]["status"]     = "sold"
@@ -1477,10 +1486,24 @@ def _get_balance(force: bool = False):
         return cached
     try:
         bal_data = kalshi_get("/portfolio/balance")
-        cash_dollars = float(bal_data.get("balance_dollars") or 0)
-        if not cash_dollars:
-            cash_dollars = float(bal_data.get("balance") or 0) / 100
+        # Try multiple field names for cash (API may have changed)
+        cash_dollars = None
+        if "balance_dollars" in bal_data:
+            cash_dollars = float(bal_data.get("balance_dollars") or 0)
+        if cash_dollars is None or cash_dollars == 0:
+            # Fallback to cents field if dollars not present or zero
+            balance_cents = bal_data.get("balance") or 0
+            if balance_cents:
+                cash_dollars = float(balance_cents) / 100
+            else:
+                cash_dollars = 0.0
+
         pos_dollars = round(float(bal_data.get("portfolio_value") or 0) / 100, 2)
+
+        # Debug log the response if cash is unexpectedly zero
+        if cash_dollars == 0 and "balance" in bal_data or "balance_dollars" in bal_data:
+            print(f"[balance] API response: {bal_data}")
+
         data = {
             "cash":            round(cash_dollars, 2),
             "positions_value": pos_dollars,
@@ -1835,12 +1858,14 @@ def portfolio():
         if _c:
             recent_settlements = _c["data"]
 
+    live = bool(_balance_cache.get("live", True))
     return jsonify({
         "balance":            balance,           # spendable cash
         "positions_value":    round(portfolio_value, 2),  # open positions value only
         "portfolio_value":    total_value,       # total account = cash + positions (matches Kalshi)
         "positions":          positions,
         "positions_ok":       positions_ok,      # did the live Kalshi positions fetch succeed?
+        "balance_live":       live,              # whether balance is fresh (true) or stale/failed (false)
         "recent_settlements": recent_settlements,
     })
 

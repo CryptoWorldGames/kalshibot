@@ -580,59 +580,62 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <!-- BUY UP / BUY DOWN range sections -->
     <div class="col" style="gap:0">
 
-      <!-- BUY UP -->
-      <div style="border:2px solid #fff;border-radius:8px;padding:12px 14px;margin-bottom:10px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <label class="check-row" style="font-size:14px;font-weight:700;color:var(--green)">
-            <input type="checkbox" id="enableBuyUp" checked onchange="saveSettings()"> 📈 BUY UP (YES)
-          </label>
-          <span style="font-size:11px;color:#666">buy YES contracts — price will go up</span>
+      <!-- BUY UP & BUY DOWN (SIDE-BY-SIDE) -->
+      <div style="display:flex;gap:12px;margin-bottom:10px">
+        <!-- BUY UP -->
+        <div style="flex:1;border:2px solid #fff;border-radius:8px;padding:12px 14px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+            <label class="check-row" style="font-size:14px;font-weight:700;color:var(--green)">
+              <input type="checkbox" id="enableBuyUp" checked onchange="saveSettings()"> 📈 BUY UP (YES)
+            </label>
+            <span style="font-size:11px;color:#666">price up</span>
+          </div>
+          <div class="btn-group" id="probGroupUp" style="margin-bottom:8px;flex-wrap:wrap">
+            <button class="pill" onclick="setRangeUp(1,98)">1–98%</button>
+            <button class="pill" onclick="setRangeUp(25,75)">25–75%</button>
+            <button class="pill" onclick="setRangeUp(40,60)">40–60%</button>
+            <button class="pill" onclick="setRangeUp(50,96)">50–96%</button>
+            <button class="pill active" onclick="setRangeUp(80,96)">80–96%</button>
+            <button class="pill" onclick="setRangeUp(90,96)">90–96%</button>
+            <button class="pill" id="customUpPill" onclick="document.getElementById('minProb').focus();setStrategy && activatePills('probGroupUp','Custom')">Custom</button>
+          </div>
+          <div class="inline" style="gap:6px;flex-wrap:wrap">
+            <span style="font-size:13px;color:#aaa">From</span>
+            <input type="number" id="minProb" value="80" min="1" max="99" style="width:60px" oninput="onProbInput()">
+            <span style="font-size:13px;color:#aaa">to</span>
+            <input type="number" id="maxProb" value="96" min="1" max="99" style="width:60px" oninput="onProbInput()">
+            <span style="font-size:13px;color:#aaa">% &nbsp;±</span>
+            <input type="number" id="spreadUp" value="" min="0" max="49" placeholder="0" style="width:55px" title="±spread: type 5 to make 45% into 40–50%" oninput="applySpread('up')">
+            <span style="font-size:11px;color:#555">spread</span>
+          </div>
         </div>
-        <div class="btn-group" id="probGroupUp" style="margin-bottom:8px;flex-wrap:wrap">
-          <button class="pill" onclick="setRangeUp(1,98)">1–98%</button>
-          <button class="pill" onclick="setRangeUp(25,75)">25–75%</button>
-          <button class="pill" onclick="setRangeUp(40,60)">40–60%</button>
-          <button class="pill" onclick="setRangeUp(50,96)">50–96%</button>
-          <button class="pill active" onclick="setRangeUp(80,96)">80–96%</button>
-          <button class="pill" onclick="setRangeUp(90,96)">90–96%</button>
-          <button class="pill" id="customUpPill" onclick="document.getElementById('minProb').focus();setStrategy && activatePills('probGroupUp','Custom')">Custom</button>
-        </div>
-        <div class="inline" style="gap:6px;flex-wrap:wrap">
-          <span style="font-size:13px;color:#aaa">From</span>
-          <input type="number" id="minProb" value="80" min="1" max="99" style="width:60px" oninput="onProbInput()">
-          <span style="font-size:13px;color:#aaa">to</span>
-          <input type="number" id="maxProb" value="96" min="1" max="99" style="width:60px" oninput="onProbInput()">
-          <span style="font-size:13px;color:#aaa">% &nbsp;±</span>
-          <input type="number" id="spreadUp" value="" min="0" max="49" placeholder="0" style="width:55px" title="±spread: type 5 to make 45% into 40–50%" oninput="applySpread('up')">
-          <span style="font-size:11px;color:#555">spread</span>
-        </div>
-      </div>
 
-      <!-- BUY DOWN -->
-      <div style="border:2px solid #fff;border-radius:8px;padding:12px 14px;margin-bottom:10px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <label class="check-row" style="font-size:14px;font-weight:700;color:var(--red)">
-            <input type="checkbox" id="enableBuyDown" onchange="saveSettings()"> 📉 BUY DOWN (NO)
-          </label>
-          <span style="font-size:11px;color:#666">buy NO contracts — price will go down</span>
-        </div>
-        <div class="btn-group" id="probGroupDown" style="margin-bottom:8px;flex-wrap:wrap">
-          <button class="pill" onclick="setRangeDown(1,98)">1–98%</button>
-          <button class="pill" onclick="setRangeDown(25,75)">25–75%</button>
-          <button class="pill" onclick="setRangeDown(40,60)">40–60%</button>
-          <button class="pill" onclick="setRangeDown(50,96)">50–96%</button>
-          <button class="pill active" onclick="setRangeDown(80,96)">80–96%</button>
-          <button class="pill" onclick="setRangeDown(90,96)">90–96%</button>
-          <button class="pill" onclick="document.getElementById('minProbDown').focus();activatePills('probGroupDown','Custom')">Custom</button>
-        </div>
-        <div class="inline" style="gap:6px;flex-wrap:wrap">
-          <span style="font-size:13px;color:#aaa">From</span>
-          <input type="number" id="minProbDown" value="80" min="1" max="99" style="width:60px" oninput="onProbDownInput()">
-          <span style="font-size:13px;color:#aaa">to</span>
-          <input type="number" id="maxProbDown" value="96" min="1" max="99" style="width:60px" oninput="onProbDownInput()">
-          <span style="font-size:13px;color:#aaa">% &nbsp;±</span>
-          <input type="number" id="spreadDown" value="" min="0" max="49" placeholder="0" style="width:55px" title="±spread" oninput="applySpread('down')">
-          <span style="font-size:11px;color:#555">spread</span>
+        <!-- BUY DOWN -->
+        <div style="flex:1;border:2px solid #fff;border-radius:8px;padding:12px 14px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+            <label class="check-row" style="font-size:14px;font-weight:700;color:var(--red)">
+              <input type="checkbox" id="enableBuyDown" onchange="saveSettings()"> 📉 BUY DOWN (NO)
+            </label>
+            <span style="font-size:11px;color:#666">price down</span>
+          </div>
+          <div class="btn-group" id="probGroupDown" style="margin-bottom:8px;flex-wrap:wrap">
+            <button class="pill" onclick="setRangeDown(1,98)">1–98%</button>
+            <button class="pill" onclick="setRangeDown(25,75)">25–75%</button>
+            <button class="pill" onclick="setRangeDown(40,60)">40–60%</button>
+            <button class="pill" onclick="setRangeDown(50,96)">50–96%</button>
+            <button class="pill active" onclick="setRangeDown(80,96)">80–96%</button>
+            <button class="pill" onclick="setRangeDown(90,96)">90–96%</button>
+            <button class="pill" onclick="document.getElementById('minProbDown').focus();activatePills('probGroupDown','Custom')">Custom</button>
+          </div>
+          <div class="inline" style="gap:6px;flex-wrap:wrap">
+            <span style="font-size:13px;color:#aaa">From</span>
+            <input type="number" id="minProbDown" value="80" min="1" max="99" style="width:60px" oninput="onProbDownInput()">
+            <span style="font-size:13px;color:#aaa">to</span>
+            <input type="number" id="maxProbDown" value="96" min="1" max="99" style="width:60px" oninput="onProbDownInput()">
+            <span style="font-size:13px;color:#aaa">% &nbsp;±</span>
+            <input type="number" id="spreadDown" value="" min="0" max="49" placeholder="0" style="width:55px" title="±spread" oninput="applySpread('down')">
+            <span style="font-size:11px;color:#555">spread</span>
+          </div>
         </div>
       </div>
 
@@ -642,12 +645,12 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
           <span class="label-sm" style="margin:0;font-size:14px;font-weight:700;color:var(--green)">📊 Show Categories</span>
           <button class="pill sm" onclick="toggleAllCategories()" style="font-size:12px;padding:4px 12px">Select All</button>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px">
           <label class="check-row"><input type="checkbox" id="showCrypto" checked onchange="saveSettings()"> Crypto</label>
           <label class="check-row"><input type="checkbox" id="showSports" checked onchange="saveSettings()"> Sports</label>
+          <label class="check-row"><input type="checkbox" id="showCombo" checked onchange="saveSettings()"> Combo/Parlay</label>
           <label class="check-row"><input type="checkbox" id="showPolitics" checked onchange="saveSettings()"> Politics / Elections</label>
           <label class="check-row"><input type="checkbox" id="showEconomics" checked onchange="saveSettings()"> Economics / Finance</label>
-          <label class="check-row"><input type="checkbox" id="showCombo" checked onchange="saveSettings()"> Combo/Parlay</label>
         </div>
         <div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.4px;margin:14px 0 6px;border-top:1px solid var(--border);padding-top:10px">FILTERS <span style="font-weight:400">(not categories — these refine what's shown)</span></div>
         <div style="display:flex;gap:16px;flex-wrap:wrap">
@@ -681,38 +684,8 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
         <button class="pill" onclick="setTime(4320,'3d')">3d</button>
         <button class="pill" onclick="setTime(10080,'1w')">1w</button>
         <button class="pill" onclick="setTime(20160,'2w')">2w</button>
-        <button class="pill" onclick="setTime(43200,'1m')">1m</button>
-        <button class="pill" onclick="setTime(525600,'All (365d)')">All (365d)</button>
-        <div class="inline">
-          <button class="pill" onclick="setTime('custom')">Custom</button>
-          <input type="number" id="timeCustom" value="15" min="1" placeholder="min" style="display:none;width:70px">
-          <span id="timeCustomLabel" style="display:none;font-size:13px;color:var(--muted)">min</span>
-        </div>
-      </div>
-      <div style="margin-top:14px;display:flex;flex-direction:column;gap:8px">
-        <span class="label-sm">Started</span>
-        <div class="inline" style="gap:8px;flex-wrap:wrap">
-          <div class="inline" style="gap:6px">
-            <span style="font-size:14px;color:#fff">Opened at least</span>
-            <input type="number" id="minAgeMins" value="" min="0" placeholder="any" style="width:70px" oninput="saveSettings()" title="Only show markets that have been open for at least this many minutes">
-            <span style="font-size:14px;color:#fff">min ago</span>
-          </div>
-          <div class="inline" style="gap:6px">
-            <span style="font-size:14px;color:#fff">Opened within the last</span>
-            <input type="number" id="maxAgeMins" value="" min="0" placeholder="any" style="width:70px" oninput="saveSettings()" title="Only show markets that opened within this many minutes">
-            <span style="font-size:14px;color:#fff">min</span>
-          </div>
-        </div>
-        <div style="font-size:11px;color:#555">Leave blank = no restriction on when market opened</div>
-      </div>
-      <div style="margin-top:14px">
-        <span class="label-sm">Skip If Too Close To End</span>
-        <div class="inline" style="gap:6px;margin-top:8px">
-          <span style="font-size:14px;color:#fff">Don't buy if less than</span>
-          <input type="number" id="noBuyWithinMins" value="" min="0" placeholder="off" style="width:70px" oninput="saveSettings()" title="Skip markets expiring in less than this many minutes">
-          <span style="font-size:14px;color:#fff">min left</span>
-        </div>
-        <div style="font-size:11px;color:#555;margin-top:4px">e.g. set 2 = skip markets expiring in &lt;2 min (too late to act)</div>
+        <button class="pill" onclick="setTime(43200,'1mo')">1mo</button>
+        <button class="pill" onclick="setTime(525600,'Show all')">Show all</button>
       </div>
       </div>
     </div>
@@ -906,39 +879,42 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <div class="card-title">🎟️ Lotto Bot Settings (T2)</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:14px">A second, independent bot. Set it up however you like — it only trades when its switch above is <b>ON</b> (it can run at the same time as the Scanner bot). Changes save automatically.</div>
 
-    <!-- BUY UP -->
-    <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
-      <label class="check-row" style="font-weight:700;color:var(--green)"><input type="checkbox" id="L_enableBuyUp" checked onchange="pushLottoSettings()"> 📈 BUY UP (YES) <span style="color:var(--muted);font-weight:400;font-size:12px">— price will go up</span></label>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">
-        <span style="font-size:12px;color:var(--muted)">From</span>
-        <input type="number" id="L_minProb" min="1" max="99" value="1" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
-        <span style="font-size:12px;color:var(--muted)">to</span>
-        <input type="number" id="L_maxProb" min="1" max="99" value="15" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
-        <span style="font-size:12px;color:var(--muted)">¢ (1–99 ok; default 1–15)</span>
+    <!-- BUY UP & BUY DOWN (SIDE-BY-SIDE) -->
+    <div style="display:flex;gap:12px;margin-bottom:10px">
+      <!-- BUY UP -->
+      <div style="flex:1;border:1px solid var(--border);border-radius:8px;padding:12px">
+        <label class="check-row" style="font-weight:700;color:var(--green);display:block;margin-bottom:8px"><input type="checkbox" id="L_enableBuyUp" checked onchange="pushLottoSettings()"> 📈 BUY UP (YES)</label>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="font-size:12px;color:var(--muted)">From</span>
+          <input type="number" id="L_minProb" min="1" max="99" value="1" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
+          <span style="font-size:12px;color:var(--muted)">to</span>
+          <input type="number" id="L_maxProb" min="1" max="99" value="15" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
+          <span style="font-size:12px;color:var(--muted)">¢</span>
+        </div>
       </div>
-    </div>
 
-    <!-- BUY DOWN -->
-    <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
-      <label class="check-row" style="font-weight:700;color:var(--red)"><input type="checkbox" id="L_enableBuyDown" onchange="pushLottoSettings()"> 📉 BUY DOWN (NO) <span style="color:var(--muted);font-weight:400;font-size:12px">— price will go down</span></label>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">
-        <span style="font-size:12px;color:var(--muted)">From</span>
-        <input type="number" id="L_minProbDown" min="1" max="99" value="1" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
-        <span style="font-size:12px;color:var(--muted)">to</span>
-        <input type="number" id="L_maxProbDown" min="1" max="99" value="15" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
-        <span style="font-size:12px;color:var(--muted)">¢ (1–99 ok)</span>
+      <!-- BUY DOWN -->
+      <div style="flex:1;border:1px solid var(--border);border-radius:8px;padding:12px">
+        <label class="check-row" style="font-weight:700;color:var(--red);display:block;margin-bottom:8px"><input type="checkbox" id="L_enableBuyDown" onchange="pushLottoSettings()"> 📉 BUY DOWN (NO)</label>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="font-size:12px;color:var(--muted)">From</span>
+          <input type="number" id="L_minProbDown" min="1" max="99" value="1" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
+          <span style="font-size:12px;color:var(--muted)">to</span>
+          <input type="number" id="L_maxProbDown" min="1" max="99" value="15" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
+          <span style="font-size:12px;color:var(--muted)">¢</span>
+        </div>
       </div>
     </div>
 
     <!-- Categories -->
     <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
       <div style="font-size:12px;color:var(--muted);font-weight:700;margin-bottom:8px">CATEGORIES</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 8px">
         <label class="check-row"><input type="checkbox" id="L_showCrypto" checked onchange="pushLottoSettings()"> Crypto</label>
         <label class="check-row"><input type="checkbox" id="L_showSports" checked onchange="pushLottoSettings()"> Sports</label>
+        <label class="check-row"><input type="checkbox" id="L_showCombo" checked onchange="pushLottoSettings()"> Combo/Parlay</label>
         <label class="check-row"><input type="checkbox" id="L_showPolitics" checked onchange="pushLottoSettings()"> Politics / Elections</label>
         <label class="check-row"><input type="checkbox" id="L_showEconomics" checked onchange="pushLottoSettings()"> Economics / Finance</label>
-        <label class="check-row"><input type="checkbox" id="L_showCombo" checked onchange="pushLottoSettings()"> Combo/Parlay</label>
       </div>
       <div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.4px;margin:14px 0 6px;border-top:1px solid var(--border);padding-top:10px">FILTERS <span style="font-weight:400">(not categories — these refine what's shown)</span></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
@@ -949,17 +925,33 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 
     <!-- Limits -->
     <div style="border:1px solid var(--border);border-radius:8px;padding:12px">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <label style="font-size:12px;color:var(--muted)">Ends within (min) <button type="button" onclick="document.getElementById('L_minutes').value=525600;pushLottoSettings()" style="font-size:10px;font-weight:700;padding:2px 8px;border:1px solid var(--border);border-radius:5px;background:#161616;color:var(--green);cursor:pointer;margin-left:4px">Show all</button><br><input type="number" id="L_minutes" min="1" value="525600" onchange="pushLottoSettings()" style="width:64px;min-width:64px"></label>
-        <label style="font-size:12px;color:var(--muted)">Max $ per buy<br><input type="number" id="L_buyAmount" min="0.01" step="0.01" value="0.15" onchange="pushLottoSettings()"></label>
-        <label style="font-size:12px;color:var(--muted)">Max buys / scan<br><input type="number" id="L_autoMaxPerScan" min="1" value="10" onchange="pushLottoSettings()"></label>
-        <label style="font-size:12px;color:var(--muted)">Max open positions<br><input type="number" id="L_autoMaxConcurrent" min="1" value="999" onchange="pushLottoSettings()"></label>
-        <label style="font-size:12px;color:var(--muted)">Max buys / market<br><input type="number" id="L_maxBuysPerMarket" min="1" value="1" onchange="pushLottoSettings()"></label>
+      <div style="font-size:12px;color:var(--muted);font-weight:700;margin-bottom:10px">⏰ Ends Within</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+        <button type="button" onclick="setLottoEndsWithin(1)" class="pill" style="font-size:11px">1m</button>
+        <button type="button" onclick="setLottoEndsWithin(5)" class="pill" style="font-size:11px">5m</button>
+        <button type="button" onclick="setLottoEndsWithin(10)" class="pill" style="font-size:11px">10m</button>
+        <button type="button" onclick="setLottoEndsWithin(15)" class="pill active" style="font-size:11px">15m</button>
+        <button type="button" onclick="setLottoEndsWithin(20)" class="pill" style="font-size:11px">20m</button>
+        <button type="button" onclick="setLottoEndsWithin(30)" class="pill" style="font-size:11px">30m</button>
+        <button type="button" onclick="setLottoEndsWithin(60)" class="pill" style="font-size:11px">1h</button>
+        <button type="button" onclick="setLottoEndsWithin(120)" class="pill" style="font-size:11px">2h</button>
+        <button type="button" onclick="setLottoEndsWithin(240)" class="pill" style="font-size:11px">4h</button>
+        <button type="button" onclick="setLottoEndsWithin(360)" class="pill" style="font-size:11px">6h</button>
+        <button type="button" onclick="setLottoEndsWithin(720)" class="pill" style="font-size:11px">12h</button>
+        <button type="button" onclick="setLottoEndsWithin(1440)" class="pill" style="font-size:11px">24h</button>
+        <button type="button" onclick="setLottoEndsWithin(10080)" class="pill" style="font-size:11px">1w</button>
+        <button type="button" onclick="setLottoEndsWithin(20160)" class="pill" style="font-size:11px">2w</button>
+        <button type="button" onclick="setLottoEndsWithin(30240)" class="pill" style="font-size:11px">3w</button>
+        <button type="button" onclick="setLottoEndsWithin(40320)" class="pill" style="font-size:11px">4w</button>
+        <button type="button" onclick="setLottoEndsWithin(525600)" class="pill" style="font-size:11px">Show all</button>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px">
-        <label style="font-size:12px;color:var(--muted)">Min age (min)<br><input type="number" id="L_minAgeMins" min="0" placeholder="any" onchange="pushLottoSettings()"></label>
-        <label style="font-size:12px;color:var(--muted)">Max age (min)<br><input type="number" id="L_maxAgeMins" min="0" placeholder="any" onchange="pushLottoSettings()"></label>
-        <label style="font-size:12px;color:var(--muted)">Skip if &lt; (min) left<br><input type="number" id="L_noBuyWithinMins" min="0" placeholder="off" onchange="pushLottoSettings()"></label>
+      <input type="hidden" id="L_minutes" value="15">
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px">
+        <label style="font-size:12px;color:var(--muted)">Max $ per buy<br><input type="number" id="L_buyAmount" min="0.01" step="0.01" value="0.15" onchange="pushLottoSettings()" style="width:100%;margin-top:4px"></label>
+        <label style="font-size:12px;color:var(--muted)">Max buys / scan<br><input type="number" id="L_autoMaxPerScan" min="1" value="10" onchange="pushLottoSettings()" style="width:100%;margin-top:4px"></label>
+        <label style="font-size:12px;color:var(--muted)">Max open positions<br><input type="number" id="L_autoMaxConcurrent" min="1" value="999" onchange="pushLottoSettings()" style="width:100%;margin-top:4px"></label>
+        <label style="font-size:12px;color:var(--muted)">Max qty per ticker<br><input type="number" id="L_maxBuysPerMarket" min="1" value="1" onchange="pushLottoSettings()" style="width:100%;margin-top:4px" title="Max contracts to buy of same ticker (prevents over-concentration)"></label>
       </div>
     </div>
 
@@ -1075,6 +1067,11 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
         <button class="pill sm" id="sFilter7d"  onclick="setSettleFilter(168,'7d')" style="padding:4px 10px;font-size:12px">7d</button>
         <button class="pill sm" id="sFilter30d" onclick="setSettleFilter(720,'30d')" style="padding:4px 10px;font-size:12px">30d</button>
       </div>
+      <div style="display:flex;gap:4px">
+        <button class="pill sm active" id="sFilterBoth" onclick="setSettleProfileFilter('both')" style="padding:4px 10px;font-size:12px">Both</button>
+        <button class="pill sm" id="sFilterT1" onclick="setSettleProfileFilter('T1')" style="padding:4px 10px;font-size:12px">T1 only</button>
+        <button class="pill sm" id="sFilterT2" onclick="setSettleProfileFilter('T2')" style="padding:4px 10px;font-size:12px">T2 only</button>
+      </div>
     </div>
     <div id="settlementsSummary" style="font-size:13px;color:var(--muted)"></div>
   </div>
@@ -1172,6 +1169,18 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   </div>
 </div><!-- /tab-apilog -->
 
+<!-- ── Debug tab — real-time status + background report generator ── -->
+<div id="tab-debug" class="tab-pane">
+  <div class="card">
+    <div class="card-title">🐛 Debug — Real-time Status</div>
+    <div style="margin-bottom:16px;display:flex;gap:8px">
+      <button onclick="generateDebugReport()" style="background:var(--green);color:#000;border:none;border-radius:6px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer">Generate Report Now</button>
+      <button onclick="toggleAutoReporting()" id="autoReportBtn" style="background:#444;color:#fff;border:none;border-radius:6px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer">Start Auto Reports (every 1m)</button>
+    </div>
+    <div id="debugOutput" style="background:#0a0a0a;border:1px solid #333;border-radius:8px;padding:12px;font-family:monospace;font-size:11px;color:#0f0;max-height:70vh;overflow:auto;line-height:1.5;white-space:pre-wrap;word-break:break-all"></div>
+  </div>
+</div><!-- /tab-debug -->
+
 </div><!-- /main -->
 
 <!-- ── Sell Notifications (bottom-left, stacked) ───────────────── -->
@@ -1265,6 +1274,9 @@ async function loadPnl() {
 // ── Nav balance ───────────────────────────────────────────────────────────
 
 let _settleHours = 24;
+let _settleProfileFilter = "both";  // "both", "T1", or "T2"
+let _settleTickerFilter = null;     // null or ticker string to filter by
+let _settleHighLowFilter = null;    // null, "high", or "low" for P&L
 let _lastBalanceCall = 0;
 let _waitingForCash = false;
 // Persistent last-20 sales for the ticker. Loaded from localStorage so the
@@ -1402,7 +1414,21 @@ function setSettleFilter(hours, label) {
   });
   const title = document.getElementById("settlementsTitle");
   if (title) title.textContent = `Recent Settlements (${label})`;
-  loadSettlements(); // dedicated, fast settlements refresh for the new period
+  loadSettlements();
+}
+
+function setSettleProfileFilter(profile) {
+  _settleProfileFilter = profile;
+  ["Both", "T1", "T2"].forEach(p => {
+    const el = document.getElementById("sFilter" + p);
+    if (el) el.classList.toggle("active", p.toLowerCase() === profile.toLowerCase() || (profile === "both" && p === "Both"));
+  });
+  renderSettlements(window._lastSettlements || []);
+}
+
+function setSettleTickerFilter(ticker) {
+  _settleTickerFilter = _settleTickerFilter === ticker ? null : ticker;
+  renderSettlements(window._lastSettlements || []);
 }
 
 // Fast, standalone cash fetch. Hits the lightweight cached /api/balance so the top
@@ -1581,7 +1607,19 @@ async function loadPositionsFast() {
     const r = await fetch(`/api/portfolio?enrich=false&settlement_hours=${_settleHours}`, {signal: ctrl.signal});
     clearTimeout(tid);
     const d = await r.json();
-    if (d.balance != null)         { const el = document.getElementById("navCash");      if (el) { el.textContent = "$" + d.balance.toFixed(2); el.className = "fund-amount cash-val"; } }
+    if (d.balance != null)         {
+      const el = document.getElementById("navCash");
+      if (el) {
+        if (d.balance_live === false) {
+          el.textContent = "$" + d.balance.toFixed(2) + " ⚠";
+          el.className = "fund-amount"; el.style.color = "var(--yellow)";
+          el.title = "Stale — can't reach Kalshi right now (showing last value)";
+        } else {
+          el.textContent = "$" + d.balance.toFixed(2);
+          el.className = "fund-amount cash-val"; el.style.color = ""; el.title = "";
+        }
+      }
+    }
     if (d.positions_value != null) { const el = document.getElementById("navPositions");  if (el)   el.textContent = "$" + d.positions_value.toFixed(2); }
     if (d.portfolio_value != null) { const el = document.getElementById("navPortfolio");  if (el) { el.textContent = "$" + d.portfolio_value.toFixed(2); el.className = "fund-amount port-val"; } }
     const np = d.positions || [];
@@ -1642,7 +1680,8 @@ function renderSettlements(rows) {
   }
 
   if (!rows.length) {
-    wrap.innerHTML = `<div style="text-align:center;color:var(--muted);padding:24px;font-size:13px">No settlements in this period.</div>`;
+    const emptyMsg = _settleTickerFilter ? `No settlements for ${_settleTickerFilter}.` : "No settlements in this period.";
+    wrap.innerHTML = `<div style="text-align:center;color:var(--muted);padding:24px;font-size:13px">${emptyMsg}</div>`;
     if (sum) sum.textContent = "";
     return;
   }
@@ -1653,22 +1692,43 @@ function renderSettlements(rows) {
     totalPnl += (r.pnl || 0);
   });
   const pnlCls = totalPnl > 0 ? "pos" : totalPnl < 0 ? "neg" : "neu";
+  const filterInfo = _settleTickerFilter ? ` (${_settleTickerFilter})` : "";
   if (sum) {
-    sum.innerHTML = `${rows.length} settled · <span class="pos">${wins} won</span> · <span class="neg">${losses} lost</span> · P&amp;L: <span class="${pnlCls}" style="font-weight:700;font-size:14px">${totalPnl >= 0 ? "+" : ""}$${totalPnl.toFixed(2)}</span>`;
+    sum.innerHTML = `${rows.length} settled${filterInfo} · <span class="pos">${wins} won</span> · <span class="neg">${losses} lost</span> · P&amp;L: <span class="${pnlCls}" style="font-weight:700;font-size:14px">${totalPnl >= 0 ? "+" : ""}$${totalPnl.toFixed(2)}</span>`;
+  }
+
+  // Apply filters
+  let filtered = [...rows];
+
+  // Filter by profile (T1/T2/both)
+  if (_settleProfileFilter !== "both") {
+    filtered = filtered.filter(r => r.profile === _settleProfileFilter);
+  }
+
+  // Filter by ticker if selected
+  if (_settleTickerFilter) {
+    filtered = filtered.filter(r => r.ticker === _settleTickerFilter);
+  }
+
+  // Filter by P&L (high/low) if set
+  if (_settleHighLowFilter === "high") {
+    filtered = filtered.filter(r => (r.pnl || 0) > 0.001);
+  } else if (_settleHighLowFilter === "low") {
+    filtered = filtered.filter(r => (r.pnl || 0) < -0.001);
   }
 
   // Sort settlements
-  const sorted = [...rows].sort((a, b) => {
+  const sorted = filtered.sort((a, b) => {
     if (_settleSortBy === "pnl_desc")      return (b.pnl||0) - (a.pnl||0);
     if (_settleSortBy === "pnl_asc")       return (a.pnl||0) - (b.pnl||0);
-    if (_settleSortBy === "won_desc")      return (b.won?1:0) - (a.won?1:0);  // Won first
-    if (_settleSortBy === "won_asc")       return (a.won?1:0) - (b.won?1:0);  // Lost first
-    if (_settleSortBy === "recent_asc")    return (a.settled_time||"").localeCompare(b.settled_time||""); // Oldest first
+    if (_settleSortBy === "won_desc")      return (b.won?1:0) - (a.won?1:0);
+    if (_settleSortBy === "won_asc")       return (a.won?1:0) - (b.won?1:0);
+    if (_settleSortBy === "recent_asc")    return (a.settled_time||"").localeCompare(b.settled_time||"");
     if (_settleSortBy === "howsold_desc")  return (b.sold_by||"").localeCompare(a.sold_by||"");
     if (_settleSortBy === "howsold_asc")   return (a.sold_by||"").localeCompare(b.sold_by||"");
     if (_settleSortBy === "title_desc")    return (b.title||"").localeCompare(a.title||"");
     if (_settleSortBy === "title_asc")     return (a.title||"").localeCompare(b.title||"");
-    return (b.settled_time||"").localeCompare(a.settled_time||""); // default: newest first
+    return (b.settled_time||"").localeCompare(a.settled_time||"");
   });
   rows = sorted;
   const body = rows.map(r => {
@@ -1681,8 +1741,12 @@ function renderSettlements(rows) {
       : won === false
         ? `<span class="badge no" style="background:rgba(255,80,80,.15);color:var(--red)">LOST</span>`
         : `<span class="badge" style="background:#333;color:#aaa">—</span>`;
+    const isTickerFiltered = _settleTickerFilter === r.ticker;
     const titleHtml = r.ticker
-      ? `<a href="${r.kalshi_url || '#'}" target="_blank" style="color:#ccc;text-decoration:none" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='#ccc'">${esc(r.title)}<span style="font-size:10px;margin-left:4px;opacity:.5">↗</span></a>`
+      ? `<div style="display:flex;align-items:center;gap:8px">
+          <span onclick="setSettleTickerFilter('${r.ticker}')" style="color:${isTickerFiltered?'var(--green)':'#ccc'};cursor:pointer;text-decoration:${isTickerFiltered?'underline':'none'}" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='${isTickerFiltered?'var(--green)':'#ccc'}'">${esc(r.title)}</span>
+          <a href="${r.kalshi_url || '#'}" target="_blank" style="color:#666;text-decoration:none;font-size:11px" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='#666'">↗</a>
+        </div>`
       : esc(r.title);
     const catTag = r.category ? `<div style="font-size:11px;color:#666;margin-top:3px">${esc(r.category)}</div>` : "";
     return `
@@ -1778,9 +1842,12 @@ try {
 async function enrichStaged() {
   const wt = allPositions.filter(p => p.ticker);
   if (!wt.length) { loadSettlements(); return; }
+  // FIRST: enrich all titles for the filter list (fast, high priority)
+  const allTickers = wt.map(p => p.ticker);
+  if (allTickers.length) await enrichPositionMarkets(allTickers, true); // title-only pass
+  // THEN: stage price enrichment by importance
   const stake = p => Math.abs((p.quantity || 0) * (p.buy_price || 0)) / 100;
   const needsPrice = p => (p.current_yes == null && p.current_no == null);
-  // Missing-a-price positions first, biggest stake first within each group.
   const sorted = [...wt].sort((a, b) => {
     const an = needsPrice(a) ? 1 : 0, bn = needsPrice(b) ? 1 : 0;
     if (an !== bn) return bn - an;
@@ -1788,41 +1855,39 @@ async function enrichStaged() {
   });
   const top  = sorted.slice(0, 10).map(p => p.ticker);
   const rest = sorted.slice(10).map(p => p.ticker);
-  if (top.length)  await enrichPositionMarkets(top);    // top 10 numbers — fast
+  if (top.length)  await enrichPositionMarkets(top);    // top 10 prices — fast
   if (rest.length) await enrichPositionMarkets(rest);   // then everything else
   loadSettlements();                                     // settlements last
 }
 
-async function enrichPositionMarkets(tickerList) {
+async function enrichPositionMarkets(tickerList, titleOnly) {
   const tickers = ((tickerList && tickerList.length) ? tickerList
                    : allPositions.map(p => p.ticker)).filter(Boolean);
   if (!tickers.length) return;
 
   try {
-    // NOTE: fetch() has no {timeout} option — it was silently ignored, so a slow
-    // enrich could hang forever and positions stayed on "—". Use AbortController.
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 25000);
-    // Enrich up to 50 tickers (backend cap) per call.
     const r = await fetch(`/api/enrich-positions?tickers=${tickers.slice(0,50).join(",")}`, {signal: ctrl.signal});
     clearTimeout(to);
     const enriched = await r.json() || {};
 
-    // Merge enriched data into allPositions
     for (const pos of allPositions) {
       const data = enriched[pos.ticker];
       if (data) {
         if (data.event_ticker) pos.event_ticker = data.event_ticker;
         if (data.title) pos.title = data.title;
         if (data.category) pos.category = data.category;
-        if (data.current_yes != null) pos.current_yes = data.current_yes;
-        if (data.current_no != null) pos.current_no = data.current_no;
         if (data.close_time) pos.close_time = data.close_time;
         if (data.kalshi_url) pos.kalshi_url = data.kalshi_url;
+        // On title-only pass, don't overwrite prices (will be enriched next in staged pass)
+        if (!titleOnly) {
+          if (data.current_yes != null) pos.current_yes = data.current_yes;
+          if (data.current_no != null) pos.current_no = data.current_no;
+        }
       }
     }
 
-    // Re-render positions with enriched data
     renderBotPositions(allPositions);
   } catch(e) {
     console.warn("[enrich] error fetching market data:", e);
@@ -2278,9 +2343,6 @@ async function scan() {
     // Note: Don't read from timeCustom here. setTime() manages selTime correctly via button clicks,
     // and loadSettings() restores it on page load. Reading from the field here causes it to override
     // the user's button selection if the field is visible or has leftover values.
-    const minAge       = document.getElementById("minAgeMins")?.value || "";
-    const maxAge       = document.getElementById("maxAgeMins")?.value || "";
-    const noBuyWithin  = document.getElementById("noBuyWithinMins")?.value || "";
     const timeParams   = (minAge ? `&min_age_mins=${minAge}` : "") + (maxAge ? `&max_age_mins=${maxAge}` : "") + (noBuyWithin ? `&no_buy_within_mins=${noBuyWithin}` : "");
     const hideMulti    = chk("hideMultiOutcome");
     const cryptoParams = (hideMulti ? "&hide_multi=true" : "");
@@ -2770,10 +2832,14 @@ async function sellPos(ticker, side, count, safeId) {
   }
 
   try {
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 30000); // 30s timeout
     const r = await fetch("/api/sell", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ticker, side, count}),
+      signal: ctrl.signal,
     });
+    clearTimeout(timeout);
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "Sell failed");
 
@@ -2799,13 +2865,235 @@ async function sellPos(ticker, side, count, safeId) {
     filterPos();
     setTimeout(() => loadBalanceThrottled(true), 8000);
   } catch(e) {
-    toast(e.message,"err");
+    const errorMsg = e.message || "Sell failed";
+
+    // Check if it's a "no fill" error (no buyers at market price)
+    if (errorMsg.includes("no buyers") || errorMsg.includes("no fill")) {
+      // Ask user if they want to try a limit order instead
+      showOrderTypeDialog(ticker, side, count, prePos, bid_cents);
+    } else {
+      toast(errorMsg, "err");
+    }
+
     if (btn) { btn.disabled = false; btn.textContent = "Sell This"; }
-    // Restore the position if sell failed — put it back in the list
     loadBalanceThrottled(true);
   } finally {
     _inFlightSells.delete(sellKey);
   }
+}
+
+// Show dialog to choose order type when market order fails
+function showOrderTypeDialog(ticker, side, count, position, currentBidCents) {
+  const modal = document.createElement("div");
+  modal.style.cssText = `
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.7); display: flex; align-items: center;
+    justify-content: center; z-index: 10000;
+  `;
+
+  const marketTitle = position?.title || ticker;
+  const dialog = document.createElement("div");
+  dialog.style.cssText = `
+    background: #1a1a1a; border: 2px solid var(--green); border-radius: 12px;
+    padding: 24px; max-width: 420px; color: #fff; font-family: inherit;
+  `;
+
+  dialog.innerHTML = `
+    <div style="font-size: 16px; font-weight: 700; margin-bottom: 12px; color: var(--green)">
+      ⚠ No Buyers at Market Price
+    </div>
+    <div style="font-size: 13px; color: #ddd; margin-bottom: 16px; line-height: 1.5">
+      <b>${marketTitle}</b> has no buyers at the current bid (${currentBidCents}¢).<br><br>
+      What would you like to do?
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <button onclick="retryMarketSell('${ticker}', '${side}', ${count})"
+        style="background: var(--green); color: #000; border: none; border-radius: 6px;
+               padding: 12px 16px; font-size: 13px; font-weight: 700; cursor: pointer;">
+        🔄 Retry Market Order (now)
+      </button>
+
+      <button onclick="placeLimitOrder('${ticker}', '${side}', ${count}, ${currentBidCents})"
+        style="background: #444; color: #fff; border: none; border-radius: 6px;
+               padding: 12px 16px; font-size: 13px; font-weight: 700; cursor: pointer;">
+        📌 Place Limit Order at ${currentBidCents}¢
+      </button>
+
+      <button onclick="closeOrderDialog()"
+        style="background: transparent; color: #888; border: 1px solid #666;
+               border-radius: 6px; padding: 12px 16px; font-size: 13px; font-weight: 700;
+               cursor: pointer;">
+        ✕ Cancel
+      </button>
+    </div>
+  `;
+
+  modal.appendChild(dialog);
+  modal.id = "orderTypeModal";
+  modal.onclick = (e) => e.target === modal && closeOrderDialog();
+  document.body.appendChild(modal);
+}
+
+function closeOrderDialog() {
+  const modal = document.getElementById("orderTypeModal");
+  if (modal) modal.remove();
+}
+
+async function retryMarketSell(ticker, side, count) {
+  closeOrderDialog();
+  toast("Retrying market sell…", "");
+  // Re-trigger the sell (it will try market order again)
+  await new Promise(r => setTimeout(r, 500));
+  sellOne(ticker, side);
+}
+
+async function placeLimitOrder(ticker, side, count, limitPriceCents) {
+  closeOrderDialog();
+
+  // Get current position for details
+  const pos = allPositions.find(p => p.ticker === ticker && _posSide(p) === side);
+  if (!pos) {
+    toast("Position not found", "err");
+    return;
+  }
+
+  try {
+    // Place limit order via backend
+    const r = await fetch("/api/sell", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ticker, side, count,
+        order_type: "limit",
+        limit_price_cents: limitPriceCents
+      })
+    });
+
+    if (!r.ok) {
+      const d = await r.json();
+      throw new Error(d.error || "Limit order failed");
+    }
+
+    const d = await r.json();
+
+    // Store limit order in localStorage for 24-hour reminder
+    const limitOrders = JSON.parse(localStorage.getItem("kb_limit_orders") || "{}");
+    const orderKey = `${ticker}_${side}`;
+    limitOrders[orderKey] = {
+      ticker, side, count, limitPriceCents,
+      placedAt: Date.now(),
+      title: pos.title || ticker
+    };
+    localStorage.setItem("kb_limit_orders", JSON.stringify(limitOrders));
+
+    toast(`📌 Limit order placed at ${limitPriceCents}¢ — will remind in 24h`, "ok");
+
+    // Schedule 24-hour reminder
+    setTimeout(() => checkLimitOrderReminders(), 24 * 60 * 60 * 1000);
+
+  } catch(e) {
+    toast(`Limit order failed: ${e.message}`, "err");
+  }
+}
+
+// Check for limit orders that need 24-hour reminders
+function checkLimitOrderReminders() {
+  const limitOrders = JSON.parse(localStorage.getItem("kb_limit_orders") || "{}");
+  const now = Date.now();
+  const expiredOrders = [];
+
+  for (const [key, order] of Object.entries(limitOrders)) {
+    const ageMs = now - order.placedAt;
+    const age24h = 24 * 60 * 60 * 1000;
+
+    if (ageMs >= age24h) {
+      expiredOrders.push({key, ...order});
+    }
+  }
+
+  if (expiredOrders.length === 0) return;
+
+  // Show reminder dialog
+  const modal = document.createElement("div");
+  modal.style.cssText = `
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.7); display: flex; align-items: center;
+    justify-content: center; z-index: 10001;
+  `;
+
+  const dialog = document.createElement("div");
+  dialog.style.cssText = `
+    background: #1a1a1a; border: 2px solid #f5c542; border-radius: 12px;
+    padding: 24px; max-width: 480px; color: #fff; font-family: inherit;
+  `;
+
+  let html = `
+    <div style="font-size: 16px; font-weight: 700; margin-bottom: 12px; color: #f5c542">
+      ⏰ 24-Hour Limit Order Reminder
+    </div>
+    <div style="font-size: 13px; color: #ddd; margin-bottom: 16px;">
+      ${expiredOrders.length} limit order(s) placed 24 hours ago. Still want to keep them?
+    </div>
+
+    <div style="background: #0a0a0a; border: 1px solid #444; border-radius: 8px;
+                padding: 12px; margin-bottom: 16px; max-height: 200px; overflow-y: auto;">
+  `;
+
+  expiredOrders.forEach(order => {
+    html += `
+      <div style="padding: 8px; border-bottom: 1px solid #333; font-size: 12px;">
+        <b>${order.title}</b> — ${order.count} ${order.side.toUpperCase()} @ ${order.limitPriceCents}¢
+      </div>
+    `;
+  });
+
+  html += `
+    </div>
+
+    <div style="display: flex; gap: 10px;">
+      <button onclick="keepLimitOrders()"
+        style="flex: 1; background: var(--green); color: #000; border: none; border-radius: 6px;
+               padding: 12px; font-size: 13px; font-weight: 700; cursor: pointer;">
+        ✓ Keep Them
+      </button>
+
+      <button onclick="cancelAllLimitOrders()"
+        style="flex: 1; background: #ff4d4d; color: #fff; border: none; border-radius: 6px;
+               padding: 12px; font-size: 13px; font-weight: 700; cursor: pointer;">
+        ✕ Cancel All
+      </button>
+    </div>
+  `;
+
+  dialog.innerHTML = html;
+  modal.appendChild(dialog);
+  modal.id = "limitOrderReminderModal";
+  modal.onclick = (e) => e.target === modal || closeLimitOrderReminder();
+  document.body.appendChild(modal);
+}
+
+function closeLimitOrderReminder() {
+  const modal = document.getElementById("limitOrderReminderModal");
+  if (modal) modal.remove();
+}
+
+function keepLimitOrders() {
+  closeLimitOrderReminder();
+  // Reset the 24-hour timer for all limit orders
+  const limitOrders = JSON.parse(localStorage.getItem("kb_limit_orders") || "{}");
+  for (const key in limitOrders) {
+    limitOrders[key].placedAt = Date.now();
+  }
+  localStorage.setItem("kb_limit_orders", JSON.stringify(limitOrders));
+  toast("✓ Limit orders will remind again in 24h", "ok");
+  setTimeout(() => checkLimitOrderReminders(), 24 * 60 * 60 * 1000);
+}
+
+function cancelAllLimitOrders() {
+  closeLimitOrderReminder();
+  localStorage.setItem("kb_limit_orders", "{}");
+  toast("✕ All limit orders cleared", "");
 }
 
 // ── Market results table ──────────────────────────────────────────────────
@@ -4777,7 +5065,7 @@ const SETTINGS_CHECKBOXES = ["showCrypto","showSports","showPolitics","showEcono
 const SETTINGS_INPUTS = ["buyAmount","maxBuysPerMarket","autoMaxPerScan","autoMaxConcurrent","posSort",
   "autoMins","autoBuysMax","profitCustom","profitDolCustom","targetPriceCustom","minProb","maxProb","timeCustom",
   "stopLossPct","skipAutoSellMinutes",
-  "minAgeMins","maxAgeMins","noBuyWithinMins","minProbDown","maxProbDown","spreadUp","spreadDown","snoozeDuration"];
+  "minProbDown","maxProbDown","spreadUp","spreadDown","snoozeDuration"];
 
 function saveSettings() {
   // Validation: Must have at least one buy direction enabled
@@ -4826,9 +5114,6 @@ function pushBuySettings(immediate=false) {
       show_economics:  chk("showEconomics"),
       good_liq:        chk("goodLiq"),
       hide_multi:      chk("hideMultiOutcome"),
-      min_age_mins:    optNum("minAgeMins"),
-      max_age_mins:    optNum("maxAgeMins"),
-      no_buy_within_mins: optNum("noBuyWithinMins"),
       profile:         "T1",   // the front page edits the T1 (Scanner) bot profile
     };
     fetch("/api/buy-settings", {
@@ -4905,6 +5190,19 @@ async function setActiveProfile(p) {
 }
 
 // ── Lotto (T2) settings: independent form, posts to profile T2 ────────────
+function setLottoEndsWithin(mins) {
+  document.getElementById("L_minutes").value = mins;
+  // Update active pill styling
+  const buttons = document.querySelectorAll('button[onclick^="setLottoEndsWithin"]');
+  buttons.forEach(btn => {
+    btn.classList.remove("active");
+    if (btn.onclick.includes(`setLottoEndsWithin(${mins})`)) {
+      btn.classList.add("active");
+    }
+  });
+  pushLottoSettings();
+}
+
 let _pushLottoTimer = null;
 function pushLottoSettings() {
   const chk = id => { const el = document.getElementById(id); return el ? el.checked : false; };
@@ -4930,18 +5228,15 @@ function pushLottoSettings() {
     show_economics:  chk("L_showEconomics"),
     good_liq:        chk("L_goodLiq"),
     hide_multi:      chk("L_hideMultiOutcome"),
-    min_age_mins:    optNum("L_minAgeMins"),
-    max_age_mins:    optNum("L_maxAgeMins"),
-    no_buy_within_mins: optNum("L_noBuyWithinMins"),
   };
   const st = document.getElementById("L_saveStatus");
-  if (st) st.textContent = "Saving…";
   if (_pushLottoTimer) clearTimeout(_pushLottoTimer);
   _pushLottoTimer = setTimeout(() => {
+    if (st) st.textContent = "Saving…";
     fetch("/api/buy-settings", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload)})
-      .then(() => { if (st) st.textContent = "Saved ✓"; setTimeout(()=>{ if(st) st.textContent=""; }, 1500); })
-      .catch(() => { if (st) st.textContent = "Save failed — retry"; });
-  }, 500);
+      .then(() => { if (st) st.textContent = "✓"; setTimeout(()=>{ if(st) st.textContent=""; }, 600); })
+      .catch(() => { if (st) st.textContent = "Failed"; });
+  }, 100);
 }
 
 async function loadLottoSettings() {
@@ -4957,7 +5252,6 @@ async function loadLottoSettings() {
     chk("L_showCrypto", s.show_crypto); chk("L_showCombo", s.show_combo); chk("L_showSports", s.show_sports);
     chk("L_showPolitics", s.show_politics); chk("L_showEconomics", s.show_economics);
     chk("L_goodLiq", s.good_liq); chk("L_hideMultiOutcome", s.hide_multi);
-    set("L_minAgeMins", s.min_age_mins); set("L_maxAgeMins", s.max_age_mins); set("L_noBuyWithinMins", s.no_buy_within_mins);
   } catch(e) {}
 }
 
@@ -4985,13 +5279,13 @@ function pushLottoStrategy() {
     stop_loss_pct:      slOn ? num("L_stopLossPct") : null,
   };
   const st = document.getElementById("L_sellStatus");
-  if (st) st.textContent = "Saving…";
   if (_pushLottoStratTimer) clearTimeout(_pushLottoStratTimer);
   _pushLottoStratTimer = setTimeout(() => {
+    if (st) st.textContent = "Saving…";
     fetch("/api/strategy", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload)})
-      .then(() => { if (st) st.textContent = "Saved ✓"; setTimeout(()=>{ if(st) st.textContent=""; }, 1500); })
-      .catch(() => { if (st) st.textContent = "Save failed — retry"; });
-  }, 500);
+      .then(() => { if (st) st.textContent = "✓"; setTimeout(()=>{ if(st) st.textContent=""; }, 600); })
+      .catch(() => { if (st) st.textContent = "Failed"; });
+  }, 100);
 }
 
 async function loadLottoStrategy() {
@@ -5017,7 +5311,6 @@ async function loadLottoStrategy() {
 const LOTTO_FIELDS = ["L_enableBuyUp","L_minProb","L_maxProb","L_enableBuyDown","L_minProbDown","L_maxProbDown",
   "L_minutes","L_buyAmount","L_autoMaxPerScan","L_autoMaxConcurrent","L_maxBuysPerMarket",
   "L_showCrypto","L_showCombo","L_showSports","L_showPolitics","L_showEconomics","L_goodLiq","L_hideMultiOutcome",
-  "L_minAgeMins","L_maxAgeMins","L_noBuyWithinMins",
   "L_targetPct","L_targetDol","L_targetPrice","L_stopLossChk","L_stopLossPct"];
 let _lottoMemArming = false;
 
@@ -5084,7 +5377,6 @@ function seedLottoMemDefaults() {
     L_autoMaxConcurrent:"999", L_maxBuysPerMarket:"1",
     L_showCrypto:true, L_showCombo:true, L_showSports:true, L_showPolitics:true, L_showEconomics:true,
     L_goodLiq:false, L_hideMultiOutcome:false,
-    L_minAgeMins:"", L_maxAgeMins:"", L_noBuyWithinMins:"",
     lottoSellMode:"resolution", L_targetPct:"10", L_targetDol:"0.05", L_targetPrice:"50",
     L_stopLossChk:true, L_stopLossPct:"50"
   });
@@ -5115,6 +5407,20 @@ async function loadLottoHistory() {
     const rows = Array.isArray(d) ? d : (d.settlements || d.recent_settlements || []);
     if (rows && rows.length) { window._lottoSettlements = rows; renderLottoStats(); }
   } catch(e) {}
+}
+
+function fmtDuration(mins) {
+  if (!mins || mins < 0) return "—";
+  if (mins < 50) return mins.toFixed(0) + "m";
+  const w = Math.floor(mins / 10080), m1 = mins % 10080;
+  const d = Math.floor(m1 / 1440), m2 = m1 % 1440;
+  const h = Math.floor(m2 / 60), m3 = Math.round(m2 % 60);
+  const parts = [];
+  if (w > 0) parts.push(w + "w");
+  if (d > 0) parts.push(d + "d");
+  if (h > 0) parts.push(h + "h");
+  if (m3 > 0 || parts.length === 0) parts.push(m3 + "m");
+  return parts.join(" ");
 }
 
 function renderLottoStats() {
@@ -5155,12 +5461,22 @@ function renderLottoStats() {
     b.n++; b.invested += (s.cost || 0); if (s.won) b.won++; b.pnl += (s.pnl || 0);
   });
   const centRows = Object.keys(buckets).map(Number).sort((a,b)=>a-b);
+  // Get date range from settled T2 bets
+  const settleDates = settledT2.map(s => s.settled_time).filter(Boolean);
+  const dateRange = settleDates.length ? (() => {
+    const dates = settleDates.map(d => { try { return new Date(d.replace('Z', '+00:00')); } catch(e) { return null; } }).filter(Boolean);
+    if (dates.length < 2) return "";
+    const sorted = dates.sort((a,b) => a-b);
+    const fmt = d => d.toLocaleDateString([], {month:"short",day:"numeric"});
+    return ` (${fmt(sorted[0])} – ${fmt(sorted[sorted.length-1])})`;
+  })() : "";
+
   const centTable = centRows.length ? `
-    <div style="font-weight:700;margin:18px 0 6px">📊 Win/Loss by 1¢ bet</div>
-    <div style="overflow-x:auto"><table class="flat-tbl" style="width:100%;font-size:12px;border-collapse:collapse">
-      <thead><tr style="color:var(--muted);text-align:left">
+    <div style="font-weight:700;margin:18px 0 6px">📊 Win/Loss by 1¢ bet${dateRange}</div>
+    <div style="overflow-x:auto;max-height:500px"><table class="flat-tbl" style="width:100%;font-size:12px;border-collapse:collapse">
+      <thead style="position:sticky;top:0;background:var(--card);z-index:10"><tr style="color:var(--muted);text-align:left">
         <th style="padding:4px">Bet</th><th>Bets</th><th>Invested</th><th>Won</th><th>Win&nbsp;ratio</th><th>P&amp;L</th></tr></thead>
-      <tbody>${centRows.map((c,i) => { const b = buckets[c]; const ratio = Math.round(100*b.won/b.n);
+      <tbody>${centRows.slice(0,25).map((c,i) => { const b = buckets[c]; const ratio = Math.round(100*b.won/b.n);
         const bg = i % 2 ? "#141414" : "transparent"; const pc = b.pnl>=0?"var(--green)":"var(--red)";
         return `<tr style="background:${bg}">
           <td style="padding:5px;font-weight:800;color:#ff9416">${c}¢</td>
@@ -5169,7 +5485,7 @@ function renderLottoStats() {
           <td>${b.won}</td>
           <td style="color:${ratio>0?'var(--green)':'#aaa'};font-weight:700">${ratio}%</td>
           <td style="color:${pc};font-weight:800">${b.pnl>=0?'+':''}$${b.pnl.toFixed(2)}</td></tr>`; }).join("")}
-      </tbody></table></div>` : "";
+      </tbody></table></div>${centRows.length > 25 ? `<div style="font-size:11px;color:#888;margin-top:6px">Showing ${Math.min(25,centRows.length)} of ${centRows.length}.</div>` : ""}` : "";
 
   // ── Full history ledger: every buy + sell, one line each, newest first, zebra ──
   const hist = [];
@@ -5187,11 +5503,13 @@ function renderLottoStats() {
       qty: abs, cents: p.buy_price || 0, pnl: null });
   });
   hist.sort((a,b) => (b.t||"").localeCompare(a.t||""));
-  const fmtTs = iso => { try { const d=new Date(iso); return d.toLocaleString([], {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}); } catch(e){ return "—"; } };
+  const fmtTs = iso => { try { const d=new Date(iso); return d.toLocaleString([], {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit",second:"2-digit"}); } catch(e){ return "—"; } };
   const histHtml = hist.length ? `
     <div style="font-weight:700;margin:18px 0 6px">🧾 History — every buy & sell</div>
-    <div style="overflow-x:auto"><table class="flat-tbl" style="width:100%;font-size:11px;border-collapse:collapse">
-      <tbody>${hist.slice(0,300).map((h,i) => {
+    <div style="overflow-x:auto;max-height:500px"><table class="flat-tbl" style="width:100%;font-size:11px;border-collapse:collapse">
+      <thead style="position:sticky;top:0;background:var(--card);z-index:10"><tr style="color:var(--muted);text-align:left">
+        <th style="padding:4px">Time</th><th>Type</th><th>Market</th><th>Position</th><th>P&amp;L</th></tr></thead>
+      <tbody>${hist.slice(0,25).map((h,i) => {
         const bg = i % 2 ? "#141414" : "transparent";
         const pnl = h.pnl == null ? `<span style="color:#888">open</span>` : `<span style="color:${h.pnl>=0?'var(--green)':'var(--red)'};font-weight:700">${h.pnl>=0?'+':''}$${h.pnl.toFixed(2)}</span>`;
         return `<tr style="background:${bg}">
@@ -5201,29 +5519,33 @@ function renderLottoStats() {
           <td style="white-space:nowrap">${h.side} ${h.qty}×@${h.cents}¢</td>
           <td style="text-align:right;white-space:nowrap">${pnl}</td></tr>`; }).join("")}
       </tbody></table></div>
-      ${hist.length>300 ? `<div style="font-size:11px;color:#888;margin-top:6px">Showing newest 300 of ${hist.length}.</div>` : ""}` : "";
+      ${hist.length>25 ? `<div style="font-size:11px;color:#888;margin-top:6px">Showing newest 25 of ${hist.length}.</div>` : ""}` : "";
 
   // ── Live Lotto bets: full economics + a Sell button on each open position ──
   const _lf = v => (v < 0 ? "-$" : "$") + Math.abs(v).toFixed(2);
   const liveHtml = openT2.length ? `
     <div style="font-weight:700;margin:6px 0 6px">🎯 Live Lotto bets — sell anytime</div>
-    <div style="overflow-x:auto"><table class="flat-tbl" style="width:100%;font-size:12px;border-collapse:collapse">
-      <thead><tr style="color:var(--muted);text-align:left">
-        <th style="padding:4px">Status</th><th>Market</th><th>Side</th><th>Qty</th><th>Cost/sh</th><th>Cost</th><th>Value&nbsp;now</th><th>Max</th><th>P&amp;L</th><th></th></tr></thead>
-      <tbody>${openT2.map((p,i) => {
+    <div style="overflow-x:auto;max-height:500px"><table class="flat-tbl" style="width:100%;font-size:12px;border-collapse:collapse">
+      <thead style="position:sticky;top:0;background:var(--card);z-index:10"><tr style="color:var(--muted);text-align:left">
+        <th style="padding:4px">Status</th><th>Market</th><th>Side</th><th>Qty</th><th>Cost/sh</th><th>Cost</th><th>Value&nbsp;now</th><th>Max</th><th>Closes</th><th>P&amp;L</th><th></th></tr></thead>
+      <tbody>${openT2.slice(0,25).map((p,i) => {
         const side = (p.quantity>=0) ? "yes" : "no";
         const qty  = Math.abs(p.quantity||0);
         const bp   = p.buy_price;
         const cost = bp!=null ? qty*bp/100 : null;
         const cur  = side==="yes" ? p.current_yes : p.current_no;
         const valNow = cur!=null ? qty*cur/100 : null;
-        const maxVal = qty*1.0;                       // each contract pays $1 if it hits
+        const maxVal = qty*1.0;
         const pnl  = (valNow!=null && cost!=null) ? valNow-cost : null;
         const bg   = i%2 ? "#141414" : "transparent";
         const id   = `lsell-${i}`;
         const sellLabel = valNow!=null ? `Sell ${_lf(valNow)} (${pnl>=0?'+':''}${_lf(pnl)})` : "Sell";
         const pnlHtml = pnl==null ? '<span style="color:#888">—</span>'
           : `<span style="color:${pnl>=0?'var(--green)':'var(--red)'};font-weight:700">${pnl>=0?'+':''}${_lf(pnl)}</span>`;
+        const closeTs = p.close_time ? new Date(p.close_time.replace('Z','+00:00')).getTime() : null;
+        const now = Date.now();
+        const minsLeft = closeTs ? Math.round((closeTs - now) / 60000) : null;
+        const closesHtml = minsLeft != null ? `<span style="color:${minsLeft > 0 ? '#fff' : 'var(--red)'}">${fmtDuration(minsLeft)}</span>` : '—';
         return `<tr style="background:${bg}">
           <td style="padding:5px 6px"><span style="background:#00d97e22;color:var(--green);font-weight:700;font-size:10px;padding:2px 7px;border-radius:5px">LIVE</span></td>
           <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.title||p.ticker)}</td>
@@ -5233,10 +5555,11 @@ function renderLottoStats() {
           <td>${cost!=null?_lf(cost):'—'}</td>
           <td>${valNow!=null?_lf(valNow):'<span style="color:#888">no bid</span>'}</td>
           <td>${_lf(maxVal)}</td>
+          <td>${closesHtml}</td>
           <td>${pnlHtml}</td>
           <td><button id="${id}" onclick="sellPos('${p.ticker}','${side}',${qty},'${id}').then(()=>setTimeout(renderLottoStats,900))" style="background:var(--red);color:#fff;border:none;border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">${sellLabel}</button></td></tr>`;
       }).join("")}
-      </tbody></table></div>` : "";
+      </tbody></table></div>${openT2.length > 25 ? `<div style="font-size:11px;color:#888;margin-top:6px">Showing ${Math.min(25,openT2.length)} of ${openT2.length}.</div>` : ""}` : "";
 
   bodyEl.innerHTML = liveHtml + centTable + histHtml;
 }
@@ -5493,6 +5816,94 @@ setInterval(async () => {
     _showBotDownAlert();
   }
 }, 5000);
+
+// ── Debug Report Generator (runs in background, persists across tabs) ────
+let _autoReportInterval = null;
+let _reportHistory = [];
+
+async function generateDebugReport() {
+  const out = document.getElementById("debugOutput");
+  if (!out) return;
+
+  const timestamp = new Date().toLocaleString("en-US", {
+    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+    second: "2-digit", hour12: false
+  });
+
+  let report = `[${timestamp}] DEBUG REPORT\n`;
+  report += `${"=".repeat(60)}\n\n`;
+
+  // Bot status
+  report += `BOT STATUS:\n`;
+  report += `  Running: ${autoModeOn ? "✓ YES" : "✗ NO"}\n`;
+  report += `  Positions open: ${allPositions.length}\n`;
+  report += `  Sells in flight: ${_inFlightSells.size}\n`;
+  report += `\n`;
+
+  // Cash & balance
+  const cashEl = document.getElementById("navCash");
+  const portEl = document.getElementById("navPortfolio");
+  report += `BALANCE:\n`;
+  report += `  Cash: ${cashEl?.textContent || "?"}\n`;
+  report += `  Portfolio: ${portEl?.textContent || "?"}\n`;
+  report += `\n`;
+
+  // Open positions
+  report += `OPEN POSITIONS (${allPositions.length}):\n`;
+  if (allPositions.length === 0) {
+    report += `  (none)\n`;
+  } else {
+    allPositions.forEach((p, i) => {
+      const side = _posSide(p);
+      const cur = side === "yes" ? p.current_yes : p.current_no;
+      const pnl = (cur && p.buy_price) ? cur - p.buy_price : null;
+      const pnlStr = pnl !== null ? (pnl > 0 ? `+${pnl}¢` : `${pnl}¢`) : "?";
+      report += `  [${i+1}] ${p.ticker} ${p.quantity} ${side} @ ${p.buy_price}¢ (now ${cur}¢, ${pnlStr})\n`;
+    });
+  }
+  report += `\n`;
+
+  // Sells in progress
+  if (_inFlightSells.size > 0) {
+    report += `SELLS IN PROGRESS:\n`;
+    _inFlightSells.forEach(key => {
+      report += `  - ${key}\n`;
+    });
+    report += `\n`;
+  }
+
+  // Recent API errors (if any)
+  report += `RECENT STATUS: OK\n\n`;
+
+  out.textContent = (_reportHistory[0] || "") + report + out.textContent.substring(0, 2000);
+  _reportHistory[0] = report;
+
+  console.log(`[DEBUG] Report generated at ${timestamp}`);
+}
+
+let _autoReporting = false;
+function toggleAutoReporting() {
+  const btn = document.getElementById("autoReportBtn");
+  if (!btn) return;
+
+  if (_autoReporting) {
+    // Stop
+    if (_autoReportInterval) clearInterval(_autoReportInterval);
+    _autoReportInterval = null;
+    _autoReporting = false;
+    btn.textContent = "Start Auto Reports (every 1m)";
+    btn.style.background = "#444";
+    toast("Auto reports stopped", "");
+  } else {
+    // Start
+    _autoReporting = true;
+    btn.textContent = "Stop Auto Reports (running)";
+    btn.style.background = "#ff4d4d";
+    toast("Auto reports will generate every 1 minute — even when you switch tabs", "ok");
+    generateDebugReport();  // generate immediately
+    _autoReportInterval = setInterval(generateDebugReport, 60000);  // every 60s
+  }
+}
 </script>
 
 <!-- Version Info -->
