@@ -263,6 +263,9 @@ def _save_tracked():
 
 # { ticker: { side, count, buy_price, title, strategy, target_pct, bought_at, status } }
 tracked: dict = {}
+
+# Queue of recent bot-made buys that the frontend hasn't announced yet
+_recent_buys_queue = []  # [{"ticker": "...", "side": "...", "count": ..., "spent": ..., "category": "..."}, ...]
 try:
     if TRACKED_FILE.exists():
         tracked = json.loads(TRACKED_FILE.read_text(encoding="utf-8"))
@@ -1303,6 +1306,15 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
                     _balance_cache["ts"] = 0
                     open_now += 1
                     bought += 1
+                    # Queue the buy for frontend announcement
+                    spent_dollars = round(contracts * pc / 100, 2)
+                    _recent_buys_queue.append({
+                        "ticker": ticker,
+                        "side": side,
+                        "count": contracts,
+                        "spent": spent_dollars,
+                        "category": m.get("category", ""),
+                    })
                     print(f"[bot:{prof}] Auto-bought {side.upper()} {ticker}: {contracts} @ {pc}¢")
             except Exception as e:
                 # Out of cash? Stop trying the rest of this cycle's candidates —
@@ -3162,6 +3174,15 @@ def active_profile_endpoint():
     active_profiles = [pid for pid in PROFILE_IDS if pid in new]
     _save_profiles()
     return jsonify({"ok": True, "active": active_profiles})
+
+
+@app.route("/api/recent-buys")
+def get_recent_buys():
+    """Fetch and clear the queue of bot-made buys that the frontend hasn't announced yet."""
+    global _recent_buys_queue
+    buys = _recent_buys_queue[:]  # copy the list
+    _recent_buys_queue = []        # clear the queue
+    return jsonify({"buys": buys})
 
 
 @app.route("/api/enrich-positions", methods=["GET"])

@@ -1709,6 +1709,21 @@ async function loadBalance(enrich=true) {
 // blank — even while the bot is hammering the Kalshi API and the enrich call is
 // stuck. The slow enrich call upgrades prices/titles/settlements when it finishes.
 let _posFastInFlight = false;
+async function checkRecentBuys() {
+  try {
+    const r = await fetch('/api/recent-buys');
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d.buys && d.buys.length > 0) {
+      for (const buy of d.buys) {
+        announceBuy(buy.count, buy.spent * 100 / buy.count, buy.spent, buy.category);
+      }
+    }
+  } catch(e) {
+    // Silent fail — not critical
+  }
+}
+
 async function loadPositionsFast() {
   recordPollTime('loadPositionsFast');
   if (_posFastInFlight) return;
@@ -2068,6 +2083,9 @@ window.addEventListener("load", () => {
 
   // Keep cash current independently of the 60s heavy refresh (cheap + cached).
   setInterval(() => { if (!document.hidden) loadCash(); }, 15000);
+
+  // Check for bot-made buys and announce them (5s interval so we catch them quickly)
+  setInterval(checkRecentBuys, 5000);
 }, {once: true});
 // Global background intervals (paused when page is hidden)
 let _bgBalanceInterval = null, _bgPnlInterval = null;
