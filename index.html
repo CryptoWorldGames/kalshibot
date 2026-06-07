@@ -4706,8 +4706,11 @@ async function loadCoach() {
     if (e.name === 'AbortError') return;
     // For other errors, show a clear message
     const msg = e.message || "Unknown error";
-    document.getElementById("coachTotals").textContent = "Coach unavailable";
-    document.getElementById("coachRecs").textContent = msg;
+    const ct = document.getElementById("coachTotals");
+    const cr = document.getElementById("coachRecs");
+    if (ct) ct.textContent = "Coach unavailable";
+    if (cr) cr.textContent = "Error: " + msg;
+    console.error("[Coach] Error:", e);
   }
 }
 
