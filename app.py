@@ -1018,25 +1018,34 @@ def _monitor():
                 should_sell = (hit_pct or hit_dol or hit_price or hit_stop_pct or hit_stop_dol) if strat_mode != "resolution" else (hit_stop_pct or hit_stop_dol)
 
                 if should_sell:
-                    # Build limit sell order with current bid price (Kalshi requires price field)
+                    # Build MARKET sell order with protective floor = current bid price
                     bid_key = "yes_bid_dollars" if pos["side"] == "yes" else "no_bid_dollars"
                     bid_d = m.get(bid_key)
-                    if bid_d is None or float(bid_d or 0) < 0.01:
+                    bid_cents = round(float(bid_d or 0) * 100) if bid_d else 0
+                    if bid_cents < 1:
                         print(f"[monitor] {ticker} bid too low to sell ({bid_d}) — skipping")
                         continue
-                    price_key = "yes_price_dollars" if pos["side"] == "yes" else "no_price_dollars"
                     # Kalshi API only accepts whole numbers - round down fractional quantities
                     count_val = int(pos["count"])
 
+                    price_key = "yes_price" if pos["side"] == "yes" else "no_price"
                     order_body = {
                         "ticker":   ticker,
                         "action":   "sell",
                         "side":     pos["side"],
-                        "type":     "limit",  # LIMIT order with current bid price
+                        "type":     "market",  # MARKET order (matches manual sell behavior)
                         "count":    count_val,
-                        price_key:  str(float(bid_d)),  # Kalshi API requires price as STRING
+                        "client_order_id": str(uuid.uuid4()),  # Required by Kalshi API
+                        price_key:  bid_cents,  # protective floor (cents, integer)
                     }
                     result = kalshi_post("/portfolio/orders", order_body)
+                    order_status = result.get("order", {}).get("status", "")
+
+                    # Check if order was actually filled (not canceled)
+                    if order_status == "canceled":
+                        print(f"[monitor] Auto-sell CANCELED: {pos.get('title', ticker)} | no fill at {bid_cents}¢")
+                        continue
+
                     with _lock:
                         if ticker in tracked:
                             tracked[ticker]["status"]     = "sold"
