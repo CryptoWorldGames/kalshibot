@@ -164,6 +164,21 @@ git push
 
 ---
 
+## 2026-06-07 Session — Monitor auto-sell now uses MARKET orders (not LIMIT)
+
+**Issue:** Auto-sell positions (monitor thread) were using LIMIT orders that would rest 
+unfilled on the book instead of executing. This caused the "not selling" problem — positions 
+stayed open because the limit orders never filled when bids moved or buyers disappeared.
+
+**Fix:** Changed monitor's sell logic (line ~1020-1040) to match the manual `/api/sell` 
+endpoint: now uses MARKET orders with protective floor = current bid. Market orders execute 
+immediately against available liquidity, never rest. If the bid moves away, Kalshi cancels 
+the order (we return "couldn't sell"); we don't accept a worse price.
+
+**Files changed:** `app.py` (monitor sell order construction).
+
+---
+
 ## 2026-06-03 Session 3 — Settings persistence fixes + portfolio enrichment starvation fix
 
 **Fixed three critical issues:**
