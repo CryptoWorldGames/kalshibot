@@ -2845,29 +2845,33 @@ def sell():
             print(f"[sell] {ticker}: {count} contracts (fractional < 1, error)")
             return jsonify({"error": f"Can't sell {count} contracts — less than 1. Position will resolve at expiry."}), 400
 
-        # TRUE MARKET SELL — executes immediately at best available bid/ask.
-        # No protective floor: market orders execute at market price right now.
-        # This ensures orders either fill instantly or cancel immediately, preventing
-        # the "stuck in selling" issue that happens with limit orders that sit pending.
+        # LIMIT SELL at current bid price — locked in price, won't sell below.
+        # Safer than market orders which could fill at terrible prices if liquidity dries up.
         order_payload = {
             "ticker": ticker,
             "client_order_id": str(uuid.uuid4()),  # Required by Kalshi API
             "action": "sell",
             "side":   side,
-            "type":   "market",  # TRUE MARKET: executes at market price with no floor
+            "type":   "limit",  # LIMIT: won't sell below this price
             "count":  count_int,
         }
+        price_key = "yes_price" if side == "yes" else "no_price"
+        order_payload[price_key] = bid_cents  # sell at this price or better
 
-        print(f"[sell] {ticker} {side} × {count_int} MARKET (at {bid_cents}¢)")
+        print(f"[sell] {ticker} {side} × {count_int} LIMIT @ {bid_cents}¢")
         result = kalshi_post("/portfolio/orders", order_payload)
         order_status = result.get("order", {}).get("status", "")
 
-        # "canceled" = nothing matched at/above the floor (bid moved or no buyers).
-        # Don't fake a sale — return honestly so the position isn't hidden and then
-        # reappears later. The user can retry, or it resolves at expiry.
+        # "canceled" = limit order didn't fill (no buyers at that price).
+        # Return error and let frontend offer retry options (lower price, wait, etc).
         if order_status == "canceled":
-            print(f"[sell] {ticker} MARKET canceled — no fill at {bid_cents}¢")
-            return jsonify({"error": f"Couldn't sell — no buyers at {bid_cents}¢ right now. Try again, or it'll resolve at expiry."}), 400
+            print(f"[sell] {ticker} LIMIT canceled — no buyers at {bid_cents}¢")
+            return jsonify({
+                "error": f"No buyers at {bid_cents}¢",
+                "reason": "limit_no_fill",
+                "tried_price": bid_cents,
+                "suggest_lower": max(1, bid_cents - 5),  # suggest ±5¢ lower as fallback
+            }), 400
     except req.HTTPError as e:
         err_text = e.response.text[:500]
         print(f"[sell] HTTPError {e.response.status_code}: {err_text}")

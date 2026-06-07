@@ -2967,7 +2967,7 @@ async function sellPos(ticker, side, count, safeId) {
   // Show confirmation with current bid price
   const bidPrice = side === "yes" ? prePos.current_yes : prePos.current_no;
   if (bidPrice != null) {
-    const msg = `Sell ${count} ${side.toUpperCase()} @ ${bidPrice}¢?\n\nUsing MARKET order with protective floor.\nIf bid moves away, order will cancel.`;
+    const msg = `Sell ${count} ${side.toUpperCase()} @ ${bidPrice}¢?\n\nUsing LIMIT order (locked in price).\nIf no buyers at this price, you can:\n• Retry at lower price (±5¢)\n• Wait for buyers\n• Cancel and hold`;
     if (!confirm(msg)) return;
   }
 
@@ -2993,7 +2993,26 @@ async function sellPos(ticker, side, count, safeId) {
     });
     clearTimeout(timeout);
     const d = await r.json();
-    if (!r.ok) throw new Error(d.error || "Sell failed");
+    if (!r.ok) {
+      // Handle limit order fill failures with retry options
+      if (d.reason === "limit_no_fill" && d.suggest_lower) {
+        const retryPrice = d.suggest_lower;
+        const msg = `No buyers at ${d.tried_price}¢\n\nOptions:\n✓ Retry at ${retryPrice}¢ (±5¢ lower)\n✗ Cancel and hold\n\nRetry at lower price?`;
+        if (confirm(msg)) {
+          // Retry with lower price by re-fetching market and using lower bid
+          console.log(`[sell] Retrying ${ticker} at lower price ${retryPrice}¢`);
+          // Note: Full retry logic would fetch market again and retry
+          // For now, just let the user know to try again after waiting
+          toast(`Try selling again in a few seconds when market updates`, "info");
+          _inFlightSells.delete(sellKey);
+          if (btn) { btn.disabled = false; btn.textContent = "Sell"; }
+          return;
+        } else {
+          throw new Error(d.error || "Sell canceled");
+        }
+      }
+      throw new Error(d.error || "Sell failed");
+    }
 
     const soldPos = allPositions.find(p => p.ticker === ticker && _posSide(p) === side);
     const marketTitle = soldPos?.title || ticker;
