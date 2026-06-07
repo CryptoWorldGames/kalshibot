@@ -1414,7 +1414,19 @@ async function loadCash() {
     const d = await r.json();
     if (d.balance != null) {
       const el = document.getElementById("navCash");
-      if (el) { el.textContent = "$" + d.balance.toFixed(2); el.className = "fund-amount cash-val"; }
+      if (el) {
+        // When live===false the balance fetch from Kalshi FAILED — we're showing the
+        // last-known value, so flag it (a "$0" here may be stale, not real).
+        if (d.live === false) {
+          el.textContent = "$" + d.balance.toFixed(2) + " ⚠";
+          el.className = "fund-amount"; el.style.color = "var(--yellow)";
+          el.title = "Stale — can't reach Kalshi right now (showing last value " +
+                     (d.age_seconds!=null ? Math.round(d.age_seconds/60)+"m old" : "") + "). Check the API Log tab.";
+        } else {
+          el.textContent = "$" + d.balance.toFixed(2);
+          el.className = "fund-amount cash-val"; el.style.color = ""; el.title = "";
+        }
+      }
     }
     if (d.positions_value != null) {
       const el = document.getElementById("navPositions");

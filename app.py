@@ -1489,9 +1489,12 @@ def _get_balance(force: bool = False):
         }
         _balance_cache["data"] = data
         _balance_cache["ts"]   = now
+        _balance_cache["live"] = True            # fresh, real Kalshi data
+        _balance_cache["last_ok"] = now
         return data
     except Exception as e:
         print(f"[balance] fetch error: {e} (serving cached={cached is not None})")
+        _balance_cache["live"] = False           # serving STALE — Kalshi unreachable
         return cached  # last-known on failure; None only if we never succeeded
 
 
@@ -1502,11 +1505,18 @@ def balance_only():
     positions/enrichment load that can get stuck behind a scan."""
     b = _get_balance()
     if not b:
-        return jsonify({"balance": None})
+        return jsonify({"balance": None, "live": False})
+    # live=False means the last Kalshi balance fetch FAILED and we're serving the
+    # last-known value — so a "$0" here may be stale, not real. The UI flags it.
+    now = time.time()
+    live = bool(_balance_cache.get("live", True))
+    age = now - _balance_cache.get("last_ok", now)
     return jsonify({
         "balance":         b["cash"],
         "positions_value": b["positions_value"],
         "portfolio_value": b["total"],
+        "live":            live,
+        "age_seconds":     round(age),
     })
 
 
