@@ -4382,6 +4382,7 @@ function announceBuy(count, priceCents, totalDollars, category, ticker) {
         text += ` for ${Math.round(_buyBatchQueue[0].priceCents)} cents`;
       }
       if (total_dollars > 0) text += `, total cost ${moneyWords(total_dollars)}`;
+      console.log("[voice] announcing buy:", text);
       speakText(text);
       _buyBatchQueue = [];
     }, 250);
