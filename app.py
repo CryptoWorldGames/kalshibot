@@ -943,7 +943,7 @@ def _monitor():
         for ticker in tickers:
             with _lock:
                 pos = tracked.get(ticker)
-                if not pos or pos["status"] != "open":
+                if not pos or pos.get("status") not in ("open", "selling"):
                     continue
                 # Already past its close time — stop probing it every cycle. This was
                 # the source of endless "holding to resolution" log spam plus a wasted
@@ -1086,28 +1086,38 @@ def _monitor():
                         "client_order_id": str(uuid.uuid4()),  # Required by Kalshi API
                         price_key:  bid_cents,  # protective floor (cents, integer)
                     }
-                    result = kalshi_post("/portfolio/orders", order_body)
-                    order_status = result.get("order", {}).get("status", "")
+                    try:
+                        result = kalshi_post("/portfolio/orders", order_body)
+                        order_status = result.get("order", {}).get("status", "")
 
-                    # Check if order was actually filled (not canceled)
-                    if order_status == "canceled":
-                        print(f"[monitor] Auto-sell CANCELED: {pos.get('title', ticker)} | no fill at {bid_cents}¢")
-                        continue
+                        # Check if order was actually filled (not canceled)
+                        if order_status == "canceled":
+                            print(f"[monitor] Auto-sell CANCELED: {pos.get('title', ticker)} | no fill at {bid_cents}¢")
+                            with _lock:
+                                if ticker in tracked:
+                                    tracked[ticker]["status"] = "open"  # revert selling status
+                            continue
 
-                    with _lock:
-                        if ticker in tracked:
-                            tracked[ticker]["status"]     = "sold"
-                            tracked[ticker]["sold_at"]    = datetime.now(timezone.utc).isoformat()
-                            tracked[ticker]["sell_price"] = bid
-                            # Mark whether this was a profit target or stop-loss
-                            if hit_stop_pct or hit_stop_dol:
-                                tracked[ticker]["sold_by"] = "bot_stop_loss"
-                            else:
-                                tracked[ticker]["sold_by"] = "bot_auto"  # auto-sell by strategy
-                    _save_tracked()
-                    title = pos.get("title", ticker)
-                    reason = "STOP-LOSS" if (hit_stop_pct or hit_stop_dol) else "PROFIT TARGET"
-                    print(f"[monitor] Auto-sold ({reason}): {title} | bid={bid}¢ profit={profit_pct:.1f}% / ${profit_dollars:.2f}")
+                        with _lock:
+                            if ticker in tracked:
+                                tracked[ticker]["status"]     = "sold"
+                                tracked[ticker]["sold_at"]    = datetime.now(timezone.utc).isoformat()
+                                tracked[ticker]["sell_price"] = bid
+                                # Mark whether this was a profit target or stop-loss
+                                if hit_stop_pct or hit_stop_dol:
+                                    tracked[ticker]["sold_by"] = "bot_stop_loss"
+                                else:
+                                    tracked[ticker]["sold_by"] = "bot_auto"  # auto-sell by strategy
+                        _save_tracked()
+                        title = pos.get("title", ticker)
+                        reason = "STOP-LOSS" if (hit_stop_pct or hit_stop_dol) else "PROFIT TARGET"
+                        print(f"[monitor] Auto-sold ({reason}): {title} | bid={bid}¢ profit={profit_pct:.1f}% / ${profit_dollars:.2f}")
+                    except Exception as e:
+                        # If kalshi_post or result processing fails, revert selling status
+                        with _lock:
+                            if ticker in tracked:
+                                tracked[ticker]["status"] = "open"  # revert selling status
+                        raise
 
             except Exception as e:
                 print(f"[monitor] Error checking {ticker}: {e}")
@@ -1777,7 +1787,7 @@ def portfolio():
         tracked_snap = {k: dict(v) for k, v in tracked.items()}
 
     for ticker, info in tracked_snap.items():
-        if ticker in live_tickers or info.get("status") != "open":
+        if ticker in live_tickers or info.get("status") not in ("open", "selling"):
             continue
         # Also skip anything just sold via the UI (status may not have flushed yet)
         if _is_recently_sold(ticker, info.get("side", "yes")):
@@ -2903,7 +2913,7 @@ def positions():
         snap = {k: dict(v) for k, v in tracked.items()}
 
     for ticker, pos in snap.items():
-        if pos["status"] != "open":
+        if pos.get("status") not in ("open", "selling"):
             continue
         try:
             m     = _get_market(ticker)
@@ -3812,7 +3822,7 @@ if __name__ == "__main__":
         sys.exit(0)
     print("Open http://localhost:5003")
 
-    # Health check: ensure Kalshi API is reachable before starting
+    # Health check: attempt Kalshi API connection, but don't block startup if it fails
     try:
         bal = kalshi_get("/portfolio/balance")
         if not bal or "balance" not in bal:
@@ -3820,12 +3830,8 @@ if __name__ == "__main__":
         else:
             print(f"✓ Kalshi API reachable (balance: ${float(bal.get('balance_dollars') or 0):.2f})")
     except Exception as e:
-        print(f"\n⚠️  ERROR: Cannot reach Kalshi API: {e}")
-        print("Check your internet connection and API credentials.\n")
-        try:
-            input("Press Enter to continue anyway or Ctrl+C to exit...")
-        except (EOFError, KeyboardInterrupt):
-            sys.exit(1)
+        print(f"\n⚠️  WARNING: Cannot reach Kalshi API: {e}")
+        print("Bot will start, but will be unable to trade until the connection is restored.\n")
 
     # threaded=True is critical: the scan loop and slow Kalshi API calls can each
     # tie up a worker for seconds at a time. Single-threaded (the Werkzeug default)
