@@ -2319,12 +2319,14 @@ function onProbDownInput() {
 // Removed duplicate/broken handlers — HTML already has oninput="onProbInput()" and onProbDownInput()
 
 function setTime(val, label) {
-  selTime = val === "custom" ? parseInt(document.getElementById("timeCustom").value) : val;
+  selTime = val === "custom" ? parseInt(document.getElementById("timeCustom")?.value) : val;
   activatePills("timeGroup", val === "custom" ? "Custom" : (label || val + " min"));
   const c = val === "custom";
-  document.getElementById("timeCustom").style.display      = c ? "inline-block" : "none";
-  document.getElementById("timeCustomLabel").style.display = c ? "inline" : "none";
-  if (c) document.getElementById("timeCustom").oninput = () => { selTime = parseInt(document.getElementById("timeCustom").value) || 15; saveSettings(); };
+  const tcEl = document.getElementById("timeCustom");
+  const tlEl = document.getElementById("timeCustomLabel");
+  if (tcEl) tcEl.style.display = c ? "inline-block" : "none";
+  if (tlEl) tlEl.style.display = c ? "inline" : "none";
+  if (c && tcEl) tcEl.oninput = () => { selTime = parseInt(tcEl.value) || 15; saveSettings(); };
   saveSettings();
 }
 
@@ -4355,9 +4357,13 @@ function announceBuy(count, priceCents, totalDollars, category, ticker) {
     const cryptoStr = tickerNames.length === 1 ? tickerNames[0] : tickerNames.join(" and ");
 
     setTimeout(() => {
+      if (_buyBatchQueue.length === 0) {
+        console.log("[voice] buy queue empty, skipping announcement");
+        return;
+      }
       let text = `you bought ${contractPhrase(total_count, null)}`;
       if (cryptoStr) text += ` of ${cryptoStr}`;
-      if (total_count === 1 && _buyBatchQueue[0].priceCents != null) {
+      if (total_count === 1 && _buyBatchQueue[0] && _buyBatchQueue[0].priceCents != null) {
         text += ` for ${Math.round(_buyBatchQueue[0].priceCents)} cents`;
       }
       if (total_dollars > 0) text += `, total cost ${moneyWords(total_dollars)}`;
