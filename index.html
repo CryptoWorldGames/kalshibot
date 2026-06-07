@@ -3779,7 +3779,11 @@ async function sellSelected() {
 
 async function confirmSellAll() {
   if (!allPositions.length) return;
-  if (!confirm(`Sell ALL ${allPositions.length} open position(s)?`)) return;
+  const totalValue = allPositions.reduce((sum, p) => {
+    const cur = (p.quantity??0) > 0 ? p.current_yes : p.current_no;
+    return sum + (cur != null ? Math.abs(p.quantity||0) * cur / 100 : 0);
+  }, 0);
+  if (!confirm(`⚠️ SELL ALL ${allPositions.length} position(s) worth ~$${totalValue.toFixed(2)}?\n\nClick OK to confirm, Cancel to abort.`)) return;
   let soldCount = 0;
   for (const pos of allPositions) {
     const qty  = pos.quantity ?? 0;

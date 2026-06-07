@@ -36,7 +36,7 @@ app = Flask(__name__)
 HERE = Path(__file__).resolve().parent
 BASE_URL = "https://api.elections.kalshi.com"
 API_PREFIX = "/trade-api/v2"
-DEBUG_LOGGING = True  # Set to True for verbose logs, False for production — ENABLED TO DIAGNOSE SCAN FILTERING
+DEBUG_LOGGING = False  # Set to True for verbose logs, False for production — DISABLED FOR PRODUCTION
 
 # Category detection cache — avoid re-detecting same market
 _category_cache = {}
@@ -151,8 +151,8 @@ def _log_api(method, ep, status, ms):
     try:
         _api_log.append({"ts": time.time(), "method": method,
                          "ep": ep, "status": status, "ms": round(ms)})
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[api_log] record error: {e}")
 _max_retries = 4
 _api_lock = threading.Lock()
 
@@ -282,13 +282,14 @@ RECENTLY_SOLD_TTL = 120  # seconds
 def _is_recently_sold(ticker: str, side: str) -> bool:
     """True if `ticker`/`side` was sold within the last RECENTLY_SOLD_TTL seconds.
     Prunes expired entries as a side effect so the dict stays small."""
-    entry = _recently_sold.get(ticker)
-    if not entry:
-        return False
-    if time.time() - entry.get("at", 0) > RECENTLY_SOLD_TTL:
-        _recently_sold.pop(ticker, None)  # expired — clean up
-        return False
-    return entry.get("side") == side
+    with _lock:
+        entry = _recently_sold.get(ticker)
+        if not entry:
+            return False
+        if time.time() - entry.get("at", 0) > RECENTLY_SOLD_TTL:
+            _recently_sold.pop(ticker, None)  # expired — clean up
+            return False
+        return entry.get("side") == side
 
 # Sell strategy settings (updated from frontend)
 sell_settings = {
@@ -299,7 +300,8 @@ sell_settings = {
 # Global sell strategy — load from file so it survives Flask restarts
 try:
     sell_strategy = json.loads(STRATEGY_FILE.read_text(encoding="utf-8")) if STRATEGY_FILE.exists() else {}
-except Exception:
+except Exception as e:
+    print(f"[strategy] load error: {e}")
     sell_strategy = {}
 sell_strategy.setdefault("mode", "resolution")
 sell_strategy.setdefault("target_pct", 10.0)
@@ -324,7 +326,8 @@ _DEFAULT_BUY_SETTINGS = {
 }
 try:
     _bs_loaded = json.loads(BUY_SETTINGS_FILE.read_text(encoding="utf-8")) if BUY_SETTINGS_FILE.exists() else {}
-except Exception:
+except Exception as e:
+    print(f"[buy_settings] load error: {e}")
     _bs_loaded = {}
 buy_settings = {**_DEFAULT_BUY_SETTINGS, **_bs_loaded}
 
@@ -871,13 +874,28 @@ def _mark_price_cents(m: dict, side: str) -> float | None:
     return bid  # None or 0
 
 
+def _kalshi_get_with_timeout(endpoint: str, params: dict = None, timeout_secs: float = 5.0) -> dict:
+    """Get from Kalshi with a short timeout for monitor thread — skip on timeout."""
+    try:
+        # Use a separate thread to fetch with timeout
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(kalshi_get, endpoint, params)
+            return future.result(timeout=timeout_secs)
+    except concurrent.futures.TimeoutError:
+        print(f"[monitor] {endpoint} timed out ({timeout_secs}s) — skipping")
+        return {}
+    except Exception as e:
+        print(f"[monitor] {endpoint} error: {e}")
+        return {}
+
 def _monitor():
     while True:
         time.sleep(45)
         # Auto-adopt manually bought Kalshi positions into tracked so the sell
         # strategy applies to them too.  Only adds; never overwrites bot entries.
         try:
-            port = kalshi_get("/portfolio/positions", {"limit": 200})
+            port = _kalshi_get_with_timeout("/portfolio/positions", {"limit": 200}, timeout_secs=10.0)
             for p in port.get("positions", []):
                 ticker = p.get("market_ticker") or p.get("ticker", "")
                 qty    = p.get("position", 0) or 0
@@ -934,7 +952,7 @@ def _monitor():
                     continue
 
             try:
-                data = kalshi_get(f"/markets/{ticker}")
+                data = _kalshi_get_with_timeout(f"/markets/{ticker}", timeout_secs=5.0)
                 m = data.get("market", {})
                 bid_d = m.get("yes_bid_dollars") if pos["side"] == "yes" else m.get("no_bid_dollars")
                 bid = _dollars_to_cents(bid_d)
