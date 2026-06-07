@@ -5706,16 +5706,19 @@ function renderLottoStats() {
   const hist = [];
   settledT2.forEach(s => {
     const cps = Math.round(100 * (s.cost || 0) / Math.max(s.count || 1, 1));
+    const totalCost = s.cost || 0;
+    const resolvedValue = (s.count || 0) * cps / 100 + (s.pnl || 0);
     hist.push({ t: s.settled_time || "", kind: s.won ? "WON" : "LOST",
       color: s.won ? "var(--green)" : "var(--red)",
       title: s.title || s.ticker, side: (s.side||"").toUpperCase(),
-      qty: s.count || 0, cents: cps, pnl: s.pnl });
+      qty: s.count || 0, cents: cps, pnl: s.pnl, cost: totalCost, resolved: resolvedValue });
   });
   openT2.forEach(p => {
     const abs = Math.abs(p.quantity || 0);
+    const totalCost = abs * (p.buy_price || 0) / 100;
     hist.push({ t: p.bought_at || "", kind: "BUY", color: "#5b9dff",
       title: p.title || p.ticker, side: (p.quantity>=0?"YES":"NO"),
-      qty: abs, cents: p.buy_price || 0, pnl: null });
+      qty: abs, cents: p.buy_price || 0, pnl: null, cost: totalCost, resolved: null });
   });
   hist.sort((a,b) => (b.t||"").localeCompare(a.t||""));
   const fmtTs = iso => { try { const d=new Date(iso); return d.toLocaleString([], {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit",second:"2-digit"}); } catch(e){ return "—"; } };
@@ -5723,9 +5726,11 @@ function renderLottoStats() {
     <div style="font-weight:700;margin:18px 0 6px">🧾 History — every buy &amp; sell</div>
     <div style="overflow:auto;max-height:350px;border:1px solid #1e2530;border-radius:6px"><table class="flat-tbl" style="width:100%;font-size:11px;border-collapse:collapse">
       <thead style="position:sticky;top:0;background:#0d1117;z-index:10"><tr style="color:var(--muted);text-align:left">
-        <th style="padding:6px 8px">Time</th><th style="padding:6px 8px">Type</th><th style="padding:6px 8px">Market</th><th style="padding:6px 8px">Position</th><th style="padding:6px 8px;text-align:right">P&amp;L</th></tr></thead>
+        <th style="padding:6px 8px">Time</th><th style="padding:6px 8px">Type</th><th style="padding:6px 8px">Market</th><th style="padding:6px 8px">Position</th><th style="padding:6px 8px;text-align:right">Cost</th><th style="padding:6px 8px;text-align:right">Sold For</th><th style="padding:6px 8px;text-align:right">P&amp;L</th></tr></thead>
       <tbody>${hist.map((h,i) => {
         const bg = i % 2 ? "#141414" : "transparent";
+        const costHtml = h.cost != null ? `$${h.cost.toFixed(2)}` : '—';
+        const resolvedHtml = h.resolved != null ? `$${h.resolved.toFixed(2)}` : (h.kind === "BUY" ? '—' : '<span style="color:#888">—</span>');
         const pnl = h.kind === "BUY"
           ? `<span style="color:#888">open</span>`
           : (h.pnl == null ? `<span style="color:#888">—</span>`
@@ -5733,8 +5738,10 @@ function renderLottoStats() {
         return `<tr style="background:${bg}">
           <td style="padding:4px 8px;white-space:nowrap;color:#888">${fmtTs(h.t)}</td>
           <td style="padding:4px 8px;font-weight:800;color:${h.color};white-space:nowrap">${h.kind}</td>
-          <td style="padding:4px 8px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(h.title)}</td>
-          <td style="padding:4px 8px;white-space:nowrap">${h.side} ${h.qty}×@${h.cents}¢</td>
+          <td style="padding:4px 8px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(h.title)}</td>
+          <td style="padding:4px 8px;white-space:nowrap;font-size:10px">${h.side} ${h.qty}×@${h.cents}¢</td>
+          <td style="padding:4px 8px;text-align:right;white-space:nowrap">${costHtml}</td>
+          <td style="padding:4px 8px;text-align:right;white-space:nowrap">${resolvedHtml}</td>
           <td style="padding:4px 8px;text-align:right;white-space:nowrap">${pnl}</td></tr>`; }).join("")}
       </tbody></table></div>` : "";
 
