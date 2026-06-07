@@ -2907,16 +2907,15 @@ async function sellPos(ticker, side, count, safeId) {
     const marketTitle = soldPos?.title || ticker;
 
     // Use EXECUTED price from response, not stale current_yes/current_no
-    const executedPriceCents = d.executed_price_cents;
-    const soldProfit = (soldPos?.buy_price != null && executedPriceCents != null)
-      ? count * (executedPriceCents - soldPos.buy_price) / 100 : null;
+    const executedPriceCents = d.executed_price_cents ?? d.bid_price_cents;
+    const buyPrice = soldPos?.buy_price ?? soldPos?.bought_at ?? null;
+    const soldProfit = (buyPrice != null && executedPriceCents != null)
+      ? count * (executedPriceCents - buyPrice) / 100 : 0;
 
     toast(`✓ Sold ${count} ${side.toUpperCase()} · ${marketTitle}`, "ok");
-    // Announce sell with audio feedback (happy for profit, sad for loss)
-    if (soldProfit != null) {
-      const totalReceived = executedPriceCents != null ? count * executedPriceCents / 100 : null;
-      announceSell(count, soldProfit, executedPriceCents, totalReceived, soldPos?.category);
-    }
+    // Always announce sell — use profit=0 (break even sound) if we can't calculate exact profit
+    const totalReceived = executedPriceCents != null ? count * executedPriceCents / 100 : null;
+    announceSell(count, soldProfit, executedPriceCents, totalReceived, soldPos?.category);
     addToSaleTicker(marketTitle, soldProfit, side);
     selectedPosTickers.delete(ticker);
 
