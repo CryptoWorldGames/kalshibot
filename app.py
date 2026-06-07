@@ -35,8 +35,20 @@ from flask import Flask, jsonify, request, send_from_directory, make_response
 
 app = Flask(__name__)
 HERE = Path(__file__).resolve().parent
+
+# Load environment variables from .env
+env_file = HERE / ".env"
+if env_file.exists():
+    with open(env_file) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                key, value = line.split("=", 1)
+                os.environ[key.strip()] = value.strip()
+
 BASE_URL = "https://api.elections.kalshi.com"
 API_PREFIX = "/trade-api/v2"
+FLASK_PORT = int(os.getenv("KALSHI_BOT_PORT", "5003"))
 
 # Bot identity — shown in the terminal banner/title and the web UI header so you
 # always know which build is running. Bump BOT_VERSION when you ship changes.
@@ -4062,18 +4074,18 @@ def _print_banner():
 
 if __name__ == "__main__":
     _print_banner()
-    if _already_running(5003):
+    if _already_running(FLASK_PORT):
         print("=" * 60)
-        print(f"{BOT_NAME} is ALREADY RUNNING (port 5003 is in use).")
+        print(f"{BOT_NAME} is ALREADY RUNNING (port {FLASK_PORT} is in use).")
         print("This window will close — use the one that's already open,")
-        print("or open http://localhost:5003 in your browser.")
+        print(f"or open http://localhost:{FLASK_PORT} in your browser.")
         print("=" * 60)
         try:
             input("Press Enter to close...")
         except EOFError:
             pass
         sys.exit(0)
-    print("Open http://localhost:5003")
+    print(f"Open http://localhost:{FLASK_PORT}")
 
     # Health check: attempt Kalshi API connection, but don't block startup if it fails
     try:
@@ -4092,7 +4104,7 @@ if __name__ == "__main__":
     # so the browser falls back to its cached "offline copy" snapshot — even though
     # the bot is running fine. Multi-threaded lets navigation + API + scan run at
     # once so the UI is always reachable.
-    app.run(debug=False, host="0.0.0.0", port=5003, threaded=True)
+    app.run(debug=False, host="0.0.0.0", port=FLASK_PORT, threaded=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
