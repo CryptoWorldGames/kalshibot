@@ -527,6 +527,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   <button class="tab-btn" onclick="switchTab('debug')">Debug</button>
   <button class="tab-btn" id="tabCoach" onclick="switchTab('coach')">Coach</button>
   <button class="tab-btn" id="tabApiLog" onclick="switchTab('apilog')">API Log</button>
+  <button class="tab-btn" id="tabPolling" onclick="switchTab('polling')">Polling</button>
 </div>
 
 <!-- ── Bot Status Bar (BELOW TABS) ─────────────────────────────────────────────── -->
@@ -1257,6 +1258,26 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   </div>
 </div><!-- /tab-apilog -->
 
+<!-- ── Polling tab — frontend polling status ── -->
+<div id="tab-polling" class="tab-pane">
+  <div class="card">
+    <div class="card-title">📊 Polling Monitor — Frontend API calls</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">
+      Shows when each endpoint was last called. Green = recent, yellow = stale, red = never called. Updates every 1s.
+    </div>
+    <div style="max-height:70vh;overflow:auto;border:1px solid var(--border);border-radius:8px">
+      <table class="flat-tbl" style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="position:sticky;top:0;background:#161616;text-align:left;z-index:10">
+          <th style="padding:6px 10px">Endpoint</th><th style="padding:6px 10px">Last Called</th><th style="padding:6px 10px">Interval</th><th style="padding:6px 10px">Status</th>
+        </tr></thead>
+        <tbody id="pollingBody">
+          <tr><td colspan="4" style="padding:14px;color:var(--muted)">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div><!-- /tab-polling -->
+
 <!-- ── Debug tab — real-time status + background report generator ── -->
 <div id="tab-debug" class="tab-pane">
   <div class="card">
@@ -1437,6 +1458,7 @@ function _setOfflineBanner(show) {
 }
 
 async function loadBotStatus() {
+  recordPollTime('loadBotStatus');
   try {
     const r = await fetch("/api/bot/status", {cache: "no-store"});
     const d = await r.json();
@@ -1560,6 +1582,7 @@ async function loadBalance(enrich=true) {
   // this guard concurrent calls pile up and time out (the AbortError console spam).
   if (_loadBalanceInFlight) return;
   _loadBalanceInFlight = true;
+  recordPollTime('loadBalance');
   try {
     const enrichParam = enrich ? "true" : "false";
     const controller = new AbortController();
@@ -1687,6 +1710,7 @@ async function loadBalance(enrich=true) {
 // stuck. The slow enrich call upgrades prices/titles/settlements when it finishes.
 let _posFastInFlight = false;
 async function loadPositionsFast() {
+  recordPollTime('loadPositionsFast');
   if (_posFastInFlight) return;
   _posFastInFlight = true;
   try {
@@ -1949,6 +1973,7 @@ async function enrichStaged() {
 }
 
 async function enrichPositionMarkets(tickerList, titleOnly) {
+  recordPollTime('enrichPositionMarkets');
   const tickers = ((tickerList && tickerList.length) ? tickerList
                    : allPositions.map(p => p.ticker)).filter(Boolean);
   if (!tickers.length) return;
@@ -1990,6 +2015,7 @@ async function enrichPositionMarkets(tickerList, titleOnly) {
 // Dedicated settlements loader — independent of the slow /api/portfolio enrich so
 // the Recent Settlements table fills in on its own and never gets stuck loading.
 async function loadSettlements() {
+  recordPollTime('loadSettlements');
   try {
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 25000);
@@ -2411,6 +2437,7 @@ function syncFabButtons() {
 let _lastScanResultsTs = 0; // timestamp of last scan that found results
 
 async function scan() {
+  recordPollTime('scan');
   if (scanInProgress) return;
   scanInProgress = true;
   // Safety: force-unlock after 30s so scan button never stays stuck
@@ -3253,7 +3280,7 @@ function renderMarkets() {
   document.getElementById("marketsWrap").innerHTML = `
     <div class="tbl-wrap">
       <table>
-        <thead><tr>
+        <thead><tr style="position:sticky;top:0;background:var(--card);z-index:10">
           <th style="width:36px"><input type="checkbox" checked id="mAllChk" style="accent-color:var(--green)" onchange="toggleAllMarkets(this.checked)"></th>
           <th>Market</th><th>Side</th><th>Price</th><th>Closes In</th><th>If it wins</th><th>Buy</th><th>Result</th>
         </tr></thead>
@@ -4277,6 +4304,7 @@ function renderCoachLotto(d) {
 }
 
 async function loadApiLog() {
+  recordPollTime('loadApiLog');
   try {
     const r = await fetch("/api/apilog", {cache:"no-store"});
     const d = await r.json();
@@ -4311,7 +4339,52 @@ async function loadApiLog() {
   }
 }
 
+// ── Polling Monitor — track when each endpoint was last called ──
+const _pollTimes = {
+  'loadBotStatus': { last: 0, interval: 10000 },
+  'loadBalance': { last: 0, interval: 60000 },
+  'loadCash': { last: 0, interval: 15000 },
+  'loadPnl': { last: 0, interval: 300000 },
+  'scan': { last: 0, interval: 15000 },  // varies but ~15s
+  'loadPositionsFast': { last: 0, interval: 30000 },
+  'enrichPositionMarkets': { last: 0, interval: 60000 },
+  'loadSettlements': { last: 0, interval: 60000 },
+  'loadLottoHistory': { last: 0, interval: 30000 },
+  'loadStats': { last: 0, interval: 60000 },
+  'loadCoach': { last: 0, interval: 60000 },
+  'loadApiLog': { last: 0, interval: 10000 },
+};
+
+function recordPollTime(endpoint) {
+  if (_pollTimes[endpoint]) {
+    _pollTimes[endpoint].last = Date.now();
+  }
+}
+
+function renderPollingMonitor() {
+  const body = document.getElementById("pollingBody");
+  if (!body) return;
+
+  const now = Date.now();
+  const rows = Object.entries(_pollTimes).map(([name, info]) => {
+    const msAgo = now - info.last;
+    const sAgo = Math.round(msAgo / 1000);
+    const status = info.last === 0 ? '—' : sAgo <= 5 ? '✓ Active' : sAgo <= info.interval / 1000 ? 'OK' : 'Stale';
+    const color = info.last === 0 ? '#666' : sAgo <= 5 ? 'var(--green)' : sAgo <= info.interval / 1000 ? 'var(--yellow)' : 'var(--red)';
+    const timeStr = info.last === 0 ? 'never' : sAgo < 60 ? sAgo + 's ago' : Math.round(sAgo / 60) + 'm ago';
+    const intervalStr = (info.interval / 1000) + 's';
+    return `<tr style="border-top:1px solid var(--border)">
+      <td style="padding:6px 10px;font-weight:600">${name}</td>
+      <td style="padding:6px 10px;color:var(--muted)">${timeStr}</td>
+      <td style="padding:6px 10px;color:var(--muted)">${intervalStr}</td>
+      <td style="padding:6px 10px;color:${color};font-weight:700">${status}</td></tr>`;
+  }).join("");
+
+  body.innerHTML = rows || '<tr><td colspan="4" style="padding:14px;color:var(--muted)">No polls yet.</td></tr>';
+}
+
 async function loadCoach() {
+  recordPollTime('loadCoach');
   try {
     // Send current filter settings to Coach for analysis
     const filters = {
@@ -4405,7 +4478,7 @@ function coachBucketTable(elId, rows, label) {
     </tr>`;
   }).join("");
   el.innerHTML = `<div class="tbl-wrap"><table>
-    <thead><tr><th>${label}</th><th>n</th><th>WR</th><th>P&L</th></tr></thead>
+    <thead><tr style="position:sticky;top:0;background:var(--card);z-index:10"><th>${label}</th><th>n</th><th>WR</th><th>P&L</th></tr></thead>
     <tbody>${body}</tbody></table></div>`;
 }
 
@@ -4902,6 +4975,13 @@ function switchTab(name) {
   } else {
     if (window._apiLogRefresh) { clearInterval(window._apiLogRefresh); window._apiLogRefresh = null; }
   }
+  if (name === "polling") {
+    renderPollingMonitor();
+    if (window._pollingRefresh) clearInterval(window._pollingRefresh);
+    if (!document.hidden) window._pollingRefresh = setInterval(renderPollingMonitor, 1000);
+  } else {
+    if (window._pollingRefresh) { clearInterval(window._pollingRefresh); window._pollingRefresh = null; }
+  }
   if (name === "positions") {
     // Staged: list (fast) -> top-10 biggest positions' prices -> the rest -> settlements.
     loadPositionsFast().then(() => enrichStaged());
@@ -5057,6 +5137,7 @@ async function copyDiagnostics() {
 }
 
 async function loadStats() {
+  recordPollTime('loadStats');
   const el = document.getElementById("statsContent");
   if (!el) return;
   el.textContent = "Loading…";
@@ -5082,7 +5163,7 @@ async function loadStats() {
         </tr>`).join("");
       el.innerHTML = `
         <div class="tbl-wrap"><table>
-          <thead><tr>
+          <thead><tr style="position:sticky;top:0;background:var(--card);z-index:10">
             <th>Category</th><th>Buys</th><th>Open</th><th>Sold</th>
             <th>Wins</th><th>Losses</th><th>Win%</th><th>P&amp;L</th>
           </tr></thead>
@@ -5493,6 +5574,7 @@ function _statBox(label, value, color) {
 // Pull a wide (30-day) settlement window just for the Lotto history ledger, so it
 // shows a full history without changing the Settled tab's own period filter.
 async function loadLottoHistory() {
+  recordPollTime('loadLottoHistory');
   try {
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 25000);
