@@ -1082,11 +1082,13 @@ def _monitor():
                             print(f"[monitor] Error checking expiration time for {ticker}: {e}")
                             pass
 
-                # Use per-position target if set, otherwise fall back to current global settings
+                # Use per-position target if set, otherwise fall back to the position's PROFILE strategy
+                # (not the global — each profile has its own sell strategy)
                 profit_dollars = pos["count"] * (bid - pos["buy_price"]) / 100 if pos.get("buy_price") else None
+                prof_strat = _sell_profiles.get(pos.get("profile")) or {}
 
                 # ENFORCE SINGLE-MODE STRATEGY: only check conditions matching the current mode
-                strat_mode = sell_strategy.get("mode", "resolution")
+                strat_mode = prof_strat.get("mode", "resolution")
 
                 # Initialize all as False; only set based on active mode
                 hit_pct = False
@@ -1097,22 +1099,22 @@ def _monitor():
 
                 # Only check profit % if mode is "profit"
                 if strat_mode == "profit":
-                    target_pct = pos.get("target_pct") or sell_strategy.get("target_pct")
+                    target_pct = pos.get("target_pct") or prof_strat.get("target_pct")
                     hit_pct = target_pct is not None and profit_pct >= target_pct
 
                 # Only check profit $ if mode is "profit_dollars"
                 if strat_mode == "profit_dollars":
-                    target_dollars = pos.get("target_dollars") or sell_strategy.get("target_dollars")
+                    target_dollars = pos.get("target_dollars") or prof_strat.get("target_dollars")
                     hit_dol = target_dollars is not None and profit_dollars is not None and profit_dollars >= target_dollars
 
                 # Only check target price if mode is "target_price"
                 if strat_mode == "target_price":
-                    target_price_c = pos.get("target_price_cents") or sell_strategy.get("target_price_cents")
+                    target_price_c = pos.get("target_price_cents") or prof_strat.get("target_price_cents")
                     hit_price = target_price_c is not None and bid >= target_price_c
 
-                # Stop-loss applies to all modes (safety measure)
-                stop_loss_pct = sell_strategy.get("stop_loss_pct")
-                stop_loss_dol = sell_strategy.get("stop_loss_dol")
+                # Stop-loss applies to all modes (safety measure), but use the position's PROFILE strategy
+                stop_loss_pct = prof_strat.get("stop_loss_pct")
+                stop_loss_dol = prof_strat.get("stop_loss_dol")
                 hit_stop_pct = stop_loss_pct is not None and profit_pct <= -stop_loss_pct
                 hit_stop_dol = stop_loss_dol is not None and profit_dollars is not None and profit_dollars <= -stop_loss_dol
 
