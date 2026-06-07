@@ -4306,8 +4306,11 @@ function renderCoachLotto(d) {
 async function loadApiLog() {
   recordPollTime('loadApiLog');
   try {
-    const r = await fetch("/api/apilog", {cache:"no-store"});
-    const d = await r.json();
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 15000);
+    const r = await fetch("/api/apilog", {cache:"no-store", signal: ctrl.signal});
+    clearTimeout(to);
+    const d = await r.json() || {};
     const chip = (label, val, color) =>
       `<div style="background:#161616;border:1px solid var(--border);border-radius:8px;padding:8px 14px">
          <div style="font-size:20px;font-weight:800;color:${color}">${val}</div>
@@ -4334,6 +4337,9 @@ async function loadApiLog() {
         <td style="padding:5px 10px;color:var(--muted)">${e.ms}</td></tr>`;
     }).join("");
   } catch(e) {
+    // Ignore AbortErrors (happens on tab switch or timeout)
+    if (e.name === 'AbortError') return;
+    // Show connection error if it's a real issue
     document.getElementById("apiLogBody").innerHTML =
       '<tr><td colspan="5" style="padding:14px;color:var(--red)">Bot not reachable (is it running?)</td></tr>';
   }
@@ -4460,7 +4466,12 @@ async function loadCoach() {
     coachBucketTable("coachSides",  d.by_side       || [], "Side");
     coachBucketTable("coachHours",  d.by_hour_utc   || [], "Hour");
   } catch(e) {
-    document.getElementById("coachTotals").textContent = "Coach unavailable: " + e.message;
+    // Ignore AbortErrors (happens when tab switches or timeout fires)
+    if (e.name === 'AbortError') return;
+    // For other errors, show a clear message
+    const msg = e.message || "Unknown error";
+    document.getElementById("coachTotals").textContent = "Coach unavailable";
+    document.getElementById("coachRecs").textContent = msg;
   }
 }
 
@@ -5104,9 +5115,32 @@ async function runDebugScan() {
   }
 }
 
+// ── Clipboard helper with fallback for non-HTTPS ──
+function copyToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(text);
+  } else {
+    // Fallback for http:// or older browsers
+    return new Promise((resolve, reject) => {
+      try {
+        const el = document.createElement('textarea');
+        el.value = text;
+        el.style.position = 'fixed';
+        el.style.opacity = '0';
+        document.body.appendChild(el);
+        el.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(el);
+        if (ok) resolve();
+        else reject(new Error('execCommand failed'));
+      } catch(e) { reject(e); }
+    });
+  }
+}
+
 function copyDebugScan() {
   const el = document.getElementById("debugScanOut");
-  navigator.clipboard.writeText(el.textContent).then(() => toast("Copied!", "ok")).catch(() => toast("Failed to copy", "err"));
+  copyToClipboard(el.textContent).then(() => toast("Copied!", "ok")).catch(() => toast("Failed to copy", "err"));
 }
 
 async function copyDiagnostics() {
@@ -5129,7 +5163,7 @@ async function copyDiagnostics() {
       `Results: ${Array.isArray(scan) ? scan.length : 0} found`,
       Array.isArray(scan) && scan.length ? '\nTop 3:' + scan.slice(0,3).map(m=>`\n  ${m.ticker} ${m.side} ${m.price}¢`).join('') : '',
     ].filter(Boolean).join('\n');
-    await navigator.clipboard.writeText(lines);
+    await copyToClipboard(lines);
     toast("✓ Diagnostics copied!", "ok");
   } catch(e) {
     toast("Error: " + e.message, "err");
