@@ -955,17 +955,17 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 
     <!-- Limits -->
     <div style="border:1px solid var(--border);border-radius:8px;padding:12px">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <label style="font-size:12px;color:var(--muted)">Ends within (min) <button type="button" onclick="document.getElementById('L_minutes').value=525600;pushLottoSettings()" style="font-size:10px;font-weight:700;padding:2px 8px;border:1px solid var(--border);border-radius:5px;background:#161616;color:var(--green);cursor:pointer;margin-left:4px">Show all</button><br><input type="number" id="L_minutes" min="1" value="525600" onchange="pushLottoSettings()" style="width:64px;min-width:64px"></label>
-        <label style="font-size:12px;color:var(--muted)">Max $ per buy<br><input type="number" id="L_buyAmount" min="0.01" step="0.01" value="0.15" onchange="pushLottoSettings()"></label>
-        <label style="font-size:12px;color:var(--muted)">Max buys / scan<br><input type="number" id="L_autoMaxPerScan" min="1" value="10" onchange="pushLottoSettings()"></label>
-        <label style="font-size:12px;color:var(--muted)">Max open positions<br><input type="number" id="L_autoMaxConcurrent" min="1" value="999" onchange="pushLottoSettings()"></label>
-        <label style="font-size:12px;color:var(--muted)">Max buys / market<br><input type="number" id="L_maxBuysPerMarket" min="1" value="1" onchange="pushLottoSettings()"></label>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px">
+        <label style="font-size:12px;color:var(--muted)">Ends within (min)<button type="button" onclick="document.getElementById('L_minutes').value=525600;pushLottoSettings()" style="font-size:10px;font-weight:700;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:#161616;color:var(--green);cursor:pointer;margin-left:6px">Show all</button><br><input type="number" id="L_minutes" min="1" value="525600" onchange="pushLottoSettings()" style="width:100%;margin-top:4px"></label>
+        <label style="font-size:12px;color:var(--muted)">Max $ per buy<br><input type="number" id="L_buyAmount" min="0.01" step="0.01" value="0.15" onchange="pushLottoSettings()" style="width:100%;margin-top:4px"></label>
+        <label style="font-size:12px;color:var(--muted)">Max buys / scan<br><input type="number" id="L_autoMaxPerScan" min="1" value="10" onchange="pushLottoSettings()" style="width:100%;margin-top:4px"></label>
+        <label style="font-size:12px;color:var(--muted)">Max open positions<br><input type="number" id="L_autoMaxConcurrent" min="1" value="999" onchange="pushLottoSettings()" style="width:100%;margin-top:4px"></label>
+        <label style="font-size:12px;color:var(--muted)">Max qty per ticker<br><input type="number" id="L_maxBuysPerMarket" min="1" value="1" onchange="pushLottoSettings()" style="width:100%;margin-top:4px" title="Max contracts to buy of same ticker (prevents over-concentration)"></label>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px">
-        <label style="font-size:12px;color:var(--muted)">Min age (min)<br><input type="number" id="L_minAgeMins" min="0" placeholder="any" onchange="pushLottoSettings()"></label>
-        <label style="font-size:12px;color:var(--muted)">Max age (min)<br><input type="number" id="L_maxAgeMins" min="0" placeholder="any" onchange="pushLottoSettings()"></label>
-        <label style="font-size:12px;color:var(--muted)">Skip if &lt; (min) left<br><input type="number" id="L_noBuyWithinMins" min="0" placeholder="off" onchange="pushLottoSettings()"></label>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <label style="font-size:12px;color:var(--muted)">Min listed time (min)<span style="font-size:11px;color:#666;display:block;font-weight:400">skip if too new</span><input type="number" id="L_minAgeMins" min="0" placeholder="any" onchange="pushLottoSettings()" style="width:100%;margin-top:4px"></label>
+        <label style="font-size:12px;color:var(--muted)">Max listed time (min)<span style="font-size:11px;color:#666;display:block;font-weight:400">skip if too old</span><input type="number" id="L_maxAgeMins" min="0" placeholder="any" onchange="pushLottoSettings()" style="width:100%;margin-top:4px"></label>
+        <label style="font-size:12px;color:var(--muted)">Stop buying (min left)<span style="font-size:11px;color:#666;display:block;font-weight:400">skip if expires soon</span><input type="number" id="L_noBuyWithinMins" min="0" placeholder="off" onchange="pushLottoSettings()" style="width:100%;margin-top:4px"></label>
       </div>
     </div>
 
@@ -5191,13 +5191,13 @@ function pushLottoSettings() {
     no_buy_within_mins: optNum("L_noBuyWithinMins"),
   };
   const st = document.getElementById("L_saveStatus");
-  if (st) st.textContent = "Saving…";
   if (_pushLottoTimer) clearTimeout(_pushLottoTimer);
   _pushLottoTimer = setTimeout(() => {
+    if (st) st.textContent = "Saving…";
     fetch("/api/buy-settings", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload)})
-      .then(() => { if (st) st.textContent = "Saved ✓"; setTimeout(()=>{ if(st) st.textContent=""; }, 1500); })
-      .catch(() => { if (st) st.textContent = "Save failed — retry"; });
-  }, 500);
+      .then(() => { if (st) st.textContent = "✓"; setTimeout(()=>{ if(st) st.textContent=""; }, 600); })
+      .catch(() => { if (st) st.textContent = "Failed"; });
+  }, 100);
 }
 
 async function loadLottoSettings() {
@@ -5241,13 +5241,13 @@ function pushLottoStrategy() {
     stop_loss_pct:      slOn ? num("L_stopLossPct") : null,
   };
   const st = document.getElementById("L_sellStatus");
-  if (st) st.textContent = "Saving…";
   if (_pushLottoStratTimer) clearTimeout(_pushLottoStratTimer);
   _pushLottoStratTimer = setTimeout(() => {
+    if (st) st.textContent = "Saving…";
     fetch("/api/strategy", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload)})
-      .then(() => { if (st) st.textContent = "Saved ✓"; setTimeout(()=>{ if(st) st.textContent=""; }, 1500); })
-      .catch(() => { if (st) st.textContent = "Save failed — retry"; });
-  }, 500);
+      .then(() => { if (st) st.textContent = "✓"; setTimeout(()=>{ if(st) st.textContent=""; }, 600); })
+      .catch(() => { if (st) st.textContent = "Failed"; });
+  }, 100);
 }
 
 async function loadLottoStrategy() {
