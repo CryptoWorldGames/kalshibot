@@ -1803,7 +1803,7 @@ def portfolio():
             age = _position_age_seconds(info)
             if age is None or age > 90:
                 with _lock:
-                    if ticker in tracked and tracked[ticker].get("status") == "open":
+                    if ticker in tracked and tracked[ticker].get("status") in ("open", "selling"):
                         tracked[ticker]["status"] = "sold"
                         tracked[ticker].setdefault("sold_by", "external")
                         tracked[ticker].setdefault("sold_at", datetime.now(timezone.utc).isoformat())
@@ -1835,7 +1835,7 @@ def portfolio():
                 mkt_status = (mkt.get("status") or "").lower()
                 if mkt_status in ("settled", "resolved", "finalized", "closed"):
                     with _lock:
-                        if ticker in tracked:
+                        if ticker in tracked and tracked[ticker].get("status") in ("open", "selling"):
                             tracked[ticker]["status"] = "sold"
                     _save_tracked()
                     continue
