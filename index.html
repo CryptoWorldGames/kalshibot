@@ -953,6 +953,46 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     </div>
   </div>
 
+  <!-- AUTO MODE (T2) — identical to Scanner -->
+  <div class="card" style="margin-bottom:10px">
+    <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:12px">⚙️ AUTO MODE — scans + auto-buys</div>
+    <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+      <label class="radio-pill" id="L_rpTime" onclick="setLottoRunMode('time')"><input type="radio" name="L_runMode" value="time">
+        Run for minutes
+      </label>
+      <label class="radio-pill" id="L_rpBuys" onclick="setLottoRunMode('buys')"><input type="radio" name="L_runMode" value="buys">
+        Stop after X buys
+      </label>
+      <label class="radio-pill active" id="L_rpForever" onclick="setLottoRunMode('forever')"><input type="radio" name="L_runMode" value="forever" checked>
+        Until stopped
+      </label>
+    </div>
+    <!-- Buys picker — shown when "Stop after X buys" is selected -->
+    <div id="L_buysPickerWrap" style="margin-bottom:10px;display:none;align-items:center;gap:6px;flex-wrap:wrap">
+      <span style="font-size:13px;color:#aaa">Stop after how many buys:</span>
+      <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setLottoAutoBuys(1)">1</button>
+      <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setLottoAutoBuys(3)">3</button>
+      <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setLottoAutoBuys(5)">5</button>
+      <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setLottoAutoBuys(10)">10</button>
+      <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setLottoAutoBuys(20)">20</button>
+      <input type="number" id="L_autoBuysMax" value="10" min="1" style="width:70px" oninput="pushLottoSettings()">
+      <span style="font-size:13px;color:#aaa">buys then stop</span>
+    </div>
+
+    <!-- Minutes picker — shown when "Run for minutes" is selected -->
+    <div id="L_minsPickerWrap" style="margin-bottom:10px;display:none;align-items:center;gap:6px;flex-wrap:wrap">
+      <span style="font-size:13px;color:#aaa">How many minutes:</span>
+      <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setLottoAutoMins(5)">5</button>
+      <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setLottoAutoMins(15)">15</button>
+      <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setLottoAutoMins(30)">30</button>
+      <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setLottoAutoMins(60)">1h</button>
+      <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setLottoAutoMins(120)">2h</button>
+      <input type="number" id="L_autoMins" value="30" min="1" style="width:70px" oninput="updateLottoMinsHint();pushLottoSettings()">
+      <span style="font-size:13px;color:#aaa">min</span>
+      <span id="L_autoMinsHint" style="font-size:11px;color:#888"></span>
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-title">🎟️ Lotto Bot Settings (T2)</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:14px">A second, independent bot. Set it up however you like — it only trades when its switch above is <b>ON</b> (it can run at the same time as the Scanner bot). Changes save automatically.</div>
@@ -2767,6 +2807,42 @@ function setAutoMins(n) {
 function updateMinsHint() {
   const mins = parseInt(document.getElementById("autoMins").value) || 0;
   const el   = document.getElementById("autoMinsHint");
+  if (!el) return;
+  if (mins >= 60) {
+    const h = (mins / 60).toFixed(mins % 60 === 0 ? 0 : 1);
+    el.textContent = `(${h}h)`;
+  } else {
+    el.textContent = "";
+  }
+}
+
+// Lotto (T2) AUTO MODE functions — identical to Scanner
+function setLottoRunMode(mode) {
+  ["L_rpTime","L_rpBuys","L_rpForever"].forEach(id => document.getElementById(id).classList.remove("active"));
+  document.getElementById({time:"L_rpTime",buys:"L_rpBuys",forever:"L_rpForever"}[mode]).classList.add("active");
+  const radio = document.querySelector(`input[name="L_runMode"][value="${mode}"]`);
+  if (radio) radio.checked = true;
+  const minsWrap = document.getElementById("L_minsPickerWrap");
+  const buysWrap = document.getElementById("L_buysPickerWrap");
+  if (minsWrap) minsWrap.style.display = mode === "time" ? "flex" : "none";
+  if (buysWrap) buysWrap.style.display = mode === "buys" ? "flex" : "none";
+  pushLottoSettings();
+}
+
+function setLottoAutoBuys(n) {
+  document.getElementById("L_autoBuysMax").value = n;
+  pushLottoSettings();
+}
+
+function setLottoAutoMins(n) {
+  document.getElementById("L_autoMins").value = n;
+  updateLottoMinsHint();
+  pushLottoSettings();
+}
+
+function updateLottoMinsHint() {
+  const mins = parseInt(document.getElementById("L_autoMins").value) || 0;
+  const el   = document.getElementById("L_autoMinsHint");
   if (!el) return;
   if (mins >= 60) {
     const h = (mins / 60).toFixed(mins % 60 === 0 ? 0 : 1);
@@ -5883,6 +5959,8 @@ function pushLottoSettings() {
   const chk = id => { const el = document.getElementById(id); return el ? el.checked : false; };
   const num = (id,d) => { const el = document.getElementById(id); const v = parseFloat(el?.value); return isNaN(v)?d:v; };
   const optNum = id => { const el = document.getElementById(id); return el && el.value !== "" ? parseFloat(el.value) : null; };
+  const runModeRadio = document.querySelector('input[name="L_runMode"]:checked');
+  const runMode = runModeRadio ? runModeRadio.value : "forever";
   const payload = {
     profile: "T2",
     enable_buy_up:   chk("L_enableBuyUp"),
@@ -5903,6 +5981,9 @@ function pushLottoSettings() {
     show_economics:  chk("L_showEconomics"),
     good_liq:        chk("L_goodLiq"),
     hide_multi:      chk("L_hideMultiOutcome"),
+    run_mode:        runMode,
+    auto_mins:       runMode === "time" ? num("L_autoMins", 30) : null,
+    auto_buys_max:   runMode === "buys" ? num("L_autoBuysMax", 10) : null,
   };
   const st = document.getElementById("L_saveStatus");
   if (_pushLottoTimer) clearTimeout(_pushLottoTimer);
@@ -5927,6 +6008,11 @@ async function loadLottoSettings() {
     chk("L_showCrypto", s.show_crypto); chk("L_showCombo", s.show_combo); chk("L_showSports", s.show_sports);
     chk("L_showPolitics", s.show_politics); chk("L_showEconomics", s.show_economics);
     chk("L_goodLiq", s.good_liq); chk("L_hideMultiOutcome", s.hide_multi);
+    // Load AUTO MODE settings
+    if (s.run_mode) setLottoRunMode(s.run_mode);
+    if (s.auto_mins) set("L_autoMins", s.auto_mins);
+    if (s.auto_buys_max) set("L_autoBuysMax", s.auto_buys_max);
+    updateLottoMinsHint();
   } catch(e) {}
 }
 
