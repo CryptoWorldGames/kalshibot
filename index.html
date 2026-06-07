@@ -4247,15 +4247,21 @@ function updateSnoozeBtn() {
 }
 
 function speakText(text) {
-  if (Date.now() < _voiceSnoozeUntil) return;   // snoozed — stay silent
+  console.log("[voice] speakText called with:", text);
+  if (Date.now() < _voiceSnoozeUntil) {
+    console.log("[voice] BLOCKED by snooze");
+    return;
+  }
   try {
     if ('speechSynthesis' in window) {
+      console.log("[voice] speechSynthesis available, creating utterance");
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 1.0;
       utterance.pitch = 1.2;
       utterance.volume = 1.0;
       // Try female voice first, fall back to any voice
       const voices = window.speechSynthesis.getVoices();
+      console.log("[voice] found", voices.length, "voices");
       let selectedVoice = null;
       if (voices.length > 0) {
         selectedVoice = voices.find(v => v.name.toLowerCase().includes('female')) ||
@@ -4264,9 +4270,15 @@ function speakText(text) {
                         voices.find(v => !v.name.toLowerCase().includes('male')) ||  // prefer non-male
                         voices[0];
       }
-      if (selectedVoice) utterance.voice = selectedVoice;
+      if (selectedVoice) {
+        console.log("[voice] selected voice:", selectedVoice.name);
+        utterance.voice = selectedVoice;
+      }
       utterance.onerror = (e) => console.log("[voice] error:", e.error);
       window.speechSynthesis.speak(utterance);
+      console.log("[voice] speak() called");
+    } else {
+      console.log("[voice] speechSynthesis NOT available");
     }
   } catch(e) {
     console.log("[voice] exception:", e.message);
