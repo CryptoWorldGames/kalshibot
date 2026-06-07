@@ -1395,6 +1395,7 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
                         "count": contracts,
                         "spent": spent_dollars,
                         "category": m.get("category", ""),
+                        "profile": prof,  # T1 (Scanner) or T2 (Lotto)
                     })
                     _log(f"[bot:{prof}] Auto-bought {side.upper()} {ticker}: {contracts} @ {pc}¢")
                     _record_activity("buy", ticker=ticker, side=side, count=contracts,
