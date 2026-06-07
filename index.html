@@ -2343,9 +2343,6 @@ async function scan() {
     // Note: Don't read from timeCustom here. setTime() manages selTime correctly via button clicks,
     // and loadSettings() restores it on page load. Reading from the field here causes it to override
     // the user's button selection if the field is visible or has leftover values.
-    const minAge       = document.getElementById("minAgeMins")?.value || "";
-    const maxAge       = document.getElementById("maxAgeMins")?.value || "";
-    const noBuyWithin  = document.getElementById("noBuyWithinMins")?.value || "";
     const timeParams   = (minAge ? `&min_age_mins=${minAge}` : "") + (maxAge ? `&max_age_mins=${maxAge}` : "") + (noBuyWithin ? `&no_buy_within_mins=${noBuyWithin}` : "");
     const hideMulti    = chk("hideMultiOutcome");
     const cryptoParams = (hideMulti ? "&hide_multi=true" : "");
@@ -5068,7 +5065,7 @@ const SETTINGS_CHECKBOXES = ["showCrypto","showSports","showPolitics","showEcono
 const SETTINGS_INPUTS = ["buyAmount","maxBuysPerMarket","autoMaxPerScan","autoMaxConcurrent","posSort",
   "autoMins","autoBuysMax","profitCustom","profitDolCustom","targetPriceCustom","minProb","maxProb","timeCustom",
   "stopLossPct","skipAutoSellMinutes",
-  "minAgeMins","maxAgeMins","noBuyWithinMins","minProbDown","maxProbDown","spreadUp","spreadDown","snoozeDuration"];
+  "minProbDown","maxProbDown","spreadUp","spreadDown","snoozeDuration"];
 
 function saveSettings() {
   // Validation: Must have at least one buy direction enabled
@@ -5117,9 +5114,6 @@ function pushBuySettings(immediate=false) {
       show_economics:  chk("showEconomics"),
       good_liq:        chk("goodLiq"),
       hide_multi:      chk("hideMultiOutcome"),
-      min_age_mins:    optNum("minAgeMins"),
-      max_age_mins:    optNum("maxAgeMins"),
-      no_buy_within_mins: optNum("noBuyWithinMins"),
       profile:         "T1",   // the front page edits the T1 (Scanner) bot profile
     };
     fetch("/api/buy-settings", {
@@ -5234,9 +5228,6 @@ function pushLottoSettings() {
     show_economics:  chk("L_showEconomics"),
     good_liq:        chk("L_goodLiq"),
     hide_multi:      chk("L_hideMultiOutcome"),
-    min_age_mins:    optNum("L_minAgeMins"),
-    max_age_mins:    optNum("L_maxAgeMins"),
-    no_buy_within_mins: optNum("L_noBuyWithinMins"),
   };
   const st = document.getElementById("L_saveStatus");
   if (_pushLottoTimer) clearTimeout(_pushLottoTimer);
@@ -5261,7 +5252,6 @@ async function loadLottoSettings() {
     chk("L_showCrypto", s.show_crypto); chk("L_showCombo", s.show_combo); chk("L_showSports", s.show_sports);
     chk("L_showPolitics", s.show_politics); chk("L_showEconomics", s.show_economics);
     chk("L_goodLiq", s.good_liq); chk("L_hideMultiOutcome", s.hide_multi);
-    set("L_minAgeMins", s.min_age_mins); set("L_maxAgeMins", s.max_age_mins); set("L_noBuyWithinMins", s.no_buy_within_mins);
   } catch(e) {}
 }
 
@@ -5321,7 +5311,6 @@ async function loadLottoStrategy() {
 const LOTTO_FIELDS = ["L_enableBuyUp","L_minProb","L_maxProb","L_enableBuyDown","L_minProbDown","L_maxProbDown",
   "L_minutes","L_buyAmount","L_autoMaxPerScan","L_autoMaxConcurrent","L_maxBuysPerMarket",
   "L_showCrypto","L_showCombo","L_showSports","L_showPolitics","L_showEconomics","L_goodLiq","L_hideMultiOutcome",
-  "L_minAgeMins","L_maxAgeMins","L_noBuyWithinMins",
   "L_targetPct","L_targetDol","L_targetPrice","L_stopLossChk","L_stopLossPct"];
 let _lottoMemArming = false;
 
@@ -5388,7 +5377,6 @@ function seedLottoMemDefaults() {
     L_autoMaxConcurrent:"999", L_maxBuysPerMarket:"1",
     L_showCrypto:true, L_showCombo:true, L_showSports:true, L_showPolitics:true, L_showEconomics:true,
     L_goodLiq:false, L_hideMultiOutcome:false,
-    L_minAgeMins:"", L_maxAgeMins:"", L_noBuyWithinMins:"",
     lottoSellMode:"resolution", L_targetPct:"10", L_targetDol:"0.05", L_targetPrice:"50",
     L_stopLossChk:true, L_stopLossPct:"50"
   });
