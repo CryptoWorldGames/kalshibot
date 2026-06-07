@@ -1903,7 +1903,7 @@ function renderSettlements(rows) {
       <tbody>${body}
         <tr style="border-top:2px solid var(--green);background:#0a1f14;font-weight:700">
           <td colspan="4">TOTALS</td>
-          <td>$${totalQty.toFixed(2)}</td>
+          <td>${totalQty}</td>
           <td>$${totalCost.toFixed(2)}</td>
           <td>$${totalRevenue.toFixed(2)}</td>
           <td class="${totalPnlCls}">${totalPnl >= 0 ? '+' : ''}$${totalPnl.toFixed(2)}</td>
