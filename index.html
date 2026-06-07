@@ -5332,20 +5332,6 @@ function switchTab(name) {
   } else {
     if (window._settleRefresh) { clearInterval(window._settleRefresh); window._settleRefresh = null; }
   }
-    }
-  } else {
-    if (window._posTabRefresh) { clearInterval(window._posTabRefresh); window._posTabRefresh = null; }
-    if (window._posEnrich)     { clearInterval(window._posEnrich);     window._posEnrich = null; }
-    if (window._posSettle)     { clearInterval(window._posSettle);     window._posSettle = null; }
-  }
-  if (name === "settlements") {
-    // Dedicated settlements tab — load now + refresh on its own interval.
-    loadSettlements();
-    if (window._settleTabRefresh) clearInterval(window._settleTabRefresh);
-    if (!document.hidden) window._settleTabRefresh = setInterval(loadSettlements, 60000);
-  } else {
-    if (window._settleTabRefresh) { clearInterval(window._settleTabRefresh); window._settleTabRefresh = null; }
-  }
   if (name === "lotto") {
     loadLottoSettings();   // pull the T2 buy profile into the form
     loadLottoStrategy();   // pull the T2 sell strategy into the form
