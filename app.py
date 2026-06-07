@@ -39,6 +39,12 @@ BASE_URL = "https://api.elections.kalshi.com"
 API_PREFIX = "/trade-api/v2"
 DEBUG_LOGGING = False  # Set to True for verbose logs, False for production — DISABLED FOR PRODUCTION
 
+def _log(msg: str):
+    """Print with a local timestamp prefix so the terminal shows WHEN each event
+    happened — essential for spotting gaps (e.g. 'bot hasn't bought in 9 hours')."""
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{ts}] {msg}", flush=True)
+
 # Category detection cache — avoid re-detecting same market
 _category_cache = {}
 _CACHE_MAX_SIZE = 5000
@@ -936,7 +942,7 @@ def _monitor():
                             "status":     "open",
                             "bot_bought": False,
                         }
-                        print(f"[monitor] adopted manual position {ticker} qty={abs(qty)} buy_price={buy_price}¢")
+                        _log(f"[monitor] adopted manual position {ticker} qty={abs(qty)} buy_price={buy_price}¢")
         except Exception as e:
             print(f"[monitor] adopt error: {e}")
 
@@ -1095,7 +1101,7 @@ def _monitor():
 
                         # Check if order was actually filled (not canceled)
                         if order_status == "canceled":
-                            print(f"[monitor] Auto-sell CANCELED: {pos.get('title', ticker)} | no fill at {bid_cents}¢")
+                            _log(f"[monitor] Auto-sell CANCELED: {pos.get('title', ticker)} | no fill at {bid_cents}¢")
                             with _lock:
                                 if ticker in tracked:
                                     tracked[ticker]["status"] = "open"  # revert selling status
@@ -1114,7 +1120,7 @@ def _monitor():
                         _save_tracked()
                         title = pos.get("title", ticker)
                         reason = "STOP-LOSS" if (hit_stop_pct or hit_stop_dol) else "PROFIT TARGET"
-                        print(f"[monitor] Auto-sold ({reason}): {title} | bid={bid}¢ profit={profit_pct:.1f}% / ${profit_dollars:.2f}")
+                        _log(f"[monitor] Auto-sold ({reason}): {title} | bid={bid}¢ profit={profit_pct:.1f}% / ${profit_dollars:.2f}")
                     except Exception as e:
                         # If kalshi_post or result processing fails, revert selling status
                         with _lock:
@@ -1170,11 +1176,14 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
     up_on   = bool(bs.get("enable_buy_up"))
     down_on = bool(bs.get("enable_buy_down"))
     if not (up_on or down_on):
+        _log(f"[bot:{prof}] cycle: skipped — both BUY UP and BUY DOWN are disabled")
         return 0
 
     # Out-of-cash cooldown: after an insufficient_balance we pause THIS profile's buying
     # for a full minute so we don't keep hammering Kalshi (and tripping 429s) while broke.
-    if time.time() < _buy_cooldown.get(prof, 0):
+    _cd = _buy_cooldown.get(prof, 0)
+    if time.time() < _cd:
+        _log(f"[bot:{prof}] cycle: skipped — out-of-cash cooldown ({_cd - time.time():.0f}s left)")
         return 0
 
     up_min,   up_max   = float(bs.get("up_min", 80)),   float(bs.get("up_max", 96))
@@ -1221,6 +1230,7 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
         open_now = sum(1 for p in tracked.values() if p.get("status") == "open")
 
     candidates = []  # (ticker, side, price_cents, market)
+    scan_errors = 0
     for st in series_list:
         if len(candidates) >= max_scan * 4:
             break
@@ -1244,10 +1254,16 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
                     candidates.append((ticker, "yes", yes_p, m))
                 elif down_on and no_p is not None and down_min <= no_p < down_max:
                     candidates.append((ticker, "no", no_p, m))
-        except Exception:
-            pass
+        except Exception as e:
+            # Was a silent `pass` — a persistent failure here (expired auth, sustained
+            # 429s) would make the bot scan fruitlessly for HOURS with no log line.
+            # Now surfaced with a timestamp so gaps are diagnosable.
+            scan_errors += 1
+            if scan_errors <= 3:  # don't spam: first few per cycle is enough
+                _log(f"[bot:{prof}] scan error on {st}: {type(e).__name__}: {e}")
 
     bought = 0
+    skipped_too_small = 0
     with _lock:
         for ticker, side, price_c, m in candidates:
             if bought >= max_scan or open_now >= max_conc:
@@ -1269,6 +1285,10 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
                 continue
             contracts = math.floor(buy_amt / (pc / 100))
             if contracts < 1:
+                # buy_amount too small for this price (e.g. $0.50 budget at 60¢ → 0
+                # contracts). This silently skips EVERY candidate, so the bot can look
+                # "stuck" buying nothing. Count it so the cycle summary surfaces it.
+                skipped_too_small += 1
                 continue
             order_body = {
                 "ticker": ticker,
@@ -1315,7 +1335,7 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
                         "spent": spent_dollars,
                         "category": m.get("category", ""),
                     })
-                    print(f"[bot:{prof}] Auto-bought {side.upper()} {ticker}: {contracts} @ {pc}¢")
+                    _log(f"[bot:{prof}] Auto-bought {side.upper()} {ticker}: {contracts} @ {pc}¢")
             except Exception as e:
                 # Out of cash? Stop trying the rest of this cycle's candidates —
                 # otherwise we hammer Kalshi with dozens of doomed orders and trip
@@ -1327,11 +1347,22 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
                     except Exception: _body = ""
                 if "insufficient_balance" in (_body + " " + str(e)).lower():
                     _buy_cooldown[prof] = time.time() + _BUY_COOLDOWN_SECS
-                    print(f"[bot:{prof}] out of cash — pausing buys for {_BUY_COOLDOWN_SECS}s")
+                    _log(f"[bot:{prof}] out of cash — pausing buys for {_BUY_COOLDOWN_SECS}s")
                     break
-                print(f"[bot:{prof}] Buy {ticker} failed: {e}")
+                _log(f"[bot:{prof}] Buy {ticker} failed: {e}")
+    # Always log a one-line cycle summary so the terminal shows the bot is ALIVE and
+    # WHY it bought nothing (no candidates / budget too small / scan errors), with a
+    # timestamp. This is what makes a multi-hour gap diagnosable at a glance.
     if bought:
-        print(f"[bot:{prof}] cycle: bought {bought} ({len(candidates)} candidates, {open_now} open)")
+        _log(f"[bot:{prof}] cycle: bought {bought} ({len(candidates)} candidates, {open_now} open)")
+    else:
+        reasons = []
+        if not candidates:        reasons.append("no candidates matched filters")
+        if skipped_too_small:     reasons.append(f"{skipped_too_small} skipped (buy_amount too small for price)")
+        if scan_errors:           reasons.append(f"{scan_errors} scan errors")
+        if open_now >= max_conc:  reasons.append(f"max_concurrent {max_conc} reached")
+        why = "; ".join(reasons) or f"{len(candidates)} candidates but none bought"
+        _log(f"[bot:{prof}] cycle: bought 0 — {why}")
     return bought
 
 
@@ -1347,13 +1378,22 @@ def _bot_thread():
 
     scan_interval = 15  # seconds between scans
     last_scan = 0
+    _was_running = None  # track running-state transitions so we log start/stop once
+
+    _log("[bot] trading thread started (waiting for run signal)")
 
     while True:
         time.sleep(1)  # Check every second if we should scan
 
         with _bot_lock:
-            if not _bot_running:
-                continue  # Wait for start signal (from API or config file)
+            running = _bot_running
+        # Log the moment the bot flips between running and stopped — so a silent
+        # /api/bot/stop (which would halt all buying) is visible in the terminal.
+        if running != _was_running:
+            _log(f"[bot] state → {'RUNNING' if running else 'STOPPED'}")
+            _was_running = running
+        if not running:
+            continue  # Wait for start signal (from API or config file)
 
         now = time.time()
         if (now - last_scan) < scan_interval:
@@ -1365,13 +1405,16 @@ def _bot_thread():
             cycle_start = time.time()
             # Run a scan+buy pass for EACH active profile (multiple bots can run at
             # once — e.g. the regular bot + the Lotto bot). Each uses its own settings.
-            for prof in list(active_profiles):
+            profs = list(active_profiles)
+            if not profs:
+                _log("[bot] cycle: no active profiles — turn on a bot (T1/T2) to trade")
+            for prof in profs:
                 bs = dict(_profiles.get(prof) or {})
                 ss = dict(_sell_profiles.get(prof) or {})
                 if bs:
                     _scan_and_buy_for_profile(prof, bs, ss, cycle_start)
         except Exception as e:
-            print(f"[bot] Scan cycle error: {e}")
+            _log(f"[bot] Scan cycle error: {type(e).__name__}: {e}")
 
 # Auto-load bot state from config file (so restarts preserve running state)
 if _load_bot_config():
