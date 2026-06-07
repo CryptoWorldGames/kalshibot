@@ -645,7 +645,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
           <span class="label-sm" style="margin:0;font-size:14px;font-weight:700;color:var(--green)">📊 Show Categories</span>
           <button class="pill sm" onclick="toggleAllCategories()" style="font-size:12px;padding:4px 12px">Select All</button>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 12px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px">
           <label class="check-row"><input type="checkbox" id="showCrypto" checked onchange="saveSettings()"> Crypto</label>
           <label class="check-row"><input type="checkbox" id="showSports" checked onchange="saveSettings()"> Sports</label>
           <label class="check-row"><input type="checkbox" id="showCombo" checked onchange="saveSettings()"> Combo/Parlay</label>
@@ -684,38 +684,8 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
         <button class="pill" onclick="setTime(4320,'3d')">3d</button>
         <button class="pill" onclick="setTime(10080,'1w')">1w</button>
         <button class="pill" onclick="setTime(20160,'2w')">2w</button>
-        <button class="pill" onclick="setTime(43200,'1m')">1m</button>
-        <button class="pill" onclick="setTime(525600,'All (365d)')">All (365d)</button>
-        <div class="inline">
-          <button class="pill" onclick="setTime('custom')">Custom</button>
-          <input type="number" id="timeCustom" value="15" min="1" placeholder="min" style="display:none;width:70px">
-          <span id="timeCustomLabel" style="display:none;font-size:13px;color:var(--muted)">min</span>
-        </div>
-      </div>
-      <div style="margin-top:14px;display:flex;flex-direction:column;gap:8px">
-        <span class="label-sm">Started</span>
-        <div class="inline" style="gap:8px;flex-wrap:wrap">
-          <div class="inline" style="gap:6px">
-            <span style="font-size:14px;color:#fff">Opened at least</span>
-            <input type="number" id="minAgeMins" value="" min="0" placeholder="any" style="width:70px" oninput="saveSettings()" title="Only show markets that have been open for at least this many minutes">
-            <span style="font-size:14px;color:#fff">min ago</span>
-          </div>
-          <div class="inline" style="gap:6px">
-            <span style="font-size:14px;color:#fff">Opened within the last</span>
-            <input type="number" id="maxAgeMins" value="" min="0" placeholder="any" style="width:70px" oninput="saveSettings()" title="Only show markets that opened within this many minutes">
-            <span style="font-size:14px;color:#fff">min</span>
-          </div>
-        </div>
-        <div style="font-size:11px;color:#555">Leave blank = no restriction on when market opened</div>
-      </div>
-      <div style="margin-top:14px">
-        <span class="label-sm">Skip If Too Close To End</span>
-        <div class="inline" style="gap:6px;margin-top:8px">
-          <span style="font-size:14px;color:#fff">Don't buy if less than</span>
-          <input type="number" id="noBuyWithinMins" value="" min="0" placeholder="off" style="width:70px" oninput="saveSettings()" title="Skip markets expiring in less than this many minutes">
-          <span style="font-size:14px;color:#fff">min left</span>
-        </div>
-        <div style="font-size:11px;color:#555;margin-top:4px">e.g. set 2 = skip markets expiring in &lt;2 min (too late to act)</div>
+        <button class="pill" onclick="setTime(43200,'1mo')">1mo</button>
+        <button class="pill" onclick="setTime(525600,'Show all')">Show all</button>
       </div>
       </div>
     </div>
@@ -939,7 +909,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <!-- Categories -->
     <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
       <div style="font-size:12px;color:var(--muted);font-weight:700;margin-bottom:8px">CATEGORIES</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 8px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 8px">
         <label class="check-row"><input type="checkbox" id="L_showCrypto" checked onchange="pushLottoSettings()"> Crypto</label>
         <label class="check-row"><input type="checkbox" id="L_showSports" checked onchange="pushLottoSettings()"> Sports</label>
         <label class="check-row"><input type="checkbox" id="L_showCombo" checked onchange="pushLottoSettings()"> Combo/Parlay</label>
@@ -1824,9 +1794,12 @@ try {
 async function enrichStaged() {
   const wt = allPositions.filter(p => p.ticker);
   if (!wt.length) { loadSettlements(); return; }
+  // FIRST: enrich all titles for the filter list (fast, high priority)
+  const allTickers = wt.map(p => p.ticker);
+  if (allTickers.length) await enrichPositionMarkets(allTickers, true); // title-only pass
+  // THEN: stage price enrichment by importance
   const stake = p => Math.abs((p.quantity || 0) * (p.buy_price || 0)) / 100;
   const needsPrice = p => (p.current_yes == null && p.current_no == null);
-  // Missing-a-price positions first, biggest stake first within each group.
   const sorted = [...wt].sort((a, b) => {
     const an = needsPrice(a) ? 1 : 0, bn = needsPrice(b) ? 1 : 0;
     if (an !== bn) return bn - an;
@@ -1834,41 +1807,39 @@ async function enrichStaged() {
   });
   const top  = sorted.slice(0, 10).map(p => p.ticker);
   const rest = sorted.slice(10).map(p => p.ticker);
-  if (top.length)  await enrichPositionMarkets(top);    // top 10 numbers — fast
+  if (top.length)  await enrichPositionMarkets(top);    // top 10 prices — fast
   if (rest.length) await enrichPositionMarkets(rest);   // then everything else
   loadSettlements();                                     // settlements last
 }
 
-async function enrichPositionMarkets(tickerList) {
+async function enrichPositionMarkets(tickerList, titleOnly) {
   const tickers = ((tickerList && tickerList.length) ? tickerList
                    : allPositions.map(p => p.ticker)).filter(Boolean);
   if (!tickers.length) return;
 
   try {
-    // NOTE: fetch() has no {timeout} option — it was silently ignored, so a slow
-    // enrich could hang forever and positions stayed on "—". Use AbortController.
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 25000);
-    // Enrich up to 50 tickers (backend cap) per call.
     const r = await fetch(`/api/enrich-positions?tickers=${tickers.slice(0,50).join(",")}`, {signal: ctrl.signal});
     clearTimeout(to);
     const enriched = await r.json() || {};
 
-    // Merge enriched data into allPositions
     for (const pos of allPositions) {
       const data = enriched[pos.ticker];
       if (data) {
         if (data.event_ticker) pos.event_ticker = data.event_ticker;
         if (data.title) pos.title = data.title;
         if (data.category) pos.category = data.category;
-        if (data.current_yes != null) pos.current_yes = data.current_yes;
-        if (data.current_no != null) pos.current_no = data.current_no;
         if (data.close_time) pos.close_time = data.close_time;
         if (data.kalshi_url) pos.kalshi_url = data.kalshi_url;
+        // On title-only pass, don't overwrite prices (will be enriched next in staged pass)
+        if (!titleOnly) {
+          if (data.current_yes != null) pos.current_yes = data.current_yes;
+          if (data.current_no != null) pos.current_no = data.current_no;
+        }
       }
     }
 
-    // Re-render positions with enriched data
     renderBotPositions(allPositions);
   } catch(e) {
     console.warn("[enrich] error fetching market data:", e);
