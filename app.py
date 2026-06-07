@@ -1296,10 +1296,22 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
                      "KXFED","KXCPI","KXPCE","KXUNEMP"]
     SPORTS_SERIES = ["NBAG","KXNBA","NBA","MLBG","KXMLB","MLB","NFLG","KXNFL","NFL",
                      "KXNHL","NHL","KXSOCCER"]
+    POLITICS_SERIES = ["US","USGA","2024","2026"]
+    COMBO_SERIES = ["COMBO"]
+
     series_list = []
     if bs.get("show_crypto", True):     series_list += CRYPTO_SERIES
     if bs.get("show_economics", False): series_list += ECON_SERIES
     if bs.get("show_sports", False):    series_list += SPORTS_SERIES
+    if bs.get("show_politics", False):  series_list += POLITICS_SERIES
+    if bs.get("show_combo", False):     series_list += COMBO_SERIES
+
+    if not series_list:
+        _log(f"[bot:{prof}] cycle: skipped — no categories enabled")
+        return 0
+
+    if prof == "T2":  # Debug: log T2's actual scan configuration
+        _log(f"[bot:T2] scanning: {len(series_list)} series (show_crypto={bs.get('show_crypto')}, show_econ={bs.get('show_economics')}, show_sports={bs.get('show_sports')}, show_politics={bs.get('show_politics')}, show_combo={bs.get('show_combo')})")
 
     with _lock:
         open_now = sum(1 for p in tracked.values() if p.get("status") == "open")
