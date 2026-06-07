@@ -2827,13 +2827,235 @@ async function sellPos(ticker, side, count, safeId) {
     filterPos();
     setTimeout(() => loadBalanceThrottled(true), 8000);
   } catch(e) {
-    toast(e.message,"err");
+    const errorMsg = e.message || "Sell failed";
+
+    // Check if it's a "no fill" error (no buyers at market price)
+    if (errorMsg.includes("no buyers") || errorMsg.includes("no fill")) {
+      // Ask user if they want to try a limit order instead
+      showOrderTypeDialog(ticker, side, count, prePos, bid_cents);
+    } else {
+      toast(errorMsg, "err");
+    }
+
     if (btn) { btn.disabled = false; btn.textContent = "Sell This"; }
-    // Restore the position if sell failed — put it back in the list
     loadBalanceThrottled(true);
   } finally {
     _inFlightSells.delete(sellKey);
   }
+}
+
+// Show dialog to choose order type when market order fails
+function showOrderTypeDialog(ticker, side, count, position, currentBidCents) {
+  const modal = document.createElement("div");
+  modal.style.cssText = `
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.7); display: flex; align-items: center;
+    justify-content: center; z-index: 10000;
+  `;
+
+  const marketTitle = position?.title || ticker;
+  const dialog = document.createElement("div");
+  dialog.style.cssText = `
+    background: #1a1a1a; border: 2px solid var(--green); border-radius: 12px;
+    padding: 24px; max-width: 420px; color: #fff; font-family: inherit;
+  `;
+
+  dialog.innerHTML = `
+    <div style="font-size: 16px; font-weight: 700; margin-bottom: 12px; color: var(--green)">
+      ⚠ No Buyers at Market Price
+    </div>
+    <div style="font-size: 13px; color: #ddd; margin-bottom: 16px; line-height: 1.5">
+      <b>${marketTitle}</b> has no buyers at the current bid (${currentBidCents}¢).<br><br>
+      What would you like to do?
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <button onclick="retryMarketSell('${ticker}', '${side}', ${count})"
+        style="background: var(--green); color: #000; border: none; border-radius: 6px;
+               padding: 12px 16px; font-size: 13px; font-weight: 700; cursor: pointer;">
+        🔄 Retry Market Order (now)
+      </button>
+
+      <button onclick="placeLimitOrder('${ticker}', '${side}', ${count}, ${currentBidCents})"
+        style="background: #444; color: #fff; border: none; border-radius: 6px;
+               padding: 12px 16px; font-size: 13px; font-weight: 700; cursor: pointer;">
+        📌 Place Limit Order at ${currentBidCents}¢
+      </button>
+
+      <button onclick="closeOrderDialog()"
+        style="background: transparent; color: #888; border: 1px solid #666;
+               border-radius: 6px; padding: 12px 16px; font-size: 13px; font-weight: 700;
+               cursor: pointer;">
+        ✕ Cancel
+      </button>
+    </div>
+  `;
+
+  modal.appendChild(dialog);
+  modal.id = "orderTypeModal";
+  modal.onclick = (e) => e.target === modal && closeOrderDialog();
+  document.body.appendChild(modal);
+}
+
+function closeOrderDialog() {
+  const modal = document.getElementById("orderTypeModal");
+  if (modal) modal.remove();
+}
+
+async function retryMarketSell(ticker, side, count) {
+  closeOrderDialog();
+  toast("Retrying market sell…", "");
+  // Re-trigger the sell (it will try market order again)
+  await new Promise(r => setTimeout(r, 500));
+  sellOne(ticker, side);
+}
+
+async function placeLimitOrder(ticker, side, count, limitPriceCents) {
+  closeOrderDialog();
+
+  // Get current position for details
+  const pos = allPositions.find(p => p.ticker === ticker && _posSide(p) === side);
+  if (!pos) {
+    toast("Position not found", "err");
+    return;
+  }
+
+  try {
+    // Place limit order via backend
+    const r = await fetch("/api/sell", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ticker, side, count,
+        order_type: "limit",
+        limit_price_cents: limitPriceCents
+      })
+    });
+
+    if (!r.ok) {
+      const d = await r.json();
+      throw new Error(d.error || "Limit order failed");
+    }
+
+    const d = await r.json();
+
+    // Store limit order in localStorage for 24-hour reminder
+    const limitOrders = JSON.parse(localStorage.getItem("kb_limit_orders") || "{}");
+    const orderKey = `${ticker}_${side}`;
+    limitOrders[orderKey] = {
+      ticker, side, count, limitPriceCents,
+      placedAt: Date.now(),
+      title: pos.title || ticker
+    };
+    localStorage.setItem("kb_limit_orders", JSON.stringify(limitOrders));
+
+    toast(`📌 Limit order placed at ${limitPriceCents}¢ — will remind in 24h`, "ok");
+
+    // Schedule 24-hour reminder
+    setTimeout(() => checkLimitOrderReminders(), 24 * 60 * 60 * 1000);
+
+  } catch(e) {
+    toast(`Limit order failed: ${e.message}`, "err");
+  }
+}
+
+// Check for limit orders that need 24-hour reminders
+function checkLimitOrderReminders() {
+  const limitOrders = JSON.parse(localStorage.getItem("kb_limit_orders") || "{}");
+  const now = Date.now();
+  const expiredOrders = [];
+
+  for (const [key, order] of Object.entries(limitOrders)) {
+    const ageMs = now - order.placedAt;
+    const age24h = 24 * 60 * 60 * 1000;
+
+    if (ageMs >= age24h) {
+      expiredOrders.push({key, ...order});
+    }
+  }
+
+  if (expiredOrders.length === 0) return;
+
+  // Show reminder dialog
+  const modal = document.createElement("div");
+  modal.style.cssText = `
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.7); display: flex; align-items: center;
+    justify-content: center; z-index: 10001;
+  `;
+
+  const dialog = document.createElement("div");
+  dialog.style.cssText = `
+    background: #1a1a1a; border: 2px solid #f5c542; border-radius: 12px;
+    padding: 24px; max-width: 480px; color: #fff; font-family: inherit;
+  `;
+
+  let html = `
+    <div style="font-size: 16px; font-weight: 700; margin-bottom: 12px; color: #f5c542">
+      ⏰ 24-Hour Limit Order Reminder
+    </div>
+    <div style="font-size: 13px; color: #ddd; margin-bottom: 16px;">
+      ${expiredOrders.length} limit order(s) placed 24 hours ago. Still want to keep them?
+    </div>
+
+    <div style="background: #0a0a0a; border: 1px solid #444; border-radius: 8px;
+                padding: 12px; margin-bottom: 16px; max-height: 200px; overflow-y: auto;">
+  `;
+
+  expiredOrders.forEach(order => {
+    html += `
+      <div style="padding: 8px; border-bottom: 1px solid #333; font-size: 12px;">
+        <b>${order.title}</b> — ${order.count} ${order.side.toUpperCase()} @ ${order.limitPriceCents}¢
+      </div>
+    `;
+  });
+
+  html += `
+    </div>
+
+    <div style="display: flex; gap: 10px;">
+      <button onclick="keepLimitOrders()"
+        style="flex: 1; background: var(--green); color: #000; border: none; border-radius: 6px;
+               padding: 12px; font-size: 13px; font-weight: 700; cursor: pointer;">
+        ✓ Keep Them
+      </button>
+
+      <button onclick="cancelAllLimitOrders()"
+        style="flex: 1; background: #ff4d4d; color: #fff; border: none; border-radius: 6px;
+               padding: 12px; font-size: 13px; font-weight: 700; cursor: pointer;">
+        ✕ Cancel All
+      </button>
+    </div>
+  `;
+
+  dialog.innerHTML = html;
+  modal.appendChild(dialog);
+  modal.id = "limitOrderReminderModal";
+  modal.onclick = (e) => e.target === modal || closeLimitOrderReminder();
+  document.body.appendChild(modal);
+}
+
+function closeLimitOrderReminder() {
+  const modal = document.getElementById("limitOrderReminderModal");
+  if (modal) modal.remove();
+}
+
+function keepLimitOrders() {
+  closeLimitOrderReminder();
+  // Reset the 24-hour timer for all limit orders
+  const limitOrders = JSON.parse(localStorage.getItem("kb_limit_orders") || "{}");
+  for (const key in limitOrders) {
+    limitOrders[key].placedAt = Date.now();
+  }
+  localStorage.setItem("kb_limit_orders", JSON.stringify(limitOrders));
+  toast("✓ Limit orders will remind again in 24h", "ok");
+  setTimeout(() => checkLimitOrderReminders(), 24 * 60 * 60 * 1000);
+}
+
+function cancelAllLimitOrders() {
+  closeLimitOrderReminder();
+  localStorage.setItem("kb_limit_orders", "{}");
+  toast("✕ All limit orders cleared", "");
 }
 
 // ── Market results table ──────────────────────────────────────────────────
