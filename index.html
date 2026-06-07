@@ -955,17 +955,33 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 
     <!-- Limits -->
     <div style="border:1px solid var(--border);border-radius:8px;padding:12px">
+      <div style="font-size:12px;color:var(--muted);font-weight:700;margin-bottom:10px">⏰ Ends Within</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+        <button type="button" onclick="setLottoEndsWithin(1)" class="pill" style="font-size:11px">1m</button>
+        <button type="button" onclick="setLottoEndsWithin(5)" class="pill" style="font-size:11px">5m</button>
+        <button type="button" onclick="setLottoEndsWithin(10)" class="pill" style="font-size:11px">10m</button>
+        <button type="button" onclick="setLottoEndsWithin(15)" class="pill active" style="font-size:11px">15m</button>
+        <button type="button" onclick="setLottoEndsWithin(20)" class="pill" style="font-size:11px">20m</button>
+        <button type="button" onclick="setLottoEndsWithin(30)" class="pill" style="font-size:11px">30m</button>
+        <button type="button" onclick="setLottoEndsWithin(60)" class="pill" style="font-size:11px">1h</button>
+        <button type="button" onclick="setLottoEndsWithin(120)" class="pill" style="font-size:11px">2h</button>
+        <button type="button" onclick="setLottoEndsWithin(240)" class="pill" style="font-size:11px">4h</button>
+        <button type="button" onclick="setLottoEndsWithin(360)" class="pill" style="font-size:11px">6h</button>
+        <button type="button" onclick="setLottoEndsWithin(720)" class="pill" style="font-size:11px">12h</button>
+        <button type="button" onclick="setLottoEndsWithin(1440)" class="pill" style="font-size:11px">24h</button>
+        <button type="button" onclick="setLottoEndsWithin(10080)" class="pill" style="font-size:11px">1w</button>
+        <button type="button" onclick="setLottoEndsWithin(20160)" class="pill" style="font-size:11px">2w</button>
+        <button type="button" onclick="setLottoEndsWithin(30240)" class="pill" style="font-size:11px">3w</button>
+        <button type="button" onclick="setLottoEndsWithin(40320)" class="pill" style="font-size:11px">4w</button>
+        <button type="button" onclick="setLottoEndsWithin(999999)" class="pill" style="font-size:11px">∞ 4w+</button>
+      </div>
+      <input type="hidden" id="L_minutes" value="15">
+
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px">
-        <label style="font-size:12px;color:var(--muted)">Ends within (min)<button type="button" onclick="document.getElementById('L_minutes').value=525600;pushLottoSettings()" style="font-size:10px;font-weight:700;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:#161616;color:var(--green);cursor:pointer;margin-left:6px">Show all</button><br><input type="number" id="L_minutes" min="1" value="525600" onchange="pushLottoSettings()" style="width:100%;margin-top:4px"></label>
         <label style="font-size:12px;color:var(--muted)">Max $ per buy<br><input type="number" id="L_buyAmount" min="0.01" step="0.01" value="0.15" onchange="pushLottoSettings()" style="width:100%;margin-top:4px"></label>
         <label style="font-size:12px;color:var(--muted)">Max buys / scan<br><input type="number" id="L_autoMaxPerScan" min="1" value="10" onchange="pushLottoSettings()" style="width:100%;margin-top:4px"></label>
         <label style="font-size:12px;color:var(--muted)">Max open positions<br><input type="number" id="L_autoMaxConcurrent" min="1" value="999" onchange="pushLottoSettings()" style="width:100%;margin-top:4px"></label>
         <label style="font-size:12px;color:var(--muted)">Max qty per ticker<br><input type="number" id="L_maxBuysPerMarket" min="1" value="1" onchange="pushLottoSettings()" style="width:100%;margin-top:4px" title="Max contracts to buy of same ticker (prevents over-concentration)"></label>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-        <label style="font-size:12px;color:var(--muted)">Min listed time (min)<span style="font-size:11px;color:#666;display:block;font-weight:400">skip if too new</span><input type="number" id="L_minAgeMins" min="0" placeholder="any" onchange="pushLottoSettings()" style="width:100%;margin-top:4px"></label>
-        <label style="font-size:12px;color:var(--muted)">Max listed time (min)<span style="font-size:11px;color:#666;display:block;font-weight:400">skip if too old</span><input type="number" id="L_maxAgeMins" min="0" placeholder="any" onchange="pushLottoSettings()" style="width:100%;margin-top:4px"></label>
-        <label style="font-size:12px;color:var(--muted)">Stop buying (min left)<span style="font-size:11px;color:#666;display:block;font-weight:400">skip if expires soon</span><input type="number" id="L_noBuyWithinMins" min="0" placeholder="off" onchange="pushLottoSettings()" style="width:100%;margin-top:4px"></label>
       </div>
     </div>
 
@@ -5161,6 +5177,19 @@ async function setActiveProfile(p) {
 }
 
 // ── Lotto (T2) settings: independent form, posts to profile T2 ────────────
+function setLottoEndsWithin(mins) {
+  document.getElementById("L_minutes").value = mins;
+  // Update active pill styling
+  const buttons = document.querySelectorAll('button[onclick^="setLottoEndsWithin"]');
+  buttons.forEach(btn => {
+    btn.classList.remove("active");
+    if (btn.onclick.includes(`setLottoEndsWithin(${mins})`)) {
+      btn.classList.add("active");
+    }
+  });
+  pushLottoSettings();
+}
+
 let _pushLottoTimer = null;
 function pushLottoSettings() {
   const chk = id => { const el = document.getElementById(id); return el ? el.checked : false; };
