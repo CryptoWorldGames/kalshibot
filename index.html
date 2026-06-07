@@ -19,9 +19,14 @@
     });
   }
   // Resume AudioContext on first user interaction (required by modern browsers)
-  document.addEventListener("click", resumeAudioContext, { once: true });
-  document.addEventListener("keydown", resumeAudioContext, { once: true });
-  document.addEventListener("touchstart", resumeAudioContext, { once: true });
+  // Defer listener attachment until resumeAudioContext is defined
+  window.addEventListener("load", () => {
+    if (typeof resumeAudioContext === "function") {
+      document.addEventListener("click", resumeAudioContext, { once: true });
+      document.addEventListener("keydown", resumeAudioContext, { once: true });
+      document.addEventListener("touchstart", resumeAudioContext, { once: true });
+    }
+  });
 
 </script>
 <style>
