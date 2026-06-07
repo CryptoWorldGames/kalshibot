@@ -701,11 +701,17 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
       <div style="font-size:13px;color:var(--muted);font-weight:700;margin-bottom:8px">Max Spend Per Purchase</div>
       <input type="number" id="buyAmount" value="1.00" min="0.01" step="0.01" style="width:100%;padding:8px;margin-bottom:8px;font-size:14px;background:#1a1f26;color:#fff;border:1px solid var(--border);border-radius:6px" oninput="saveSettings()">
       <div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:center">
+        <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="setAmt(0.01)">$0.01</button>
+        <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="setAmt(0.05)">$0.05</button>
+        <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="setAmt(0.10)">$0.10</button>
+        <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="setAmt(0.15)">$0.15</button>
+        <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="setAmt(0.25)">$0.25</button>
+        <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="setAmt(0.50)">$0.50</button>
+        <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="setAmt(0.75)">$0.75</button>
         <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="setAmt(1)">$1</button>
         <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="setAmt(2)">$2</button>
         <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="setAmt(3)">$3</button>
         <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="setAmt(5)">$5</button>
-        <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="setAmt(10)">$10</button>
       </div>
     </div>
 
@@ -977,11 +983,17 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
           <div style="font-size:13px;color:var(--muted);font-weight:700;margin-bottom:8px">Max Spend Per Purchase</div>
           <input type="number" id="L_buyAmount" min="0.01" step="0.01" value="0.15" onchange="pushLottoSettings()" style="width:100%;padding:8px;margin-bottom:8px;font-size:14px;background:#1a1f26;color:#fff;border:1px solid var(--border);border-radius:6px">
           <div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:center">
+            <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="L_buyAmount.value='0.01';pushLottoSettings()">$0.01</button>
             <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="L_buyAmount.value='0.05';pushLottoSettings()">$0.05</button>
             <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="L_buyAmount.value='0.10';pushLottoSettings()">$0.10</button>
+            <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="L_buyAmount.value='0.15';pushLottoSettings()">$0.15</button>
             <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="L_buyAmount.value='0.25';pushLottoSettings()">$0.25</button>
             <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="L_buyAmount.value='0.50';pushLottoSettings()">$0.50</button>
+            <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="L_buyAmount.value='0.75';pushLottoSettings()">$0.75</button>
             <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="L_buyAmount.value='1.00';pushLottoSettings()">$1.00</button>
+            <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="L_buyAmount.value='2.00';pushLottoSettings()">$2</button>
+            <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="L_buyAmount.value='3.00';pushLottoSettings()">$3</button>
+            <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="L_buyAmount.value='5.00';pushLottoSettings()">$5</button>
           </div>
         </div>
 
