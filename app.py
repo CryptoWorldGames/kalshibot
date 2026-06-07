@@ -1862,42 +1862,34 @@ def portfolio():
             current_yes  = None
             current_no   = None
             close_time   = None
-            # When 1000+ positions + enrich=true, skip expensive market lookups (they race
-            # with the scan loop for rate-limit lock). Only use cached balance/positions.
-            # Frontend will request individual position enrichment on-demand.
-            if enrich and len(raw_positions) < 100:
+            # Try cached market data first (scan loop populates this constantly).
+            # Only fetch fresh if cache is stale AND we have few positions (avoiding API storms).
+            mkt = None
+            _c = _market_cache.get(ticker)
+            if _c and (time.time() - _c["ts"]) < _MARKET_CACHE_TTL:
+                mkt = _c["data"]
+            elif enrich and len(raw_positions) < 100:
                 time.sleep(0.01)
                 try:
-                    mkt          = _get_market(ticker)
-                    event_ticker = mkt.get("event_ticker", "")
-                    market_title = _pretty_title(ticker, _event_title(event_ticker) or mkt.get("title", ticker))
-                    category     = mkt.get("category", "")
-                    current_yes  = _mark_price_cents(mkt, "yes")
-                    current_no   = _mark_price_cents(mkt, "no")
-                    close_time   = mkt.get("close_time") or mkt.get("expiration_time")
+                    mkt = _get_market(ticker)
                 except Exception:
-                    pass
+                    mkt = {}
+
+            if mkt:
+                event_ticker = mkt.get("event_ticker", "")
+                market_title = _pretty_title(ticker, _event_title(event_ticker) or mkt.get("title", ticker))
+                category     = mkt.get("category", "")
+                current_yes  = _mark_price_cents(mkt, "yes")
+                current_no   = _mark_price_cents(mkt, "no")
+                close_time   = mkt.get("close_time") or mkt.get("expiration_time")
             else:
-                # Fast mode: make NO new market call, but REUSE cached market data if
-                # the scan loop already fetched it (it scans these same crypto markets
-                # constantly). Instant live prices with zero extra API hits — so the
-                # CURRENT/PROFIT columns show numbers immediately instead of dashes.
-                _c = _market_cache.get(ticker)
-                if _c and (time.time() - _c["ts"]) < _MARKET_CACHE_TTL:
-                    _m = _c["data"]
-                    event_ticker = _m.get("event_ticker", "")
-                    market_title = _pretty_title(ticker, _event_title(event_ticker) or _m.get("title", ticker))
-                    category     = _m.get("category", "")
-                    current_yes  = _mark_price_cents(_m, "yes")
-                    current_no   = _mark_price_cents(_m, "no")
-                    close_time   = _m.get("close_time") or _m.get("expiration_time")
-                else:
-                    event_ticker = ""
-                    market_title = _title_cache.get(ticker) or _humanize_ticker(ticker)
-                    category = ""
-                    current_yes = None
-                    current_no = None
-                    close_time = None
+                # Fallback: use title cache (persists across reloads), show no prices
+                event_ticker = ""
+                market_title = _title_cache.get(ticker) or _humanize_ticker(ticker)
+                category = ""
+                current_yes = None
+                current_no = None
+                close_time = None
 
             # Portfolio value = contracts * current bid price
             side = "yes" if qty > 0 else "no"
