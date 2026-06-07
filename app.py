@@ -3093,8 +3093,7 @@ def pnl_history():
     ]
 
     # Fetch settlements from Kalshi — only these count as real profit (excludes deposits)
-    settles = []  # list of (ts_float, pnl) — a list (not a dict keyed by ts) so two
-                  # settlements at the same instant don't overwrite each other.
+    settle_by_time = {}  # ts -> pnl for that settlement
     try:
         cursor = None
         pages = 0
@@ -3116,21 +3115,11 @@ def pnl_history():
                 yes_cost = float(s.get("yes_total_cost_dollars") or 0)
                 no_cost = float(s.get("no_total_cost_dollars") or 0)
                 rev = float(s.get("revenue") or 0) / 100
-                # Skip placeholder/zero rows (combo placeholders, settled-zero entries).
-                if yes_cnt < 0.001 and no_cnt < 0.001 and yes_cost < 0.001 and no_cost < 0.001:
-                    continue
-                # Skip HEDGED positions (bought both sides → net zero, closed pre-settlement).
-                # Kalshi records these with revenue=0, so without this skip each one was
-                # counted as a FULL loss of its cost — inflating total losses by hundreds of
-                # dollars on a churny lotto account. The real P&L was taken at the offsetting
-                # trade, not at settlement. (Matches _recent_settlements / the Settled tab.)
-                if yes_cnt > 0.001 and no_cnt > 0.001:
-                    continue
                 cost = yes_cost if yes_cnt > 0.001 else no_cost
                 cnt = yes_cnt if yes_cnt > 0.001 else no_cnt
                 fee = round(cnt * 0.01, 4) if rev > 0.001 else 0
                 pnl = rev - cost - fee
-                settles.append((ts_float, pnl))
+                settle_by_time[ts_float] = pnl
             cursor = data.get("cursor")
             if not cursor: break
             pages += 1
@@ -3138,7 +3127,7 @@ def pnl_history():
         print(f"[pnl_history] settlements error: {e}")
 
     # Sort settlements by timestamp
-    sorted_settles = sorted(settles)
+    sorted_settles = sorted(settle_by_time.items())
 
     # Calculate cumulative P&L at each time window
     past_values = {}
@@ -3151,12 +3140,12 @@ def pnl_history():
         past_values[label] = round(cumul_pnl, 2) if cumul_pnl != 0 else None
 
     # Also calculate total realized P&L (all time)
-    total_realized_pnl = round(sum(pnl for _, pnl in settles), 2)
+    total_realized_pnl = round(sum(pnl for pnl in settle_by_time.values()), 2)
 
     return jsonify({
         "past_values":        past_values,
         "total_realized_pnl": total_realized_pnl,
-        "settlements_count":  len(settles),
+        "settlements_count":  len(settle_by_time),
     })
 
 
