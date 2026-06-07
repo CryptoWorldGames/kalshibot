@@ -5180,10 +5180,21 @@ async function copyDiagnostics() {
     const max = parseInt(document.getElementById("scanMax")?.value || 96);
     const mins = parseInt(document.getElementById("scanTime")?.value || 1440);
 
-    const [port, scan] = await Promise.all([
-      fetch('/api/portfolio').then(r=>r.json()),
-      fetch(`/api/scan?min_thr=${min}&max_thr=${max}&minutes=${mins}&show_crypto=true&show_combo=true&show_sports=true&show_politics=true&show_economics=true&good_liq=false`).then(r=>r.json())
+    const [portResp, scanResp] = await Promise.all([
+      fetch('/api/portfolio'),
+      fetch(`/api/scan?min_thr=${min}&max_thr=${max}&minutes=${mins}&show_crypto=true&show_combo=true&show_sports=true&show_politics=true&show_economics=true&good_liq=false`)
     ]);
+
+    if (!portResp.ok) {
+      throw new Error(`Portfolio fetch failed: ${portResp.status} ${portResp.statusText}`);
+    }
+    if (!scanResp.ok) {
+      throw new Error(`Scan fetch failed: ${scanResp.status} ${scanResp.statusText}`);
+    }
+
+    const port = await portResp.json();
+    const scan = await scanResp.json();
+
     const lines = [
       `=== KalshiBot Diagnostics ===`,
       `Cash: $${port.balance} | Portfolio: $${port.portfolio_value} | Total: $${(parseFloat(port.balance||0) + parseFloat(port.portfolio_value||0)).toFixed(2)}`,
@@ -5197,6 +5208,7 @@ async function copyDiagnostics() {
     await copyToClipboard(lines);
     toast("✓ Diagnostics copied!", "ok");
   } catch(e) {
+    console.error("[copyDiagnostics]", e);
     toast("Error: " + e.message, "err");
   }
 }
