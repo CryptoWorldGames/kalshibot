@@ -3185,7 +3185,8 @@ async function sellPos(ticker, side, count, safeId) {
     // Check if it's a "no fill" error (no buyers at market price)
     if (errorMsg.includes("no buyers") || errorMsg.includes("no fill")) {
       // Ask user if they want to try a limit order instead
-      showOrderTypeDialog(ticker, side, count, prePos, bid_cents);
+      const bidPrice = side === "yes" ? prePos?.current_yes : prePos?.current_no;
+      showOrderTypeDialog(ticker, side, count, prePos, bidPrice);
     } else {
       toast(errorMsg, "err");
     }
