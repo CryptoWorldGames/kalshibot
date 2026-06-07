@@ -3085,14 +3085,45 @@ def enrich_positions():
     tickers = [t.strip() for t in ticker_str.split(",") if t.strip()]
     result = {}
 
-    for ticker in tickers[:50]:  # limit to 50 at a time to avoid huge requests
-        time.sleep(0.01)  # gentle rate limit
+    # Split into cached (instant) vs uncached (need fetching). Serving cached
+    # markets from the 60s cache costs zero API calls and never times out.
+    now = time.time()
+    uncached = []
+    markets_by_ticker = {}
+    for ticker in tickers:
+        c = _market_cache.get(ticker)
+        if c and (now - c["ts"]) < _MARKET_CACHE_TTL:
+            markets_by_ticker[ticker] = c["data"]
+        else:
+            uncached.append(ticker)
+
+    # Fetch ALL uncached tickers using Kalshi's BATCH endpoint: GET /markets?tickers=A,B,C
+    # returns up to 100 markets in ONE call. This replaces the old loop that made one
+    # /markets/{ticker} call per ticker — that loop was throttled by the rate limiter
+    # and routinely timed out the frontend (the "blanks" / dashes bug). One batched
+    # call per 100 tickers fills every position's price reliably and fast.
+    for i in range(0, len(uncached), 100):
+        chunk = uncached[i:i + 100]
         try:
-            mkt = _get_market(ticker)
+            data = kalshi_get("/markets", {"tickers": ",".join(chunk), "limit": 100})
+            for m in data.get("markets", []):
+                tk = m.get("ticker", "")
+                if tk:
+                    markets_by_ticker[tk] = m
+                    _market_cache[tk] = {"data": m, "ts": now}  # warm the cache
+        except Exception as e:
+            print(f"[enrich-positions] batch fetch error: {e}")
+
+    for ticker in tickers:
+        mkt = markets_by_ticker.get(ticker)
+        if not mkt:
+            result[ticker] = {}
+            continue
+        try:
             event_ticker = mkt.get("event_ticker", "")
             result[ticker] = {
                 "event_ticker": event_ticker,
-                "title": _pretty_title(ticker, _event_title(event_ticker) or mkt.get("title", ticker)),
+                "title": _pretty_title(ticker, mkt.get("title") or _title_cache.get(ticker) or _humanize_ticker(ticker)),
                 "category": mkt.get("category", ""),
                 "current_yes": _mark_price_cents(mkt, "yes"),
                 "current_no": _mark_price_cents(mkt, "no"),

@@ -1978,8 +1978,9 @@ async function enrichPositionMarkets(tickerList, titleOnly) {
                    : allPositions.map(p => p.ticker)).filter(Boolean);
   if (!tickers.length) return;
 
-  // Process in batches of 50 tickers at a time
-  const batchSize = 50;
+  // Process in batches of 100 tickers. The backend fetches each batch in ONE
+  // Kalshi /markets?tickers= call, so even a 100-ticker batch returns fast.
+  const batchSize = 100;
   for (let i = 0; i < tickers.length; i += batchSize) {
     const batch = tickers.slice(i, i + batchSize);
     try {
@@ -2007,7 +2008,10 @@ async function enrichPositionMarkets(tickerList, titleOnly) {
 
       renderBotPositions(allPositions);
     } catch(e) {
-      console.warn("[enrich] batch error (tickers " + i + "-" + (i + batchSize) + "):", e);
+      // Ignore AbortErrors (tab switch / timeout); log real failures
+      if (e.name !== 'AbortError') {
+        console.warn("[enrich] batch error (tickers " + i + "-" + (i + batchSize) + "):", e);
+      }
     }
   }
 }
