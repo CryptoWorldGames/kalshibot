@@ -2782,10 +2782,14 @@ async function sellPos(ticker, side, count, safeId) {
   }
 
   try {
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 30000); // 30s timeout
     const r = await fetch("/api/sell", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ticker, side, count}),
+      signal: ctrl.signal,
     });
+    clearTimeout(timeout);
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "Sell failed");
 
