@@ -164,6 +164,32 @@ git push
 
 ---
 
+## 2026-06-07 Session 2 — UI improvements: consistent layout, bigger fonts, better spacing
+
+**Fixed layout + readability issues:**
+
+1. **Scanner "Buy up to" refactored:** Changed from inline flex to responsive grid (like Lotto). "Buy up to (per scan)" and "Hold max positions" now side-by-side on wide screens, stack on mobile.
+
+2. **Lotto "Ends Within" pills bigger:** Increased from font-size 11px → 13px (matching Scanner). Added padding for better tap targets.
+
+3. **Scanner auto mode default changed:** Now defaults to "Until stopped" (was "Run for minutes").
+
+4. **Responsive grid improvements:** Both Scanner and Lotto now use `grid-template-columns: repeat(auto-fit, minmax(160px, 1fr))` for better PC/tablet readability while staying within boxes on all devices.
+
+**Files changed:** `index.html`. Syntax OK.
+
+---
+
+## 2026-06-07 Session 1 — Monitor auto-sell now uses MARKET orders (not LIMIT)
+
+**Issue:** Auto-sell positions were using LIMIT orders that rest unfilled instead of executing. Positions stayed stuck open forever.
+
+**Fix:** Changed monitor's sell logic to match manual `/api/sell` endpoint — now uses MARKET orders with protective floor = current bid. Executes immediately or cancels (never rests).
+
+**Files changed:** `app.py` (monitor sell order construction).
+
+---
+
 ## 2026-06-03 Session 3 — Settings persistence fixes + portfolio enrichment starvation fix
 
 **Fixed three critical issues:**
