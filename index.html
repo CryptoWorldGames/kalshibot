@@ -1067,6 +1067,11 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
         <button class="pill sm" id="sFilter7d"  onclick="setSettleFilter(168,'7d')" style="padding:4px 10px;font-size:12px">7d</button>
         <button class="pill sm" id="sFilter30d" onclick="setSettleFilter(720,'30d')" style="padding:4px 10px;font-size:12px">30d</button>
       </div>
+      <div style="display:flex;gap:4px">
+        <button class="pill sm active" id="sFilterBoth" onclick="setSettleProfileFilter('both')" style="padding:4px 10px;font-size:12px">Both</button>
+        <button class="pill sm" id="sFilterT1" onclick="setSettleProfileFilter('T1')" style="padding:4px 10px;font-size:12px">T1 only</button>
+        <button class="pill sm" id="sFilterT2" onclick="setSettleProfileFilter('T2')" style="padding:4px 10px;font-size:12px">T2 only</button>
+      </div>
     </div>
     <div id="settlementsSummary" style="font-size:13px;color:var(--muted)"></div>
   </div>
@@ -1269,6 +1274,9 @@ async function loadPnl() {
 // ── Nav balance ───────────────────────────────────────────────────────────
 
 let _settleHours = 24;
+let _settleProfileFilter = "both";  // "both", "T1", or "T2"
+let _settleTickerFilter = null;     // null or ticker string to filter by
+let _settleHighLowFilter = null;    // null, "high", or "low" for P&L
 let _lastBalanceCall = 0;
 let _waitingForCash = false;
 // Persistent last-20 sales for the ticker. Loaded from localStorage so the
@@ -1406,7 +1414,21 @@ function setSettleFilter(hours, label) {
   });
   const title = document.getElementById("settlementsTitle");
   if (title) title.textContent = `Recent Settlements (${label})`;
-  loadSettlements(); // dedicated, fast settlements refresh for the new period
+  loadSettlements();
+}
+
+function setSettleProfileFilter(profile) {
+  _settleProfileFilter = profile;
+  ["Both", "T1", "T2"].forEach(p => {
+    const el = document.getElementById("sFilter" + p);
+    if (el) el.classList.toggle("active", p.toLowerCase() === profile.toLowerCase() || (profile === "both" && p === "Both"));
+  });
+  renderSettlements(window._lastSettlements || []);
+}
+
+function setSettleTickerFilter(ticker) {
+  _settleTickerFilter = _settleTickerFilter === ticker ? null : ticker;
+  renderSettlements(window._lastSettlements || []);
 }
 
 // Fast, standalone cash fetch. Hits the lightweight cached /api/balance so the top
@@ -1658,7 +1680,8 @@ function renderSettlements(rows) {
   }
 
   if (!rows.length) {
-    wrap.innerHTML = `<div style="text-align:center;color:var(--muted);padding:24px;font-size:13px">No settlements in this period.</div>`;
+    const emptyMsg = _settleTickerFilter ? `No settlements for ${_settleTickerFilter}.` : "No settlements in this period.";
+    wrap.innerHTML = `<div style="text-align:center;color:var(--muted);padding:24px;font-size:13px">${emptyMsg}</div>`;
     if (sum) sum.textContent = "";
     return;
   }
@@ -1669,22 +1692,43 @@ function renderSettlements(rows) {
     totalPnl += (r.pnl || 0);
   });
   const pnlCls = totalPnl > 0 ? "pos" : totalPnl < 0 ? "neg" : "neu";
+  const filterInfo = _settleTickerFilter ? ` (${_settleTickerFilter})` : "";
   if (sum) {
-    sum.innerHTML = `${rows.length} settled · <span class="pos">${wins} won</span> · <span class="neg">${losses} lost</span> · P&amp;L: <span class="${pnlCls}" style="font-weight:700;font-size:14px">${totalPnl >= 0 ? "+" : ""}$${totalPnl.toFixed(2)}</span>`;
+    sum.innerHTML = `${rows.length} settled${filterInfo} · <span class="pos">${wins} won</span> · <span class="neg">${losses} lost</span> · P&amp;L: <span class="${pnlCls}" style="font-weight:700;font-size:14px">${totalPnl >= 0 ? "+" : ""}$${totalPnl.toFixed(2)}</span>`;
+  }
+
+  // Apply filters
+  let filtered = [...rows];
+
+  // Filter by profile (T1/T2/both)
+  if (_settleProfileFilter !== "both") {
+    filtered = filtered.filter(r => r.profile === _settleProfileFilter);
+  }
+
+  // Filter by ticker if selected
+  if (_settleTickerFilter) {
+    filtered = filtered.filter(r => r.ticker === _settleTickerFilter);
+  }
+
+  // Filter by P&L (high/low) if set
+  if (_settleHighLowFilter === "high") {
+    filtered = filtered.filter(r => (r.pnl || 0) > 0.001);
+  } else if (_settleHighLowFilter === "low") {
+    filtered = filtered.filter(r => (r.pnl || 0) < -0.001);
   }
 
   // Sort settlements
-  const sorted = [...rows].sort((a, b) => {
+  const sorted = filtered.sort((a, b) => {
     if (_settleSortBy === "pnl_desc")      return (b.pnl||0) - (a.pnl||0);
     if (_settleSortBy === "pnl_asc")       return (a.pnl||0) - (b.pnl||0);
-    if (_settleSortBy === "won_desc")      return (b.won?1:0) - (a.won?1:0);  // Won first
-    if (_settleSortBy === "won_asc")       return (a.won?1:0) - (b.won?1:0);  // Lost first
-    if (_settleSortBy === "recent_asc")    return (a.settled_time||"").localeCompare(b.settled_time||""); // Oldest first
+    if (_settleSortBy === "won_desc")      return (b.won?1:0) - (a.won?1:0);
+    if (_settleSortBy === "won_asc")       return (a.won?1:0) - (b.won?1:0);
+    if (_settleSortBy === "recent_asc")    return (a.settled_time||"").localeCompare(b.settled_time||"");
     if (_settleSortBy === "howsold_desc")  return (b.sold_by||"").localeCompare(a.sold_by||"");
     if (_settleSortBy === "howsold_asc")   return (a.sold_by||"").localeCompare(b.sold_by||"");
     if (_settleSortBy === "title_desc")    return (b.title||"").localeCompare(a.title||"");
     if (_settleSortBy === "title_asc")     return (a.title||"").localeCompare(b.title||"");
-    return (b.settled_time||"").localeCompare(a.settled_time||""); // default: newest first
+    return (b.settled_time||"").localeCompare(a.settled_time||"");
   });
   rows = sorted;
   const body = rows.map(r => {
@@ -1697,8 +1741,12 @@ function renderSettlements(rows) {
       : won === false
         ? `<span class="badge no" style="background:rgba(255,80,80,.15);color:var(--red)">LOST</span>`
         : `<span class="badge" style="background:#333;color:#aaa">—</span>`;
+    const isTickerFiltered = _settleTickerFilter === r.ticker;
     const titleHtml = r.ticker
-      ? `<a href="${r.kalshi_url || '#'}" target="_blank" style="color:#ccc;text-decoration:none" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='#ccc'">${esc(r.title)}<span style="font-size:10px;margin-left:4px;opacity:.5">↗</span></a>`
+      ? `<div style="display:flex;align-items:center;gap:8px">
+          <span onclick="setSettleTickerFilter('${r.ticker}')" style="color:${isTickerFiltered?'var(--green)':'#ccc'};cursor:pointer;text-decoration:${isTickerFiltered?'underline':'none'}" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='${isTickerFiltered?'var(--green)':'#ccc'}'">${esc(r.title)}</span>
+          <a href="${r.kalshi_url || '#'}" target="_blank" style="color:#666;text-decoration:none;font-size:11px" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='#666'">↗</a>
+        </div>`
       : esc(r.title);
     const catTag = r.category ? `<div style="font-size:11px;color:#666;margin-top:3px">${esc(r.category)}</div>` : "";
     return `
