@@ -727,10 +727,15 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
       <div style="font-size:13px;color:var(--muted);font-weight:700;margin-bottom:8px">Max Buys Per Scan</div>
       <input type="number" id="autoMaxPerScan" value="20" min="1" style="width:100%;padding:8px;margin-bottom:8px;font-size:14px;background:#1a1f26;color:#fff;border:1px solid var(--border);border-radius:6px" oninput="saveSettings()">
       <div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:center">
+        <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('autoMaxPerScan').value=1;saveSettings()">1</button>
+        <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('autoMaxPerScan').value=2;saveSettings()">2</button>
+        <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('autoMaxPerScan').value=3;saveSettings()">3</button>
+        <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('autoMaxPerScan').value=4;saveSettings()">4</button>
         <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('autoMaxPerScan').value=5;saveSettings()">5</button>
         <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('autoMaxPerScan').value=10;saveSettings()">10</button>
         <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('autoMaxPerScan').value=20;saveSettings()">20</button>
         <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('autoMaxPerScan').value=50;saveSettings()">50</button>
+        <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('autoMaxPerScan').value=100;saveSettings()">100</button>
       </div>
     </div>
 
@@ -742,6 +747,9 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
         <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('autoMaxConcurrent').value=10;saveSettings()">10</button>
         <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('autoMaxConcurrent').value=20;saveSettings()">20</button>
         <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('autoMaxConcurrent').value=50;saveSettings()">50</button>
+        <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('autoMaxConcurrent').value=100;saveSettings()">100</button>
+        <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('autoMaxConcurrent').value=250;saveSettings()">250</button>
+        <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('autoMaxConcurrent').value=500;saveSettings()">500</button>
         <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('autoMaxConcurrent').value=999;saveSettings()">999</button>
       </div>
     </div>
@@ -994,10 +1002,15 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
           <div style="font-size:13px;color:var(--muted);font-weight:700;margin-bottom:8px">Max Buys Per Scan</div>
           <input type="number" id="L_autoMaxPerScan" min="1" value="10" onchange="pushLottoSettings()" style="width:100%;padding:8px;margin-bottom:8px;font-size:14px;background:#1a1f26;color:#fff;border:1px solid var(--border);border-radius:6px">
           <div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:center">
+            <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('L_autoMaxPerScan').value=1;pushLottoSettings()">1</button>
+            <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('L_autoMaxPerScan').value=2;pushLottoSettings()">2</button>
+            <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('L_autoMaxPerScan').value=3;pushLottoSettings()">3</button>
+            <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('L_autoMaxPerScan').value=4;pushLottoSettings()">4</button>
             <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('L_autoMaxPerScan').value=5;pushLottoSettings()">5</button>
             <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('L_autoMaxPerScan').value=10;pushLottoSettings()">10</button>
             <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('L_autoMaxPerScan').value=20;pushLottoSettings()">20</button>
             <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('L_autoMaxPerScan').value=50;pushLottoSettings()">50</button>
+            <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('L_autoMaxPerScan').value=100;pushLottoSettings()">100</button>
           </div>
         </div>
 
@@ -1009,6 +1022,9 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
             <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('L_autoMaxConcurrent').value=10;pushLottoSettings()">10</button>
             <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('L_autoMaxConcurrent').value=20;pushLottoSettings()">20</button>
             <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('L_autoMaxConcurrent').value=50;pushLottoSettings()">50</button>
+            <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('L_autoMaxConcurrent').value=100;pushLottoSettings()">100</button>
+            <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('L_autoMaxConcurrent').value=250;pushLottoSettings()">250</button>
+            <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('L_autoMaxConcurrent').value=500;pushLottoSettings()">500</button>
             <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="document.getElementById('L_autoMaxConcurrent').value=999;pushLottoSettings()">999</button>
           </div>
         </div>
@@ -4404,6 +4420,7 @@ function setAmt(n) {
     if (el) { el.value = n.toFixed(2); updatePreview(i, m.price); }
   });
   updateBuySummary();
+  saveSettings();
 }
 
 function updatePreview(idx, price_c) {
@@ -5069,6 +5086,7 @@ async function loadStats() {
 
 function setMaxBuys(n) {
   document.getElementById("maxBuysPerMarket").value = n;
+  saveSettings();
 }
 
 // ── Strategy Memory Slots (10 saved strategies) ──────────────────────────
@@ -5120,11 +5138,16 @@ const SETTINGS_KEY = "kb_settings_v2";
 const SETTINGS_CHECKBOXES = ["showCrypto","showSports","showPolitics","showEconomics","enableBuyUp","enableBuyDown","hideMultiOutcome",
   "showCombo","goodLiq",
   "stopLossChk",
-  "skipAutoSellNearResolution","hideSmallPositions","hide95LossPositions"];
+  "skipAutoSellNearResolution","hideSmallPositions","hide95LossPositions",
+  "L_showCrypto","L_showSports","L_showCombo","L_showPolitics","L_showEconomics","L_goodLiq","L_hideMultiOutcome",
+  "L_stopLossChk"];
 const SETTINGS_INPUTS = ["buyAmount","maxBuysPerMarket","autoMaxPerScan","autoMaxConcurrent","posSort",
   "autoMins","autoBuysMax","profitCustom","profitDolCustom","targetPriceCustom","minProb","maxProb","timeCustom",
   "stopLossPct","skipAutoSellMinutes",
-  "minProbDown","maxProbDown","spreadUp","spreadDown","snoozeDuration"];
+  "minProbDown","maxProbDown","spreadUp","spreadDown","snoozeDuration",
+  "L_buyAmount","L_maxBuysPerMarket","L_autoMaxPerScan","L_autoMaxConcurrent",
+  "L_minProb","L_maxProb","L_minProbDown","L_maxProbDown","L_minutes","L_stopLossPct",
+  "L_targetPct","L_targetDol","L_targetPrice"];
 
 function saveSettings() {
   // Validation: Must have at least one buy direction enabled
@@ -5259,6 +5282,7 @@ function setLottoEndsWithin(mins) {
 
 let _pushLottoTimer = null;
 function pushLottoSettings() {
+  saveSettings(); // persist Lotto inputs to localStorage too
   const chk = id => { const el = document.getElementById(id); return el ? el.checked : false; };
   const num = (id,d) => { const el = document.getElementById(id); const v = parseFloat(el?.value); return isNaN(v)?d:v; };
   const optNum = id => { const el = document.getElementById(id); return el && el.value !== "" ? parseFloat(el.value) : null; };
@@ -5749,7 +5773,7 @@ renderStratSlots();
 syncFabButtons();
 // Always push current sell strategy + BUY filters to Flask on page load so the
 // headless bot trades the UI's settings (survives Flask restarts / device switches).
-setTimeout(() => { pushStrategy(); pushSellSettings(); pushBuySettings(true); }, 1000);
+setTimeout(() => { pushStrategy(); pushSellSettings(); pushBuySettings(true); pushLottoSettings(); }, 1000);
 
 // ── Flask crash recovery (page reload DISABLED) ───────────────────────────
 // Previously this polled every 5s and reloaded the page when Flask recovered,
