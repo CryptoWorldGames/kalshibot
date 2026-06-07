@@ -1411,9 +1411,12 @@ function refreshPnlDisplay() {
   const wrap = document.getElementById("navPnlAll");
   if (!wrap) return;
   wrap.innerHTML = PNL_PERIODS.map(period => {
-    const past = pnlPastValues[period];
-    if (past == null) return `<div class="fund-block"><span class="fund-amount" style="color:#444;font-size:14px">—</span><span class="fund-label">P&L ${period}</span></div>`;
-    const pnl   = pnlCurrentTotal - past;
+    // The backend already returns the realized P&L FOR each window (e.g. "1h" =
+    // settlements in the last hour). Display it directly — do NOT subtract it from
+    // the all-time total (that old math showed ~all-time total in every cell, e.g.
+    // "-$830 in 1H" on a $50 account).
+    const pnl = pnlPastValues[period];
+    if (pnl == null) return `<div class="fund-block"><span class="fund-amount" style="color:#444;font-size:14px">—</span><span class="fund-label">P&L ${period}</span></div>`;
     const color = pnl > 0.005 ? "var(--green)" : pnl < -0.005 ? "var(--red)" : "#888";
     const sign  = pnl >= 0 ? "+" : "-";
     return `<div class="fund-block"><span class="fund-amount" style="color:${color};font-size:14px">${sign}$${Math.abs(pnl).toFixed(2)}</span><span class="fund-label">P&L ${period}</span></div>`;
