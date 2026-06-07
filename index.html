@@ -5020,6 +5020,19 @@ function switchTab(name) {
     }
   } else {
     if (window._posTabRefresh) { clearInterval(window._posTabRefresh); window._posTabRefresh = null; }
+    if (window._posEnrich)     { clearInterval(window._posEnrich); window._posEnrich = null; }
+    if (window._posSettle)     { clearInterval(window._posSettle); window._posSettle = null; }
+  }
+  if (name === "settlements") {
+    loadSettlements();
+    if (window._settleRefresh) clearInterval(window._settleRefresh);
+    if (!document.hidden) window._settleRefresh = setInterval(loadSettlements, 30000);
+  } else {
+    if (window._settleRefresh) { clearInterval(window._settleRefresh); window._settleRefresh = null; }
+  }
+    }
+  } else {
+    if (window._posTabRefresh) { clearInterval(window._posTabRefresh); window._posTabRefresh = null; }
     if (window._posEnrich)     { clearInterval(window._posEnrich);     window._posEnrich = null; }
     if (window._posSettle)     { clearInterval(window._posSettle);     window._posSettle = null; }
   }
