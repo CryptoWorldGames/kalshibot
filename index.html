@@ -509,6 +509,9 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 
     <div class="settings-section">
       <div class="settings-section-title">🔊 Notification Sounds</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px">
+        Upload custom audio files (MP3, WAV, OGG) for each notification type. Max 5MB per file.
+      </div>
       <div id="soundsList"></div>
     </div>
   </div>
@@ -4942,10 +4945,11 @@ function renderSoundsList() {
       <div class="sound-item">
         <span class="sound-name">${displayName}</span>
         <button class="sound-btn" onclick="playSoundByKey('${key}')">▶ Play</button>
-        <label class="upload-label">
+        <label class="upload-label" title="Upload a custom sound file (MP3, WAV, OGG, etc.)">
           📁
           <input type="file" accept="audio/*" onchange="handleSoundUpload(this, '${key}')">
         </label>
+        ${customSaved ? `<button class="sound-btn" onclick="resetSound('${key}')" style="color:var(--red);border-color:var(--red)">↺ Reset</button>` : ''}
       </div>
     `;
   }).join("");
@@ -4974,12 +4978,20 @@ function playSoundByKey(key) {
 function handleSoundUpload(input, soundKey) {
   if (!input.files || !input.files[0]) return;
   const file = input.files[0];
+
+  // Check file size (max 5MB)
+  if (file.size > 5 * 1024 * 1024) {
+    toast("File too large (max 5MB)", "err");
+    input.value = "";
+    return;
+  }
+
   const reader = new FileReader();
 
   reader.onload = (e) => {
     const audioData = e.target.result;
     localStorage.setItem(`customSound_${soundKey}`, audioData);
-    toast(`✓ Replaced ${soundTypes[soundKey].name} with ${file.name}`, "ok");
+    toast(`✓ Uploaded ${file.name}`, "ok");
     renderSoundsList();
     input.value = ""; // Reset input
   };
@@ -4989,6 +5001,12 @@ function handleSoundUpload(input, soundKey) {
   };
 
   reader.readAsDataURL(file);
+}
+
+function resetSound(soundKey) {
+  localStorage.removeItem(`customSound_${soundKey}`);
+  toast(`✓ Reset ${soundTypes[soundKey].name} to default`, "ok");
+  renderSoundsList();
 }
 
 function switchTab(name) {
