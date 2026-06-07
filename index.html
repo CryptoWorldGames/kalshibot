@@ -18,16 +18,6 @@
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     });
   }
-  // Resume AudioContext on first user interaction (required by modern browsers)
-  // Defer listener attachment until resumeAudioContext is defined
-  window.addEventListener("load", () => {
-    if (typeof resumeAudioContext === "function") {
-      document.addEventListener("click", resumeAudioContext, { once: true });
-      document.addEventListener("keydown", resumeAudioContext, { once: true });
-      document.addEventListener("touchstart", resumeAudioContext, { once: true });
-    }
-  });
-
 </script>
 <style>
 :root {
@@ -4074,10 +4064,8 @@ function resumeAudioContext() {
 function playBeep(freq = 800, duration = 0.2, volume = 0.3) {
   try {
     if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (_audioCtx.state === "suspended") {
-      _audioCtx.resume().catch(() => {});
-      return; // Skip this beep, will work on next user interaction
-    }
+    resumeAudioContext();
+    if (_audioCtx.state === "suspended") return;
     const ctx = _audioCtx;
     const now = ctx.currentTime;
     const osc = ctx.createOscillator();
