@@ -2841,8 +2841,7 @@ async function stopAutoMode(reason) {
   _waitingForCash = false;
   if (_cashPauseTimer) { clearInterval(_cashPauseTimer); _cashPauseTimer = null; }
   const r = reason || "Stopped";
-  document.getElementById("autoModeStatus").textContent =
-    `${r} · ${autoModeBought} buy(s) made`;
+  const ams = document.getElementById("autoModeStatus"); if (ams) ams.textContent = `${r} · ${autoModeBought} buy(s) made`;
   // Always show a persistent toast so user sees exactly why it stopped
   const el = document.getElementById("toast");
   if (el) {
@@ -2873,8 +2872,7 @@ function updateAutoStatus() {
     timeStr = "Running (manual stop)";
   }
 
-  document.getElementById("autoModeStatus").textContent =
-    `${timeStr} · ${autoModeBought} bought`;
+  const ams = document.getElementById("autoModeStatus"); if (ams) ams.textContent = `${timeStr} · ${autoModeBought} bought`;
 }
 
 // checkAutoStopConditions() removed — the portfolio-level profit/loss auto-stop it
@@ -3474,7 +3472,7 @@ function fmtSecs(s) {
 
 function clearMarkets() {
   document.getElementById("marketsWrap").innerHTML = "";
-  document.getElementById("buySummary").style.display = "none";
+  const bs = document.getElementById("buySummary"); if (bs) bs.style.display = "none";
   const _bab = document.getElementById("buyAllBtn"); if (_bab) _bab.disabled = true;
   markets = []; selectedMarkets.clear();
   if (cdTimer) { clearInterval(cdTimer); cdTimer = null; }
@@ -4376,8 +4374,8 @@ async function refreshClippy() {
     const el = document.getElementById("clippy");
     if (!el) return;
     if (sig !== _clippyLast) {
-      document.getElementById("clippyMsg").innerHTML = pick.msg.replace(/\*\*(.+?)\*\*/g, '<b style="color:var(--green)">$1</b>');
-      document.getElementById("clippyN").textContent = d.totals?.trades || 0;
+      const cm = document.getElementById("clippyMsg"); if (cm) cm.innerHTML = pick.msg.replace(/\*\*(.+?)\*\*/g, '<b style="color:var(--green)">$1</b>');
+      const cn = document.getElementById("clippyN"); if (cn) cn.textContent = d.totals?.trades || 0;
       el.style.display = "block";
       _clippyLast = sig;
       // Auto-dismiss after 2 minutes
@@ -4449,12 +4447,12 @@ async function loadApiLog() {
          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">${label}</div>
        </div>`;
     const rl = d.rate_limited_60s || 0;
-    document.getElementById("apiLogSummary").innerHTML =
+    const als = document.getElementById("apiLogSummary"); if (als) als.innerHTML =
       chip("Calls / 60s", d.calls_60s ?? 0, "#fff") +
       chip("Errors / 60s", d.errors_60s ?? 0, (d.errors_60s ? "var(--yellow)" : "#fff")) +
       chip("429 rate-limited / 60s", rl, (rl ? "var(--red)" : "var(--green)"));
     const top = (d.top_endpoints_60s || []).map(([k,n]) => `${k} <b style="color:#fff">${n}</b>`).join(" · ");
-    document.getElementById("apiLogTop").innerHTML = top ? ("Busiest (60s): " + top) : "";
+    const alt = document.getElementById("apiLogTop"); if (alt) alt.innerHTML = top ? ("Busiest (60s): " + top) : "";
     const body = document.getElementById("apiLogBody");
     const rows = d.recent || [];
     if (!rows.length) { body.innerHTML = '<tr><td colspan="5" style="padding:14px;color:var(--muted)">No calls yet.</td></tr>'; return; }
@@ -4602,8 +4600,8 @@ async function loadCoach() {
     if (e.name === 'AbortError') return;
     // For other errors, show a clear message
     const msg = e.message || "Unknown error";
-    document.getElementById("coachTotals").textContent = "Coach unavailable";
-    document.getElementById("coachRecs").textContent = msg;
+    const ct = document.getElementById("coachTotals"); if (ct) ct.textContent = "Coach unavailable";
+    const cr = document.getElementById("coachRecs"); if (cr) cr.textContent = msg;
   }
 }
 
@@ -5448,10 +5446,10 @@ async function runDebugScan() {
 
     el.textContent = out || "No data.";
     // Show copy button when there's content
-    document.getElementById("copyDebugBtn").style.display = "block";
+    const cdb = document.getElementById("copyDebugBtn"); if (cdb) cdb.style.display = "block";
   } catch(e) {
     el.textContent = "Error: " + e.message;
-    document.getElementById("copyDebugBtn").style.display = "none";
+    const cdb = document.getElementById("copyDebugBtn"); if (cdb) cdb.style.display = "none";
   }
 }
 
