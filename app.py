@@ -1477,10 +1477,24 @@ def _get_balance(force: bool = False):
         return cached
     try:
         bal_data = kalshi_get("/portfolio/balance")
-        cash_dollars = float(bal_data.get("balance_dollars") or 0)
-        if not cash_dollars:
-            cash_dollars = float(bal_data.get("balance") or 0) / 100
+        # Try multiple field names for cash (API may have changed)
+        cash_dollars = None
+        if "balance_dollars" in bal_data:
+            cash_dollars = float(bal_data.get("balance_dollars") or 0)
+        if cash_dollars is None or cash_dollars == 0:
+            # Fallback to cents field if dollars not present or zero
+            balance_cents = bal_data.get("balance") or 0
+            if balance_cents:
+                cash_dollars = float(balance_cents) / 100
+            else:
+                cash_dollars = 0.0
+
         pos_dollars = round(float(bal_data.get("portfolio_value") or 0) / 100, 2)
+
+        # Debug log the response if cash is unexpectedly zero
+        if cash_dollars == 0 and "balance" in bal_data or "balance_dollars" in bal_data:
+            print(f"[balance] API response: {bal_data}")
+
         data = {
             "cash":            round(cash_dollars, 2),
             "positions_value": pos_dollars,
@@ -1835,12 +1849,14 @@ def portfolio():
         if _c:
             recent_settlements = _c["data"]
 
+    live = bool(_balance_cache.get("live", True))
     return jsonify({
         "balance":            balance,           # spendable cash
         "positions_value":    round(portfolio_value, 2),  # open positions value only
         "portfolio_value":    total_value,       # total account = cash + positions (matches Kalshi)
         "positions":          positions,
         "positions_ok":       positions_ok,      # did the live Kalshi positions fetch succeed?
+        "balance_live":       live,              # whether balance is fresh (true) or stale/failed (false)
         "recent_settlements": recent_settlements,
     })
 

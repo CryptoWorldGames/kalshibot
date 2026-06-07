@@ -1581,7 +1581,19 @@ async function loadPositionsFast() {
     const r = await fetch(`/api/portfolio?enrich=false&settlement_hours=${_settleHours}`, {signal: ctrl.signal});
     clearTimeout(tid);
     const d = await r.json();
-    if (d.balance != null)         { const el = document.getElementById("navCash");      if (el) { el.textContent = "$" + d.balance.toFixed(2); el.className = "fund-amount cash-val"; } }
+    if (d.balance != null)         {
+      const el = document.getElementById("navCash");
+      if (el) {
+        if (d.balance_live === false) {
+          el.textContent = "$" + d.balance.toFixed(2) + " ⚠";
+          el.className = "fund-amount"; el.style.color = "var(--yellow)";
+          el.title = "Stale — can't reach Kalshi right now (showing last value)";
+        } else {
+          el.textContent = "$" + d.balance.toFixed(2);
+          el.className = "fund-amount cash-val"; el.style.color = ""; el.title = "";
+        }
+      }
+    }
     if (d.positions_value != null) { const el = document.getElementById("navPositions");  if (el)   el.textContent = "$" + d.positions_value.toFixed(2); }
     if (d.portfolio_value != null) { const el = document.getElementById("navPortfolio");  if (el) { el.textContent = "$" + d.portfolio_value.toFixed(2); el.className = "fund-amount port-val"; } }
     const np = d.positions || [];
