@@ -5275,14 +5275,22 @@ function stopSummaryClock() {
 
 function switchTab(name) {
   window.scrollTo(0, 0); // Jump to top when switching tabs
-  document.querySelectorAll(".tab-btn").forEach(b => {
-    const m = b.getAttribute("onclick")?.match(/'(\w+)'/);
-    b.classList.toggle("active", m?.[1] === name);
+  // Fast path: use data attributes instead of parsing onclick
+  const btnToActivate = Array.from(document.querySelectorAll(".tab-btn")).find(b => {
+    const tabName = b.id?.replace("tab", "")?.toLowerCase() ||
+                    b.getAttribute("onclick")?.match(/'(\w+)'/)?.[1];
+    return tabName === name;
   });
-  document.querySelectorAll(".tab-pane").forEach(p => {
-    p.classList.toggle("active", p.id === "tab-" + name);
-  });
-  localStorage.setItem("activeTab", name);
+  if (btnToActivate) {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    btnToActivate.classList.add("active");
+  }
+  const paneToActivate = document.getElementById("tab-" + name);
+  if (paneToActivate) {
+    document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
+    paneToActivate.classList.add("active");
+  }
+  try { localStorage.setItem("activeTab", name); } catch(e) {}
   if (name === "debug") {
     loadStats();
     if (window._statsRefresh) clearInterval(window._statsRefresh);
@@ -5336,19 +5344,6 @@ function switchTab(name) {
     if (window._posTabRefresh) { clearInterval(window._posTabRefresh); window._posTabRefresh = null; }
     if (window._posEnrich)     { clearInterval(window._posEnrich); window._posEnrich = null; }
     if (window._posSettle)     { clearInterval(window._posSettle); window._posSettle = null; }
-  }
-  if (name === "settlements") {
-    loadSettlements();
-    if (window._settleRefresh) clearInterval(window._settleRefresh);
-    if (!document.hidden) window._settleRefresh = setInterval(loadSettlements, 30000);
-  } else {
-    if (window._settleRefresh) { clearInterval(window._settleRefresh); window._settleRefresh = null; }
-  }
-    }
-  } else {
-    if (window._posTabRefresh) { clearInterval(window._posTabRefresh); window._posTabRefresh = null; }
-    if (window._posEnrich)     { clearInterval(window._posEnrich);     window._posEnrich = null; }
-    if (window._posSettle)     { clearInterval(window._posSettle);     window._posSettle = null; }
   }
   if (name === "settlements") {
     // Dedicated settlements tab — load now + refresh on its own interval.
