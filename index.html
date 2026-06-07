@@ -5373,6 +5373,20 @@ async function loadLottoHistory() {
   } catch(e) {}
 }
 
+function fmtDuration(mins) {
+  if (!mins || mins < 0) return "—";
+  if (mins < 50) return mins.toFixed(0) + "m";
+  const w = Math.floor(mins / 10080), m1 = mins % 10080;
+  const d = Math.floor(m1 / 1440), m2 = m1 % 1440;
+  const h = Math.floor(m2 / 60), m3 = Math.round(m2 % 60);
+  const parts = [];
+  if (w > 0) parts.push(w + "w");
+  if (d > 0) parts.push(d + "d");
+  if (h > 0) parts.push(h + "h");
+  if (m3 > 0 || parts.length === 0) parts.push(m3 + "m");
+  return parts.join(" ");
+}
+
 function renderLottoStats() {
   const sumEl = document.getElementById("lottoStatsSummary");
   const bodyEl = document.getElementById("lottoStatsBody");
@@ -5411,12 +5425,22 @@ function renderLottoStats() {
     b.n++; b.invested += (s.cost || 0); if (s.won) b.won++; b.pnl += (s.pnl || 0);
   });
   const centRows = Object.keys(buckets).map(Number).sort((a,b)=>a-b);
+  // Get date range from settled T2 bets
+  const settleDates = settledT2.map(s => s.settled_time).filter(Boolean);
+  const dateRange = settleDates.length ? (() => {
+    const dates = settleDates.map(d => { try { return new Date(d.replace('Z', '+00:00')); } catch(e) { return null; } }).filter(Boolean);
+    if (dates.length < 2) return "";
+    const sorted = dates.sort((a,b) => a-b);
+    const fmt = d => d.toLocaleDateString([], {month:"short",day:"numeric"});
+    return ` (${fmt(sorted[0])} – ${fmt(sorted[sorted.length-1])})`;
+  })() : "";
+
   const centTable = centRows.length ? `
-    <div style="font-weight:700;margin:18px 0 6px">📊 Win/Loss by 1¢ bet</div>
-    <div style="overflow-x:auto"><table class="flat-tbl" style="width:100%;font-size:12px;border-collapse:collapse">
-      <thead><tr style="color:var(--muted);text-align:left">
+    <div style="font-weight:700;margin:18px 0 6px">📊 Win/Loss by 1¢ bet${dateRange}</div>
+    <div style="overflow-x:auto;max-height:500px"><table class="flat-tbl" style="width:100%;font-size:12px;border-collapse:collapse">
+      <thead style="position:sticky;top:0;background:var(--card);z-index:10"><tr style="color:var(--muted);text-align:left">
         <th style="padding:4px">Bet</th><th>Bets</th><th>Invested</th><th>Won</th><th>Win&nbsp;ratio</th><th>P&amp;L</th></tr></thead>
-      <tbody>${centRows.map((c,i) => { const b = buckets[c]; const ratio = Math.round(100*b.won/b.n);
+      <tbody>${centRows.slice(0,25).map((c,i) => { const b = buckets[c]; const ratio = Math.round(100*b.won/b.n);
         const bg = i % 2 ? "#141414" : "transparent"; const pc = b.pnl>=0?"var(--green)":"var(--red)";
         return `<tr style="background:${bg}">
           <td style="padding:5px;font-weight:800;color:#ff9416">${c}¢</td>
@@ -5425,7 +5449,7 @@ function renderLottoStats() {
           <td>${b.won}</td>
           <td style="color:${ratio>0?'var(--green)':'#aaa'};font-weight:700">${ratio}%</td>
           <td style="color:${pc};font-weight:800">${b.pnl>=0?'+':''}$${b.pnl.toFixed(2)}</td></tr>`; }).join("")}
-      </tbody></table></div>` : "";
+      </tbody></table></div>${centRows.length > 25 ? `<div style="font-size:11px;color:#888;margin-top:6px">Showing ${Math.min(25,centRows.length)} of ${centRows.length}.</div>` : ""}` : "";
 
   // ── Full history ledger: every buy + sell, one line each, newest first, zebra ──
   const hist = [];
@@ -5443,11 +5467,13 @@ function renderLottoStats() {
       qty: abs, cents: p.buy_price || 0, pnl: null });
   });
   hist.sort((a,b) => (b.t||"").localeCompare(a.t||""));
-  const fmtTs = iso => { try { const d=new Date(iso); return d.toLocaleString([], {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}); } catch(e){ return "—"; } };
+  const fmtTs = iso => { try { const d=new Date(iso); return d.toLocaleString([], {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit",second:"2-digit"}); } catch(e){ return "—"; } };
   const histHtml = hist.length ? `
     <div style="font-weight:700;margin:18px 0 6px">🧾 History — every buy & sell</div>
-    <div style="overflow-x:auto"><table class="flat-tbl" style="width:100%;font-size:11px;border-collapse:collapse">
-      <tbody>${hist.slice(0,300).map((h,i) => {
+    <div style="overflow-x:auto;max-height:500px"><table class="flat-tbl" style="width:100%;font-size:11px;border-collapse:collapse">
+      <thead style="position:sticky;top:0;background:var(--card);z-index:10"><tr style="color:var(--muted);text-align:left">
+        <th style="padding:4px">Time</th><th>Type</th><th>Market</th><th>Position</th><th>P&amp;L</th></tr></thead>
+      <tbody>${hist.slice(0,25).map((h,i) => {
         const bg = i % 2 ? "#141414" : "transparent";
         const pnl = h.pnl == null ? `<span style="color:#888">open</span>` : `<span style="color:${h.pnl>=0?'var(--green)':'var(--red)'};font-weight:700">${h.pnl>=0?'+':''}$${h.pnl.toFixed(2)}</span>`;
         return `<tr style="background:${bg}">
@@ -5457,29 +5483,33 @@ function renderLottoStats() {
           <td style="white-space:nowrap">${h.side} ${h.qty}×@${h.cents}¢</td>
           <td style="text-align:right;white-space:nowrap">${pnl}</td></tr>`; }).join("")}
       </tbody></table></div>
-      ${hist.length>300 ? `<div style="font-size:11px;color:#888;margin-top:6px">Showing newest 300 of ${hist.length}.</div>` : ""}` : "";
+      ${hist.length>25 ? `<div style="font-size:11px;color:#888;margin-top:6px">Showing newest 25 of ${hist.length}.</div>` : ""}` : "";
 
   // ── Live Lotto bets: full economics + a Sell button on each open position ──
   const _lf = v => (v < 0 ? "-$" : "$") + Math.abs(v).toFixed(2);
   const liveHtml = openT2.length ? `
     <div style="font-weight:700;margin:6px 0 6px">🎯 Live Lotto bets — sell anytime</div>
-    <div style="overflow-x:auto"><table class="flat-tbl" style="width:100%;font-size:12px;border-collapse:collapse">
-      <thead><tr style="color:var(--muted);text-align:left">
-        <th style="padding:4px">Status</th><th>Market</th><th>Side</th><th>Qty</th><th>Cost/sh</th><th>Cost</th><th>Value&nbsp;now</th><th>Max</th><th>P&amp;L</th><th></th></tr></thead>
-      <tbody>${openT2.map((p,i) => {
+    <div style="overflow-x:auto;max-height:500px"><table class="flat-tbl" style="width:100%;font-size:12px;border-collapse:collapse">
+      <thead style="position:sticky;top:0;background:var(--card);z-index:10"><tr style="color:var(--muted);text-align:left">
+        <th style="padding:4px">Status</th><th>Market</th><th>Side</th><th>Qty</th><th>Cost/sh</th><th>Cost</th><th>Value&nbsp;now</th><th>Max</th><th>Closes</th><th>P&amp;L</th><th></th></tr></thead>
+      <tbody>${openT2.slice(0,25).map((p,i) => {
         const side = (p.quantity>=0) ? "yes" : "no";
         const qty  = Math.abs(p.quantity||0);
         const bp   = p.buy_price;
         const cost = bp!=null ? qty*bp/100 : null;
         const cur  = side==="yes" ? p.current_yes : p.current_no;
         const valNow = cur!=null ? qty*cur/100 : null;
-        const maxVal = qty*1.0;                       // each contract pays $1 if it hits
+        const maxVal = qty*1.0;
         const pnl  = (valNow!=null && cost!=null) ? valNow-cost : null;
         const bg   = i%2 ? "#141414" : "transparent";
         const id   = `lsell-${i}`;
         const sellLabel = valNow!=null ? `Sell ${_lf(valNow)} (${pnl>=0?'+':''}${_lf(pnl)})` : "Sell";
         const pnlHtml = pnl==null ? '<span style="color:#888">—</span>'
           : `<span style="color:${pnl>=0?'var(--green)':'var(--red)'};font-weight:700">${pnl>=0?'+':''}${_lf(pnl)}</span>`;
+        const closeTs = p.close_time ? new Date(p.close_time.replace('Z','+00:00')).getTime() : null;
+        const now = Date.now();
+        const minsLeft = closeTs ? Math.round((closeTs - now) / 60000) : null;
+        const closesHtml = minsLeft != null ? `<span style="color:${minsLeft > 0 ? '#fff' : 'var(--red)'}">${fmtDuration(minsLeft)}</span>` : '—';
         return `<tr style="background:${bg}">
           <td style="padding:5px 6px"><span style="background:#00d97e22;color:var(--green);font-weight:700;font-size:10px;padding:2px 7px;border-radius:5px">LIVE</span></td>
           <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.title||p.ticker)}</td>
@@ -5489,10 +5519,11 @@ function renderLottoStats() {
           <td>${cost!=null?_lf(cost):'—'}</td>
           <td>${valNow!=null?_lf(valNow):'<span style="color:#888">no bid</span>'}</td>
           <td>${_lf(maxVal)}</td>
+          <td>${closesHtml}</td>
           <td>${pnlHtml}</td>
           <td><button id="${id}" onclick="sellPos('${p.ticker}','${side}',${qty},'${id}').then(()=>setTimeout(renderLottoStats,900))" style="background:var(--red);color:#fff;border:none;border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">${sellLabel}</button></td></tr>`;
       }).join("")}
-      </tbody></table></div>` : "";
+      </tbody></table></div>${openT2.length > 25 ? `<div style="font-size:11px;color:#888;margin-top:6px">Showing ${Math.min(25,openT2.length)} of ${openT2.length}.</div>` : ""}` : "";
 
   bodyEl.innerHTML = liveHtml + centTable + histHtml;
 }
