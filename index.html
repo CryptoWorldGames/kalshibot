@@ -1353,18 +1353,17 @@ let selectedMarkets    = new Set();
 
 const PNL_PERIODS = ["1h","4h","6h","12h","24h","7d","30d"];
 let pnlPastValues = {};
+let pnlCurrentTotal = 0;
 
 function cyclePnlPeriod() {} // kept for compatibility
 
 function refreshPnlDisplay() {
-  const cur = parseFloat((document.getElementById("navPortfolio")?.textContent || "0").replace("$",""));
-  if (!cur) return;
   const wrap = document.getElementById("navPnlAll");
   if (!wrap) return;
   wrap.innerHTML = PNL_PERIODS.map(period => {
     const past = pnlPastValues[period];
     if (past == null) return `<div class="fund-block"><span class="fund-amount" style="color:#444;font-size:14px">—</span><span class="fund-label">P&L ${period}</span></div>`;
-    const pnl   = cur - past;
+    const pnl   = pnlCurrentTotal - past;
     const color = pnl > 0.005 ? "var(--green)" : pnl < -0.005 ? "var(--red)" : "#888";
     const sign  = pnl >= 0 ? "+" : "-";
     return `<div class="fund-block"><span class="fund-amount" style="color:${color};font-size:14px">${sign}$${Math.abs(pnl).toFixed(2)}</span><span class="fund-label">P&L ${period}</span></div>`;
@@ -1376,6 +1375,7 @@ async function loadPnl() {
     const r = await fetch("/api/pnl");
     const d = await r.json();
     pnlPastValues = d.past_values || {};
+    pnlCurrentTotal = d.total_realized_pnl || 0;
     refreshPnlDisplay();
   } catch(e) {}
 }

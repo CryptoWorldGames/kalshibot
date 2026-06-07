@@ -2882,7 +2882,8 @@ def positions():
 
 @app.route("/api/pnl")
 def pnl_history():
-    """Return past portfolio values at each time-window boundary for client-side PnL calc."""
+    """Return realized P&L from Kalshi settlements (excludes deposits).
+    P&L calculated from actual settled positions, not portfolio snapshots."""
     now = time.time()
     periods = [
         ("1h",  3_600),
@@ -2893,20 +2894,61 @@ def pnl_history():
         ("7d",  7 * 86_400),
         ("30d", 30 * 86_400),
     ]
-    with _snap_lock:
-        snap_copy = list(snapshots)
 
+    # Fetch settlements from Kalshi — only these count as real profit (excludes deposits)
+    settle_by_time = {}  # ts -> pnl for that settlement
+    try:
+        cursor = None
+        pages = 0
+        while pages < 20:
+            params = {"limit": 100}
+            if cursor: params["cursor"] = cursor
+            data = kalshi_get("/portfolio/settlements", params)
+            batch = data.get("settlements", [])
+            if not batch: break
+            for s in batch:
+                ts_str = s.get("settled_time", "")
+                try:
+                    ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+                    ts_float = ts.timestamp()
+                except ValueError:
+                    continue
+                yes_cnt = float(s.get("yes_count_fp") or 0)
+                no_cnt = float(s.get("no_count_fp") or 0)
+                yes_cost = float(s.get("yes_total_cost_dollars") or 0)
+                no_cost = float(s.get("no_total_cost_dollars") or 0)
+                rev = float(s.get("revenue") or 0) / 100
+                cost = yes_cost if yes_cnt > 0.001 else no_cost
+                cnt = yes_cnt if yes_cnt > 0.001 else no_cnt
+                fee = round(cnt * 0.01, 4) if rev > 0.001 else 0
+                pnl = rev - cost - fee
+                settle_by_time[ts_float] = pnl
+            cursor = data.get("cursor")
+            if not cursor: break
+            pages += 1
+    except Exception as e:
+        print(f"[pnl_history] settlements error: {e}")
+
+    # Sort settlements by timestamp
+    sorted_settles = sorted(settle_by_time.items())
+
+    # Calculate cumulative P&L at each time window
     past_values = {}
     for label, secs in periods:
         cutoff = now - secs
-        # Earliest snapshot within this window = value at the start of the window
-        entry = next((s for s in snap_copy if s["ts"] >= cutoff), None)
-        past_values[label] = entry["v"] if entry else None
+        cumul_pnl = 0.0
+        for ts, pnl in sorted_settles:
+            if ts >= cutoff:
+                cumul_pnl += pnl
+        past_values[label] = round(cumul_pnl, 2) if cumul_pnl != 0 else None
+
+    # Also calculate total realized P&L (all time)
+    total_realized_pnl = round(sum(pnl for pnl in settle_by_time.values()), 2)
 
     return jsonify({
-        "past_values":     past_values,
-        "snapshots_count": len(snap_copy),
-        "latest_v":        snap_copy[-1]["v"] if snap_copy else None,
+        "past_values":        past_values,
+        "total_realized_pnl": total_realized_pnl,
+        "settlements_count":  len(settle_by_time),
     })
 
 
@@ -3212,6 +3254,7 @@ def stats():
             else:           cats[cat]["losses"] += 1
 
     rows = []
+    total_pnl_all = 0.0
     for cat, d in sorted(cats.items()):
         sold = d["sold"]
         rows.append({
@@ -3225,6 +3268,7 @@ def stats():
             "total_pnl": round(d["total_pnl"], 2),
             "avg_pnl":   round(d["total_pnl"] / sold, 2) if sold else None,
         })
+        total_pnl_all += d["total_pnl"]
 
     scan_log_count = 0
     try:
@@ -3238,6 +3282,7 @@ def stats():
         "total_buys":     sum(d["buys"] for d in cats.values()),
         "total_open":     sum(d["open"] for d in cats.values()),
         "total_sold":     sum(d["sold"] for d in cats.values()),
+        "total_pnl":      round(total_pnl_all, 2),
         "scan_log_count": scan_log_count,
     })
 
