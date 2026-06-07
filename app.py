@@ -1318,6 +1318,8 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
 
     candidates = []  # (ticker, side, price_cents, market)
     scan_errors = 0
+    t2_debug_counters = {"api_markets": 0, "filter_passed": 0, "price_filtered": 0} if prof == "T2" else None
+
     for st in series_list:
         if len(candidates) >= max_scan * 4:
             break
@@ -1326,7 +1328,11 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
         try:
             time.sleep(0.35)  # rate limit (shared limiter keeps us within policy)
             d = kalshi_get("/markets", {"series_ticker": st, "status": "open", "limit": 200})
-            for m in d.get("markets", []):
+            markets_returned = d.get("markets", [])
+            if t2_debug_counters is not None:
+                t2_debug_counters["api_markets"] += len(markets_returned)
+
+            for m in markets_returned:
                 hit = _apply_market_filters(
                     m, now_utc, cutoff, union_min, union_max,
                     no_crypto, no_combo, no_sports, no_politics, no_economics, good_liq, 10,
@@ -1334,6 +1340,9 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
                     no_buy_within_mins=no_buy_within, crypto_times=None, hide_multi=hide_multi)
                 if not hit:
                     continue
+                if t2_debug_counters is not None:
+                    t2_debug_counters["filter_passed"] += 1
+
                 ticker = m.get("ticker", "")
                 yes_p = _market_price(m, "yes")
                 no_p  = _market_price(m, "no")
@@ -1341,6 +1350,8 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
                     candidates.append((ticker, "yes", yes_p, m))
                 elif down_on and no_p is not None and down_min <= no_p < down_max:
                     candidates.append((ticker, "no", no_p, m))
+                elif t2_debug_counters is not None:
+                    t2_debug_counters["price_filtered"] += 1
         except Exception as e:
             # Was a silent `pass` — a persistent failure here (expired auth, sustained
             # 429s) would make the bot scan fruitlessly for HOURS with no log line.
@@ -1456,6 +1467,8 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
         why = "; ".join(reasons) or f"{len(candidates)} candidates but none bought"
         summary = f"bought 0 — {why}"
         _log(f"[bot:{prof}] cycle: {summary}")
+        if t2_debug_counters is not None:
+            _log(f"[bot:T2] debug: {t2_debug_counters['api_markets']} markets from API, {t2_debug_counters['filter_passed']} passed filters, {t2_debug_counters['price_filtered']} price-filtered out")
     # Record every scan cycle so the Summary tab can prove the bot is scanning even
     # when it buys nothing (the missing signal during the 9-hour gap).
     _record_activity("scan", profile=prof, candidates=len(candidates),
