@@ -465,7 +465,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 
 <!-- ── NAV ──────────────────────────────────────────────────────── -->
 <nav>
-  <span class="nav-logo">Kalshi<span>Bot</span></span>
+  <span class="nav-logo">Kalshi<span>Bot</span><span id="navVersion" style="font-size:10px;color:#888;font-weight:600;margin-left:5px;letter-spacing:0">v—</span></span>
   <div class="nav-funds">
     <div class="fund-block">
       <span class="fund-amount" id="navCash">—</span>
@@ -508,6 +508,24 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     </div>
 
     <div class="settings-section">
+      <div class="settings-section-title">🕐 Time Zone</div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);flex-wrap:wrap">
+        <span>Show all times in</span>
+        <select id="tzSelect" onchange="saveTimezone()"
+          style="background:#111;border:1px solid var(--border);border-radius:6px;color:#fff;padding:6px 8px;font-size:13px;font-weight:600">
+          <option value="America/Chicago">Central (CDT/CST)</option>
+          <option value="America/New_York">Eastern (EDT/EST)</option>
+          <option value="America/Denver">Mountain (MDT/MST)</option>
+          <option value="America/Los_Angeles">Pacific (PDT/PST)</option>
+          <option value="America/Phoenix">Arizona (MST)</option>
+          <option value="America/Anchorage">Alaska</option>
+          <option value="Pacific/Honolulu">Hawaii</option>
+          <option value="UTC">UTC</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="settings-section">
       <div class="settings-section-title">🔊 Notification Sounds</div>
       <div style="font-size:12px;color:var(--muted);margin-bottom:12px">
         Upload custom audio files (MP3, WAV, OGG) for each notification type. Max 5MB per file.
@@ -522,6 +540,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 <div class="main">
 
 <div class="tab-nav">
+  <button class="tab-btn" id="tabSummary" onclick="switchTab('summary')">📊 Summary</button>
   <button class="tab-btn active" id="tabScanner" onclick="switchTab('scanner')"><span class="tabLed" id="led-T1"></span>Scanner</button>
   <button class="tab-btn" id="tabLotto" onclick="switchTab('lotto')"><span class="tabLed" id="led-T2"></span>Lotto</button>
   <button class="tab-btn" id="tabLottoStats" onclick="switchTab('lottostats')">Lotto Stats</button>
@@ -544,6 +563,29 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 <div id="saleTicker" style="display:none;padding:6px 0;border-bottom:1px solid var(--border);margin-bottom:12px;min-height:28px">
   <div id="saleTickerItems" style="display:flex;flex-wrap:wrap;gap:6px 0;width:100%"></div>
 </div>
+
+<!-- ── Summary tab — at-a-glance proof the bot is alive & trading ──────── -->
+<div id="tab-summary" class="tab-pane">
+  <div class="card">
+    <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <span>📊 Activity Summary</span>
+      <span id="summaryClock" style="font-size:14px;font-weight:700;color:var(--green);font-variant-numeric:tabular-nums"></span>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">
+      Confirms the bot is scanning and trading. Pick a time window — counts and the full buy/sell list below update instantly.
+    </div>
+
+    <!-- Time-range buttons -->
+    <div id="summaryRanges" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px"></div>
+
+    <!-- Headline counts -->
+    <div id="summaryCards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:18px"></div>
+
+    <!-- Per-trade list -->
+    <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;font-weight:700">Buys &amp; Sells <span id="summaryTradesMeta" style="color:#666;text-transform:none;font-weight:400"></span></div>
+    <div id="summaryTrades"></div>
+  </div>
+</div><!-- /tab-summary -->
 
 <div id="tab-scanner" class="tab-pane active">
 
@@ -2058,6 +2100,10 @@ async function loadSettlements() {
 }
 
 window.addEventListener("load", () => {
+  // Show the running build's version in the header, and restore the saved timezone.
+  loadVersion();
+  const _tzSel = document.getElementById("tzSelect");
+  if (_tzSel) _tzSel.value = getTimezone();
   // Load bot status (running/stopped) and cash first
   loadBotStatus();
   loadCash();
@@ -5040,6 +5086,172 @@ function resetSound(soundKey) {
   renderSoundsList();
 }
 
+// ── Time zone ─────────────────────────────────────────────────────────────
+function getTimezone() {
+  return localStorage.getItem("displayTimezone") || "America/Chicago";  // default CDT
+}
+function saveTimezone() {
+  const tz = document.getElementById("tzSelect")?.value || "America/Chicago";
+  localStorage.setItem("displayTimezone", tz);
+  toast(`✓ Time zone set to ${tz}`, "ok");
+  // Refresh any visible time displays
+  if (document.getElementById("tab-summary")?.classList.contains("active")) {
+    updateSummaryClock();
+    loadSummary();
+  }
+}
+function fmtTime(epochSecs, withDate) {
+  try {
+    const d = new Date(epochSecs * 1000);
+    const opts = withDate
+      ? {month:"short", day:"numeric", hour:"numeric", minute:"2-digit", second:"2-digit", hour12:true, timeZone:getTimezone()}
+      : {hour:"numeric", minute:"2-digit", second:"2-digit", hour12:true, timeZone:getTimezone()};
+    return new Intl.DateTimeFormat("en-US", opts).format(d);
+  } catch(e) {
+    return new Date(epochSecs * 1000).toLocaleString();
+  }
+}
+function tzAbbr() {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {timeZone:getTimezone(), timeZoneName:"short"}).formatToParts(new Date());
+    return parts.find(p => p.type === "timeZoneName")?.value || "";
+  } catch(e) { return ""; }
+}
+
+// ── Bot version (header) ──────────────────────────────────────────────────
+async function loadVersion() {
+  try {
+    const r = await fetch("/api/version");
+    if (!r.ok) return;
+    const d = await r.json();
+    const el = document.getElementById("navVersion");
+    if (el) el.textContent = "v" + (d.version || "?");
+  } catch(e) { /* non-critical */ }
+}
+
+// ── Summary tab ───────────────────────────────────────────────────────────
+const SUMMARY_RANGES = [
+  {label:"15m", mins:15}, {label:"30m", mins:30}, {label:"60m", mins:60},
+  {label:"1h", mins:60}, {label:"2h", mins:120}, {label:"4h", mins:240},
+  {label:"6h", mins:360}, {label:"12h", mins:720}, {label:"24h", mins:1440},
+  {label:"1d", mins:1440}, {label:"2d", mins:2880}, {label:"3d", mins:4320},
+  {label:"7d", mins:10080}, {label:"14d", mins:20160}, {label:"30d", mins:43200},
+];
+let _summaryMins = parseInt(localStorage.getItem("summaryMins") || "15");
+
+function renderSummaryRanges() {
+  const el = document.getElementById("summaryRanges");
+  if (!el) return;
+  // De-dup labels that map to same minutes (60m/1h, 24h/1d) — keep both as the user asked.
+  el.innerHTML = SUMMARY_RANGES.map(r => {
+    const active = (r.mins === _summaryMins);
+    return `<button onclick="setSummaryRange(${r.mins})"
+      style="padding:5px 11px;font-size:12px;font-weight:700;border-radius:6px;cursor:pointer;
+             border:1px solid ${active ? 'var(--green)' : 'var(--border)'};
+             background:${active ? 'var(--green)' : 'transparent'};
+             color:${active ? '#000' : 'var(--muted)'}">${r.label}</button>`;
+  }).join("");
+}
+function setSummaryRange(mins) {
+  _summaryMins = mins;
+  localStorage.setItem("summaryMins", String(mins));
+  renderSummaryRanges();
+  loadSummary();
+}
+
+function _rangeLabel(mins) {
+  if (mins < 60) return `${mins} minutes`;
+  if (mins < 1440) return `${mins/60} hour${mins===60?"":"s"}`;
+  return `${mins/1440} day${mins===1440?"":"s"}`;
+}
+
+async function loadSummary() {
+  const cardsEl  = document.getElementById("summaryCards");
+  const tradesEl = document.getElementById("summaryTrades");
+  const metaEl   = document.getElementById("summaryTradesMeta");
+  if (!cardsEl) return;
+  try {
+    const r = await fetch(`/api/summary?minutes=${_summaryMins}`);
+    if (!r.ok) throw new Error(`Summary failed: ${r.status}`);
+    const d = await r.json();
+    const t = d.totals || {};
+
+    const profit = t.realized_profit;
+    const profitStr = profit == null ? "—" : `${profit >= 0 ? "+" : ""}$${profit.toFixed(2)}`;
+    const profitCls = profit == null ? "neu" : profit > 0 ? "pos" : profit < 0 ? "neg" : "neu";
+
+    // Liveness banner: if 0 scans in the window, the bot may be down.
+    const live = (t.scans || 0) > 0;
+    const liveBanner = live
+      ? `<div style="grid-column:1/-1;padding:8px 12px;background:#0c1612;border:1px solid #1f6045;border-radius:6px;color:var(--green);font-size:13px;font-weight:700">✓ Bot is alive — ${t.scans} scan cycle(s) in the last ${_rangeLabel(_summaryMins)}</div>`
+      : `<div style="grid-column:1/-1;padding:8px 12px;background:#1a0c0c;border:1px solid #5a1f1f;border-radius:6px;color:var(--red);font-size:13px;font-weight:700">⚠️ No scans in the last ${_rangeLabel(_summaryMins)} — bot may be stopped! Check the terminal.</div>`;
+
+    const card = (label, val, cls) => `
+      <div style="background:#0c0c0e;border:1px solid var(--border);border-radius:8px;padding:12px 14px">
+        <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">${label}</div>
+        <div class="${cls||''}" style="font-size:22px;font-weight:800">${val}</div>
+      </div>`;
+
+    cardsEl.innerHTML =
+      liveBanner +
+      card("Scans", t.scans || 0) +
+      card("Buys", t.buys || 0) +
+      card("Sells", t.sells || 0) +
+      card("Realized P&L", profitStr, profitCls) +
+      card("Spent (buys)", `$${(t.buy_spent||0).toFixed(2)}`) +
+      card("Proceeds (sells)", `$${(t.sell_proceeds||0).toFixed(2)}`);
+
+    // Per-trade list
+    const trades = (d.trades || []).filter(x => x.kind === "buy" || x.kind === "sell");
+    metaEl.textContent = `(${trades.length} in last ${_rangeLabel(_summaryMins)}, ${tzAbbr()})`;
+    if (!trades.length) {
+      tradesEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:10px 0">No buys or sells in this window.</div>`;
+    } else {
+      tradesEl.innerHTML = trades.map(x => {
+        const isBuy = x.kind === "buy";
+        const color = isBuy ? "var(--blue)" : "var(--green)";
+        const tag = isBuy ? "BUY" : "SELL";
+        const title = esc(x.title || x.ticker || "");
+        const side = (x.side || "").toUpperCase();
+        const price = x.price != null ? `${x.price}¢` : "";
+        const cnt = x.count != null ? `×${x.count}` : "";
+        let result = "";
+        if (!isBuy && x.profit != null) {
+          const pcls = x.profit >= 0 ? "pos" : "neg";
+          result = ` · <span class="${pcls}" style="font-weight:700">${x.profit >= 0 ? "+" : ""}$${Number(x.profit).toFixed(2)}</span>`;
+          if (x.reason) result += ` <span style="color:#888">(${esc(x.reason)})</span>`;
+        } else if (isBuy && x.spent != null) {
+          result = ` · <span style="color:#aaa">-$${Number(x.spent).toFixed(2)}</span>`;
+        }
+        return `<div style="display:flex;align-items:center;gap:10px;padding:7px 12px;background:#0c0c0e;border-left:3px solid ${color};border-radius:4px;margin-bottom:5px;font-size:13px">
+          <span style="color:#777;min-width:120px;font-variant-numeric:tabular-nums">${fmtTime(x.ts, true)}</span>
+          <span style="color:${color};font-weight:800;min-width:38px">${tag}</span>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${title} <span style="color:#888">${side} ${cnt} @ ${price}</span></span>
+          <span>${result}</span>
+        </div>`;
+      }).join("");
+    }
+  } catch(e) {
+    console.error("[loadSummary]", e);
+    cardsEl.innerHTML = `<div style="grid-column:1/-1;color:var(--red);font-size:13px">Summary unavailable: ${esc(e.message||"error")}</div>`;
+  }
+}
+
+// Live clock in the user's timezone
+function updateSummaryClock() {
+  const el = document.getElementById("summaryClock");
+  if (!el) return;
+  el.textContent = `${fmtTime(Date.now()/1000, true)} ${tzAbbr()}`;
+}
+function startSummaryClock() {
+  updateSummaryClock();
+  if (window._summaryClock) clearInterval(window._summaryClock);
+  window._summaryClock = setInterval(updateSummaryClock, 1000);
+}
+function stopSummaryClock() {
+  if (window._summaryClock) { clearInterval(window._summaryClock); window._summaryClock = null; }
+}
+
 function switchTab(name) {
   window.scrollTo(0, 0); // Jump to top when switching tabs
   document.querySelectorAll(".tab-btn").forEach(b => {
@@ -5077,6 +5289,16 @@ function switchTab(name) {
     if (!document.hidden) window._pollingRefresh = setInterval(renderPollingMonitor, 1000);
   } else {
     if (window._pollingRefresh) { clearInterval(window._pollingRefresh); window._pollingRefresh = null; }
+  }
+  if (name === "summary") {
+    renderSummaryRanges();
+    loadSummary();
+    startSummaryClock();
+    if (window._summaryRefresh) clearInterval(window._summaryRefresh);
+    if (!document.hidden) window._summaryRefresh = setInterval(loadSummary, 15000);
+  } else {
+    if (window._summaryRefresh) { clearInterval(window._summaryRefresh); window._summaryRefresh = null; }
+    stopSummaryClock();
   }
   if (name === "positions") {
     // Staged: list (fast) -> top-10 biggest positions' prices -> the rest -> settlements.

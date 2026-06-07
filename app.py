@@ -37,6 +37,11 @@ app = Flask(__name__)
 HERE = Path(__file__).resolve().parent
 BASE_URL = "https://api.elections.kalshi.com"
 API_PREFIX = "/trade-api/v2"
+
+# Bot identity — shown in the terminal banner/title and the web UI header so you
+# always know which build is running. Bump BOT_VERSION when you ship changes.
+BOT_NAME = "KalshiBot"
+BOT_VERSION = "1.1.0"
 DEBUG_LOGGING = False  # Set to True for verbose logs, False for production — DISABLED FOR PRODUCTION
 
 def _log(msg: str):
@@ -44,6 +49,57 @@ def _log(msg: str):
     happened — essential for spotting gaps (e.g. 'bot hasn't bought in 9 hours')."""
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{ts}] {msg}", flush=True)
+
+# ── Activity log ────────────────────────────────────────────────────────────
+# Append-only record of every scan cycle, buy, and sell with an epoch timestamp.
+# Powers the Summary tab ("activity in the past X minutes") so you can confirm at
+# a glance that the bot is alive and trading — the whole point being to NEVER again
+# have a silent multi-hour gap. Kept lightweight: one JSON object per line.
+ACTIVITY_LOG = HERE / "activity_log.jsonl"
+_activity_lock = threading.Lock()
+_ACTIVITY_MAX_LINES = 50000  # trim oldest when we exceed this, so the file can't grow forever
+
+def _record_activity(kind: str, **fields):
+    """Append one activity event. `kind` is 'scan' | 'buy' | 'sell'. Extra fields
+    (ticker, side, count, price, profit, detail, profile) are stored as-is."""
+    try:
+        entry = {"ts": time.time(), "kind": kind, **fields}
+        with _activity_lock:
+            with open(ACTIVITY_LOG, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, default=str) + "\n")
+    except Exception as e:
+        # Never let logging break trading — just note it once.
+        print(f"[activity] write failed: {e}", flush=True)
+
+def _read_activity(since_ts: float):
+    """Return all activity events with ts >= since_ts, oldest→newest."""
+    out = []
+    try:
+        if not ACTIVITY_LOG.exists():
+            return out
+        with _activity_lock:
+            lines = ACTIVITY_LOG.read_text(encoding="utf-8").splitlines()
+        # Trim the file if it has grown too large (keep the newest tail).
+        if len(lines) > _ACTIVITY_MAX_LINES:
+            try:
+                tail = lines[-_ACTIVITY_MAX_LINES:]
+                with _activity_lock:
+                    ACTIVITY_LOG.write_text("\n".join(tail) + "\n", encoding="utf-8")
+                lines = tail
+            except Exception:
+                pass
+        for ln in lines:
+            if not ln.strip():
+                continue
+            try:
+                e = json.loads(ln)
+            except Exception:
+                continue
+            if e.get("ts", 0) >= since_ts:
+                out.append(e)
+    except Exception as e:
+        print(f"[activity] read failed: {e}", flush=True)
+    return out
 
 # Category detection cache — avoid re-detecting same market
 _category_cache = {}
@@ -1121,6 +1177,11 @@ def _monitor():
                         title = pos.get("title", ticker)
                         reason = "STOP-LOSS" if (hit_stop_pct or hit_stop_dol) else "PROFIT TARGET"
                         _log(f"[monitor] Auto-sold ({reason}): {title} | bid={bid}¢ profit={profit_pct:.1f}% / ${profit_dollars:.2f}")
+                        _record_activity("sell", ticker=ticker, side=pos.get("side"),
+                                         count=pos.get("count"), price=bid,
+                                         profit=round(profit_dollars, 2), profit_pct=round(profit_pct, 1),
+                                         sold_by="bot", reason=reason.lower(), title=title,
+                                         category=pos.get("category", ""))
                     except Exception as e:
                         # If kalshi_post or result processing fails, revert selling status
                         with _lock:
@@ -1336,6 +1397,9 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
                         "category": m.get("category", ""),
                     })
                     _log(f"[bot:{prof}] Auto-bought {side.upper()} {ticker}: {contracts} @ {pc}¢")
+                    _record_activity("buy", ticker=ticker, side=side, count=contracts,
+                                     price=pc, spent=spent_dollars, profile=prof,
+                                     title=m.get("title", ticker), category=m.get("category", ""))
             except Exception as e:
                 # Out of cash? Stop trying the rest of this cycle's candidates —
                 # otherwise we hammer Kalshi with dozens of doomed orders and trip
@@ -1354,7 +1418,8 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
     # WHY it bought nothing (no candidates / budget too small / scan errors), with a
     # timestamp. This is what makes a multi-hour gap diagnosable at a glance.
     if bought:
-        _log(f"[bot:{prof}] cycle: bought {bought} ({len(candidates)} candidates, {open_now} open)")
+        summary = f"bought {bought} ({len(candidates)} candidates, {open_now} open)"
+        _log(f"[bot:{prof}] cycle: {summary}")
     else:
         reasons = []
         if not candidates:        reasons.append("no candidates matched filters")
@@ -1362,7 +1427,12 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
         if scan_errors:           reasons.append(f"{scan_errors} scan errors")
         if open_now >= max_conc:  reasons.append(f"max_concurrent {max_conc} reached")
         why = "; ".join(reasons) or f"{len(candidates)} candidates but none bought"
-        _log(f"[bot:{prof}] cycle: bought 0 — {why}")
+        summary = f"bought 0 — {why}"
+        _log(f"[bot:{prof}] cycle: {summary}")
+    # Record every scan cycle so the Summary tab can prove the bot is scanning even
+    # when it buys nothing (the missing signal during the 9-hour gap).
+    _record_activity("scan", profile=prof, candidates=len(candidates),
+                     bought=bought, scan_errors=scan_errors, detail=summary)
     return bought
 
 
@@ -2959,6 +3029,16 @@ def sell():
     # Distinguish between filled (completed) and pending (waiting for buyers)
     is_filled = order_status in ("filled", "accepted")
 
+    # Record filled manual sells in the activity log (with profit if we know cost basis).
+    if is_filled:
+        exec_c = executed_price if executed_price else bid_cents
+        _pos = tracked.get(ticker, {})
+        _bp = _pos.get("buy_price")
+        _profit = round(count_int * (exec_c - _bp) / 100, 2) if _bp else None
+        _record_activity("sell", ticker=ticker, side=side, count=count_int,
+                         price=exec_c, profit=_profit, sold_by="human",
+                         title=_pos.get("title", ticker), category=_pos.get("category", ""))
+
     return jsonify({
         "ok": True,
         "order_id": order.get("order_id"),
@@ -3235,6 +3315,79 @@ def get_recent_buys():
     buys = _recent_buys_queue[:]  # copy the list
     _recent_buys_queue = []        # clear the queue
     return jsonify({"buys": buys})
+
+
+@app.route("/api/version")
+def api_version():
+    """Bot name + version + uptime, for the web UI header so you always know which
+    build is running and how long it's been up."""
+    with _bot_lock:
+        running = _bot_running
+        uptime = (time.time() - _bot_start_time) if (_bot_start_time and running) else 0
+    return jsonify({
+        "name": BOT_NAME,
+        "version": BOT_VERSION,
+        "running": running,
+        "uptime_secs": int(uptime),
+        "server_time": time.time(),  # epoch; frontend formats in the user's timezone
+    })
+
+
+@app.route("/api/summary")
+def api_summary():
+    """Aggregate activity (scans / buys / sells / profit) over the past N minutes,
+    plus the individual buy & sell events. Powers the Summary tab so you can confirm
+    at a glance the bot is alive and trading — no more silent multi-hour gaps."""
+    try:
+        minutes = float(request.args.get("minutes", 15))
+    except (TypeError, ValueError):
+        minutes = 15
+    minutes = max(1, min(minutes, 60 * 24 * 30))  # clamp 1 min … 30 days
+    since = time.time() - minutes * 60
+
+    events = _read_activity(since)
+
+    scans = buys = sells = 0
+    buy_spent = 0.0
+    sell_proceeds = 0.0
+    realized_profit = 0.0
+    have_profit = False
+    trades = []  # buy/sell events for the expandable text list
+
+    for e in events:
+        kind = e.get("kind")
+        if kind == "scan":
+            scans += 1
+        elif kind == "buy":
+            buys += 1
+            buy_spent += float(e.get("spent") or 0)
+            trades.append(e)
+        elif kind == "sell":
+            sells += 1
+            pr = e.get("profit")
+            if pr is not None:
+                realized_profit += float(pr)
+                have_profit = True
+            sell_proceeds += float(e.get("count") or 0) * float(e.get("price") or 0) / 100
+            trades.append(e)
+
+    # newest first for display
+    trades.sort(key=lambda x: x.get("ts", 0), reverse=True)
+
+    return jsonify({
+        "minutes": minutes,
+        "since": since,
+        "now": time.time(),
+        "totals": {
+            "scans": scans,
+            "buys": buys,
+            "sells": sells,
+            "buy_spent": round(buy_spent, 2),
+            "sell_proceeds": round(sell_proceeds, 2),
+            "realized_profit": round(realized_profit, 2) if have_profit else None,
+        },
+        "trades": trades[:500],  # cap payload
+    })
 
 
 @app.route("/api/enrich-positions", methods=["GET"])
@@ -3881,10 +4034,34 @@ def _already_running(port: int = 5003) -> bool:
     finally:
         s.close()
 
+def _print_banner():
+    """Print a name/version banner AND set the terminal window title, so the bot's
+    identity is visible at all times (the title bar persists even after scrolling)."""
+    title = f"{BOT_NAME} v{BOT_VERSION}"
+    # OSC escape sets the terminal/window title (works in Windows Terminal, xterm, etc.)
+    try:
+        sys.stdout.write(f"\033]0;{title}\007")
+        sys.stdout.flush()
+    except Exception:
+        pass
+    # Windows cmd.exe fallback
+    try:
+        if os.name == "nt":
+            os.system(f"title {title}")
+    except Exception:
+        pass
+    bar = "═" * 52
+    print(f"╔{bar}╗")
+    print(f"║  {title:<48}  ║")
+    print(f"║  {'Kalshi auto-trading bot':<48}  ║")
+    print(f"╚{bar}╝")
+
+
 if __name__ == "__main__":
+    _print_banner()
     if _already_running(5003):
         print("=" * 60)
-        print("KalshiBot is ALREADY RUNNING (port 5003 is in use).")
+        print(f"{BOT_NAME} is ALREADY RUNNING (port 5003 is in use).")
         print("This window will close — use the one that's already open,")
         print("or open http://localhost:5003 in your browser.")
         print("=" * 60)
