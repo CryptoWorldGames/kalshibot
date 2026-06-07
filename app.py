@@ -5,6 +5,7 @@ Run: python app.py   →   open http://localhost:5000
 """
 
 import base64
+import concurrent.futures
 import json
 import socket
 import math
@@ -878,7 +879,6 @@ def _kalshi_get_with_timeout(endpoint: str, params: dict = None, timeout_secs: f
     """Get from Kalshi with a short timeout for monitor thread — skip on timeout."""
     try:
         # Use a separate thread to fetch with timeout
-        import concurrent.futures
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(kalshi_get, endpoint, params)
             return future.result(timeout=timeout_secs)
@@ -896,7 +896,13 @@ def _monitor():
         # strategy applies to them too.  Only adds; never overwrites bot entries.
         try:
             port = _kalshi_get_with_timeout("/portfolio/positions", {"limit": 200}, timeout_secs=10.0)
+            if not isinstance(port, dict):
+                print(f"[monitor] Invalid portfolio response type: {type(port)}")
+                continue
             for p in port.get("positions", []):
+                if not isinstance(p, dict):
+                    print(f"[monitor] Invalid position entry: {type(p)}")
+                    continue
                 ticker = p.get("market_ticker") or p.get("ticker", "")
                 qty    = p.get("position", 0) or 0
                 if not ticker or abs(qty) < 0.001:
@@ -953,7 +959,13 @@ def _monitor():
 
             try:
                 data = _kalshi_get_with_timeout(f"/markets/{ticker}", timeout_secs=5.0)
+                if not isinstance(data, dict):
+                    print(f"[monitor] Invalid market response for {ticker}: {type(data)}")
+                    continue
                 m = data.get("market", {})
+                if not isinstance(m, dict):
+                    print(f"[monitor] Invalid market data for {ticker}")
+                    continue
                 bid_d = m.get("yes_bid_dollars") if pos["side"] == "yes" else m.get("no_bid_dollars")
                 bid = _dollars_to_cents(bid_d)
                 if bid is None:
@@ -1043,12 +1055,23 @@ def _monitor():
                 should_sell = (hit_pct or hit_dol or hit_price or hit_stop_pct or hit_stop_dol) if strat_mode != "resolution" else (hit_stop_pct or hit_stop_dol)
 
                 if should_sell:
+                    # Prevent double-sell: check if already marked as sold or selling
+                    with _lock:
+                        if pos.get("status") != "open":
+                            print(f"[monitor] {ticker} already {pos.get('status')} — skipping")
+                            continue
+                        # Mark as selling to prevent concurrent sell requests
+                        pos["status"] = "selling"
+
                     # Build MARKET sell order with protective floor = current bid price
                     bid_key = "yes_bid_dollars" if pos["side"] == "yes" else "no_bid_dollars"
                     bid_d = m.get(bid_key)
                     bid_cents = round(float(bid_d or 0) * 100) if bid_d else 0
                     if bid_cents < 1:
                         print(f"[monitor] {ticker} bid too low to sell ({bid_d}) — skipping")
+                        with _lock:
+                            if ticker in tracked:
+                                tracked[ticker]["status"] = "open"  # revert selling status
                         continue
                     # Kalshi API only accepts whole numbers - round down fractional quantities
                     count_val = int(pos["count"])
@@ -2662,6 +2685,8 @@ def buy():
         dollars = HARD_CAP
 
     # Check per-ticker buy count against max_per_market setting
+    # (This also serves as idempotency: if a buy succeeded but response timed out,
+    # a retry will be rejected here because the position already exists)
     max_per = int(data.get("max_per_market", 1) or 1)
     with _lock:
         existing = tracked.get(ticker)
@@ -3786,6 +3811,22 @@ if __name__ == "__main__":
             pass
         sys.exit(0)
     print("Open http://localhost:5003")
+
+    # Health check: ensure Kalshi API is reachable before starting
+    try:
+        bal = kalshi_get("/portfolio/balance")
+        if not bal or "balance" not in bal:
+            print("\n⚠️  WARNING: Kalshi API returned unexpected response — check credentials and network.\n")
+        else:
+            print(f"✓ Kalshi API reachable (balance: ${float(bal.get('balance_dollars') or 0):.2f})")
+    except Exception as e:
+        print(f"\n⚠️  ERROR: Cannot reach Kalshi API: {e}")
+        print("Check your internet connection and API credentials.\n")
+        try:
+            input("Press Enter to continue anyway or Ctrl+C to exit...")
+        except (EOFError, KeyboardInterrupt):
+            sys.exit(1)
+
     # threaded=True is critical: the scan loop and slow Kalshi API calls can each
     # tie up a worker for seconds at a time. Single-threaded (the Werkzeug default)
     # means a phone/laptop page-load (GET /) queues behind that work and times out,
