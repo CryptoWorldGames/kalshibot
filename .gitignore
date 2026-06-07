@@ -46,3 +46,11 @@ kalshi-keys/
 kalshi_api_key
 kalshi_private_key
 test2.txt
+
+# Virtual environment
+venv/
+
+# Log files
+*.log
+bot.log
+kalshi-manager.log
