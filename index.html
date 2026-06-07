@@ -5251,13 +5251,8 @@ async function setActiveProfile(p) {
 // ── Lotto (T2) settings: independent form, posts to profile T2 ────────────
 function setLottoEndsWithin(mins) {
   document.getElementById("L_minutes").value = mins;
-  // Update active pill styling
-  const buttons = document.querySelectorAll('button[onclick^="setLottoEndsWithin"]');
-  buttons.forEach(btn => {
-    btn.classList.remove("active");
-    if (btn.onclick.includes(`setLottoEndsWithin(${mins})`)) {
-      btn.classList.add("active");
-    }
+  document.querySelectorAll('button[onclick^="setLottoEndsWithin"]').forEach(btn => {
+    btn.classList.toggle("active", btn.getAttribute("onclick") === `setLottoEndsWithin(${mins})`);
   });
   pushLottoSettings();
 }
