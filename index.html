@@ -1726,7 +1726,7 @@ async function loadBalance(enrich=true) {
           const profit = cur != null ? qty * (cur - p.buy_price) / 100 : null;
           if (profit != null) {
             const totalReceived = cur != null ? qty * cur / 100 : null;
-            setTimeout(() => announceSell(qty, profit, cur, totalReceived, p.category), announceDelay);
+            setTimeout(() => announceSell(qty, profit, cur, totalReceived, p.category, p.ticker), announceDelay);
             announceDelay += 4000;  // 4 seconds between announcements to prevent overlapping voices
           }
           // Determine if this was a bot auto-sell or market resolution
@@ -1817,7 +1817,7 @@ async function checkRecentBuys() {
     const d = await r.json();
     if (d.buys && d.buys.length > 0) {
       for (const buy of d.buys) {
-        announceBuy(buy.count, buy.spent * 100 / buy.count, buy.spent, buy.category);
+        announceBuy(buy.count, buy.spent * 100 / buy.count, buy.spent, buy.category, buy.ticker);
       }
     }
   } catch(e) {
@@ -3003,7 +3003,7 @@ async function buyOne(idx, override=false) {
     msgEl.textContent = `✓ ${d.contracts} contracts · $${d.spent}`;
     msgEl.className = "row-msg ok";
     toast(`✓ Bought ${d.contracts} ${m.side.toUpperCase()} · ${m.title || m.ticker}`, "ok");
-    announceBuy(d.contracts, m.price, parseFloat(d.spent), m.category);
+    announceBuy(d.contracts, m.price, parseFloat(d.spent), m.category, m.ticker);
     // Flash the row green so it's obvious the bot bought it
     const row = document.getElementById(`btn-${idx}`)?.closest("tr");
     if (row) {
@@ -3165,7 +3165,7 @@ async function sellPos(ticker, side, count, safeId) {
     if (d.is_filled) {
       toast(`✓ Sold ${count} ${side.toUpperCase()} · ${marketTitle}`, "ok");
       const totalReceived = executedPriceCents != null ? count * executedPriceCents / 100 : null;
-      announceSell(count, soldProfit, executedPriceCents, totalReceived, soldPos?.category);
+      announceSell(count, soldProfit, executedPriceCents, totalReceived, soldPos?.category, soldPos?.ticker);
       addToSaleTicker(marketTitle, soldProfit, side);
     } else {
       // LIMIT order pending - waiting for buyers
@@ -4301,10 +4301,27 @@ function contractPhrase(count, category) {
   return `${count} ${cat}contract${count > 1 ? "s" : ""}`;
 }
 
+// Map ticker symbols to pronounceable crypto names
+function cryptoName(ticker) {
+  const map = {
+    'KXBTC': 'bitcoin', 'KXBTCD': 'bitcoin', 'KXBTCW': 'bitcoin', 'KXBTCM': 'bitcoin',
+    'KXBTC15M': 'bitcoin', 'KXBTC30M': 'bitcoin', 'KXBTC1H': 'bitcoin',
+    'KXETH': 'ethereum', 'KXETHD': 'ethereum', 'KXETHUSD': 'ethereum',
+    'KXETH15M': 'ethereum', 'KXETH30M': 'ethereum', 'KXETH1H': 'ethereum',
+    'KXSOL': 'solana', 'KXSOLD': 'solana', 'KXSOL15M': 'solana', 'KXSOL30M': 'solana', 'KXSOL1H': 'solana',
+    'KXDOGE': 'doge', 'KXDOGE15M': 'doge',
+    'KXBNB': 'binance coin', 'KXBNB15M': 'binance coin',
+    'KXXRP': 'ripple', 'KXXRP15M': 'ripple',
+    'KXHYPE': 'hype', 'KXHYPE15M': 'hype',
+  };
+  if (map[ticker]) return map[ticker];
+  return ticker.toLowerCase().replace(/^kx/, '');
+}
+
 // Batch rapid buys (within 300ms) into one announcement to avoid stuttering
 let _buyBatchQueue = [], _buyBatchTimer = null;
-function announceBuy(count, priceCents, totalDollars, category) {
-  _buyBatchQueue.push({count, priceCents, totalDollars, category});
+function announceBuy(count, priceCents, totalDollars, category, ticker) {
+  _buyBatchQueue.push({count, priceCents, totalDollars, category, ticker});
 
   if (_buyBatchTimer) clearTimeout(_buyBatchTimer);
   _buyBatchTimer = setTimeout(() => {
@@ -4322,12 +4339,16 @@ function announceBuy(count, priceCents, totalDollars, category) {
 
     const total_count = _buyBatchQueue.reduce((s, b) => s + b.count, 0);
     const total_dollars = _buyBatchQueue.reduce((s, b) => s + (b.totalDollars || 0), 0);
-    const categories = [...new Set(_buyBatchQueue.map(b => b.category))].join(" / ");
+    const tickerNames = [...new Set(_buyBatchQueue.map(b => b.ticker ? cryptoName(b.ticker) : b.category))];
+    const cryptoStr = tickerNames.length === 1 ? tickerNames[0] : tickerNames.join(" and ");
 
     setTimeout(() => {
-      let text = `you bought ${total_count} contract${total_count === 1 ? "" : "s"}`;
-      if (categories) text += ` (${categories})`;
-      if (total_dollars > 0) text += `, for a total of ${moneyWords(total_dollars)}`;
+      let text = `you bought ${contractPhrase(total_count, null)}`;
+      if (cryptoStr) text += ` of ${cryptoStr}`;
+      if (total_count === 1 && _buyBatchQueue[0].priceCents != null) {
+        text += ` for ${Math.round(_buyBatchQueue[0].priceCents)} cents`;
+      }
+      if (total_dollars > 0) text += `, total cost ${moneyWords(total_dollars)}`;
       speakText(text);
     }, 250);
 
@@ -4362,10 +4383,11 @@ function playSadTrumpet() {
   } catch(e) {}
 }
 
-function announceSell(count, profit, sellPriceCents, totalReceived, category) {
+function announceSell(count, profit, sellPriceCents, totalReceived, category, ticker) {
   // Smart announcement: show price and profit per contract (more detailed)
   const profitPerContract = profit / count;
-  let detail = `you sold ${contractPhrase(count, category)}`;
+  let detail = `you sold ${contractPhrase(count, null)}`;
+  if (ticker) detail += ` of ${cryptoName(ticker)}`;
 
   if (count === 1 && sellPriceCents != null && profit != null) {
     // Single contract: detailed breakdown
