@@ -1399,6 +1399,13 @@ let scanInProgress     = false;
 let selectedPosTickers = new Set();
 let selectedMarkets    = new Set();
 
+// ── Pagination state ─────────────────────────────────────────────────────
+let summaryPage = 0;      // Current page in summary trades
+let posPage = 0;          // Current page in positions
+let lottoLivePage = 0;    // Current page in lotto live bets
+let lottoHistPage = 0;    // Current page in lotto history
+let lottoCentPage = 0;    // Current page in lotto cent table
+
 // ── PnL tracking ─────────────────────────────────────────────────────────
 
 const PNL_PERIODS = ["1h","4h","6h","12h","24h","7d","30d"];
@@ -3677,6 +3684,16 @@ function filterPos() {
   return filtered;
 }
 
+function setPosPage(page) {
+  posPage = page;
+  const src  = document.getElementById("posFilterSource")?.value || "";
+  const cat  = document.getElementById("posFilterCat")?.value   || "";
+  const sort = document.getElementById("posSort")?.value || "recent";
+  const hideSmall = document.getElementById("hideSmallPositions")?.checked || false;
+  const hide95Loss = document.getElementById("hide95LossPositions")?.checked || false;
+  filterPos(); // This will re-render with new page
+}
+
 function renderPositionsTable(positions) {
   const wrap = document.getElementById("posWrap");
   if (!wrap) return;
@@ -3689,7 +3706,13 @@ function renderPositionsTable(positions) {
     wrap.innerHTML = '<div style="text-align:center;color:var(--muted);padding:24px;font-size:14px">No positions match filter</div>';
     return;
   }
-  const rows = positions.map((p, i) => {
+
+  const pageSize = 25;
+  const pag = paginate(positions, pageSize, posPage);
+  posPage = pag.page;
+
+  const rows = pag.items.map((p, idx) => {
+    const i = pag.start + idx; // Adjust index for pagination
     const qty  = p.quantity ?? 0;
     const side = qty > 0 ? "yes" : "no";
     const abs  = Math.abs(qty);
@@ -3765,9 +3788,9 @@ function renderPositionsTable(positions) {
       </tr>`;
   }).join("");
 
-  // Calculate totals for positions (only include positions that have loaded data)
+  // Calculate totals for positions on current page (only include positions that have loaded data)
   let totalSpent = 0, totalValNow = 0, totalProfitNow = 0, totalMaxProfit = 0;
-  positions.forEach(p => {
+  pag.items.forEach(p => {
     const abs = Math.abs(p.quantity ?? 0);
     const spent = p.buy_price != null ? abs * p.buy_price / 100 : 0;
     const cur = (p.quantity ?? 0) > 0 ? p.current_yes : p.current_no;
@@ -3775,8 +3798,8 @@ function renderPositionsTable(positions) {
     const profitNow = (spent != null && valNow != null) ? valNow - spent : 0;
     const maxWin = spent > 0 ? abs * 0.99 - spent : 0;
     totalSpent += spent;
-    if (valNow != null) totalValNow += valNow;  // only count loaded positions
-    if (valNow != null) totalProfitNow += profitNow;  // only count loaded positions
+    if (valNow != null) totalValNow += valNow;
+    if (valNow != null) totalProfitNow += profitNow;
     totalMaxProfit += maxWin;
   });
   const totalProfitCls = totalProfitNow > 0.001 ? "pos" : totalProfitNow < -0.001 ? "neg" : "neu";
@@ -3809,7 +3832,9 @@ function renderPositionsTable(positions) {
           <td colspan="3"></td>
         </tr>
       </tbody>
-    </table></div>`;
+    </table></div>
+    ${pag.pages > 1 ? `<div style="font-size:11px;color:#888;margin-top:10px;margin-bottom:10px">Showing ${pag.start + 1}–${pag.end} of ${pag.total}</div>` : ""}
+    ${paginationControls(pag.page, pag.pages, "setPosPage")}`;
   updateSellSelBtn();
 }
 
@@ -5168,6 +5193,12 @@ function setSummaryRange(mins) {
   _summaryMins = mins;
   localStorage.setItem("summaryMins", String(mins));
   renderSummaryRanges();
+  summaryPage = 0; // Reset to first page
+  loadSummary();
+}
+
+function setSummaryPage(page) {
+  summaryPage = page;
   loadSummary();
 }
 
@@ -5175,6 +5206,33 @@ function _rangeLabel(mins) {
   if (mins < 60) return `${mins} minutes`;
   if (mins < 1440) return `${mins/60} hour${mins===60?"":"s"}`;
   return `${mins/1440} day${mins===1440?"":"s"}`;
+}
+
+// ── Pagination helpers ───────────────────────────────────────────────────
+function paginate(items, pageSize, currentPage) {
+  const total = items.length;
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  const page = Math.min(currentPage, pages - 1);
+  const start = page * pageSize;
+  const end = Math.min(start + pageSize, total);
+  return {
+    items: items.slice(start, end),
+    page,
+    pages,
+    total,
+    start,
+    end
+  };
+}
+
+function paginationControls(currentPage, totalPages, setPageFn) {
+  if (totalPages <= 1) return "";
+  const buttons = [];
+  for (let i = 0; i < totalPages; i++) {
+    const active = i === currentPage;
+    buttons.push(`<button style="background:${active ? 'var(--green)' : '#444'};color:${active ? '#000' : '#fff'};border:none;border-radius:4px;padding:6px 12px;margin:0 3px;cursor:pointer;font-weight:${active ? '700' : '400'}" onclick="${setPageFn}(${i})">${i + 1}</button>`);
+  }
+  return `<div style="text-align:center;padding:12px 0;display:flex;justify-content:center;gap:4px">${buttons.join("")}</div>`;
 }
 
 async function loadSummary() {
@@ -5213,13 +5271,17 @@ async function loadSummary() {
       card("Spent (buys)", `$${(t.buy_spent||0).toFixed(2)}`) +
       card("Proceeds (sells)", `$${(t.sell_proceeds||0).toFixed(2)}`);
 
-    // Per-trade list
+    // Per-trade list with pagination
     const trades = (d.trades || []).filter(x => x.kind === "buy" || x.kind === "sell");
     metaEl.textContent = `(${trades.length} in last ${_rangeLabel(_summaryMins)}, ${tzAbbr()})`;
     if (!trades.length) {
       tradesEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:10px 0">No buys or sells in this window.</div>`;
     } else {
-      tradesEl.innerHTML = trades.map(x => {
+      const pageSize = 100;
+      const pag = paginate(trades, pageSize, summaryPage);
+      summaryPage = pag.page; // Ensure page is within bounds
+
+      const tradesHtml = pag.items.map(x => {
         const isBuy = x.kind === "buy";
         const color = isBuy ? "var(--blue)" : "var(--green)";
         const tag = isBuy ? "BUY" : "SELL";
@@ -5243,6 +5305,10 @@ async function loadSummary() {
           <span>${result}</span>
         </div>`;
       }).join("");
+
+      tradesEl.innerHTML = tradesHtml +
+        (pag.pages > 1 ? `<div style="font-size:11px;color:#888;margin-top:10px;margin-bottom:10px">Showing ${pag.start + 1}–${pag.end} of ${pag.total}</div>` : "") +
+        paginationControls(pag.page, pag.pages, "setSummaryPage");
     }
   } catch(e) {
     console.error("[loadSummary]", e);
@@ -6069,12 +6135,17 @@ function renderLottoStats() {
     return ` (${fmt(sorted[0])} – ${fmt(sorted[sorted.length-1])})`;
   })() : "";
 
+  // Paginate cent rows
+  const centPageSize = 25;
+  const centPag = paginate(centRows, centPageSize, lottoCentPage);
+  lottoCentPage = centPag.page;
+
   const centTable = centRows.length ? `
     <div style="font-weight:700;margin:18px 0 6px">📊 Win/Loss by 1¢ bet${dateRange}</div>
     <div style="overflow:auto;max-height:350px;border:1px solid #1e2530;border-radius:6px"><table class="flat-tbl" style="width:100%;font-size:12px;border-collapse:collapse">
       <thead style="position:sticky;top:0;background:#0d1117;z-index:10"><tr style="color:var(--muted);text-align:left">
         <th style="padding:6px 8px">Bet</th><th style="padding:6px 8px">Bets</th><th style="padding:6px 8px">Invested</th><th style="padding:6px 8px">Won</th><th style="padding:6px 8px">Win&nbsp;ratio</th><th style="padding:6px 8px">P&amp;L</th></tr></thead>
-      <tbody>${centRows.map((c,i) => { const b = buckets[c]; const ratio = Math.round(100*b.won/b.n);
+      <tbody>${centPag.items.map((c,i) => { const b = buckets[c]; const ratio = Math.round(100*b.won/b.n);
         const bg = i % 2 ? "#141414" : "transparent"; const pc = b.pnl>=0?"var(--green)":"var(--red)";
         return `<tr style="background:${bg}">
           <td style="padding:5px 8px;font-weight:800;color:#ff9416">${c}¢</td>
@@ -6083,7 +6154,8 @@ function renderLottoStats() {
           <td style="padding:5px 8px">${b.won}</td>
           <td style="padding:5px 8px;color:${ratio>0?'var(--green)':'#aaa'};font-weight:700">${ratio}%</td>
           <td style="padding:5px 8px;color:${pc};font-weight:800">${b.pnl>=0?'+':''}$${b.pnl.toFixed(2)}</td></tr>`; }).join("")}
-      </tbody></table></div>` : "";
+      </tbody></table></div>
+    ${centPag.pages > 1 ? `<div style="font-size:11px;color:#888;margin:8px 0">${paginationControls(centPag.page, centPag.pages, "setLottoCentPage")}</div>` : ""}` : "";
 
   // ── Full history ledger: every buy + sell, one line each, newest first, zebra ──
   const hist = [];
@@ -6104,13 +6176,19 @@ function renderLottoStats() {
       qty: abs, cents: p.buy_price || 0, pnl: null, cost: totalCost, resolved: null });
   });
   hist.sort((a,b) => (b.t||"").localeCompare(a.t||""));
+
+  // Paginate history
+  const histPageSize = 25;
+  const histPag = paginate(hist, histPageSize, lottoHistPage);
+  lottoHistPage = histPag.page;
+
   const fmtTs = iso => { try { const d=new Date(iso); return d.toLocaleString([], {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit",second:"2-digit"}); } catch(e){ return "—"; } };
   const histHtml = hist.length ? `
     <div style="font-weight:700;margin:18px 0 6px">🧾 History — every buy &amp; sell</div>
     <div style="overflow:auto;max-height:350px;border:1px solid #1e2530;border-radius:6px"><table class="flat-tbl" style="width:100%;font-size:11px;border-collapse:collapse">
       <thead style="position:sticky;top:0;background:#0d1117;z-index:10"><tr style="color:var(--muted);text-align:left">
         <th style="padding:6px 8px">Time</th><th style="padding:6px 8px">Type</th><th style="padding:6px 8px">Market</th><th style="padding:6px 8px">Position</th><th style="padding:6px 8px;text-align:right">Cost</th><th style="padding:6px 8px;text-align:right">Sold For</th><th style="padding:6px 8px;text-align:right">P&amp;L</th></tr></thead>
-      <tbody>${hist.map((h,i) => {
+      <tbody>${histPag.items.map((h,i) => {
         const bg = i % 2 ? "#141414" : "transparent";
         const costHtml = h.cost != null ? `$${h.cost.toFixed(2)}` : '—';
         const resolvedHtml = h.resolved != null ? `$${h.resolved.toFixed(2)}` : (h.kind === "BUY" ? '—' : '<span style="color:#888">—</span>');
@@ -6126,16 +6204,24 @@ function renderLottoStats() {
           <td style="padding:4px 8px;text-align:right;white-space:nowrap">${costHtml}</td>
           <td style="padding:4px 8px;text-align:right;white-space:nowrap">${resolvedHtml}</td>
           <td style="padding:4px 8px;text-align:right;white-space:nowrap">${pnl}</td></tr>`; }).join("")}
-      </tbody></table></div>` : "";
+      </tbody></table></div>
+    ${histPag.pages > 1 ? `<div style="font-size:11px;color:#888;margin:8px 0">${paginationControls(histPag.page, histPag.pages, "setLottoHistPage")}</div>` : ""}` : "";
 
   // ── Live Lotto bets: full economics + a Sell button on each open position ──
   const _lf = v => (v < 0 ? "-$" : "$") + Math.abs(v).toFixed(2);
+
+  // Paginate live bets
+  const livePageSize = 25;
+  const livePag = paginate(openT2, livePageSize, lottoLivePage);
+  lottoLivePage = livePag.page;
+
   const liveHtml = openT2.length ? `
     <div style="font-weight:700;margin:6px 0 6px">🎯 Live Lotto bets — sell anytime</div>
     <div style="overflow:auto;max-height:350px;border:1px solid #1e2530;border-radius:6px"><table class="flat-tbl" style="width:100%;font-size:12px;border-collapse:collapse">
       <thead style="position:sticky;top:0;background:#0d1117;z-index:10"><tr style="color:var(--muted);text-align:left">
         <th style="padding:6px 8px">Status</th><th style="padding:6px 8px">Market</th><th style="padding:6px 8px">Side</th><th style="padding:6px 8px">Qty</th><th style="padding:6px 8px">Cost/sh</th><th style="padding:6px 8px">Cost</th><th style="padding:6px 8px">Value&nbsp;now</th><th style="padding:6px 8px">Max</th><th style="padding:6px 8px">Closes</th><th style="padding:6px 8px">P&amp;L</th><th style="padding:6px 8px"></th></tr></thead>
-      <tbody>${openT2.map((p,i) => {
+      <tbody>${livePag.items.map((p,idx) => {
+        const i = livePag.start + idx;
         const side = (p.quantity>=0) ? "yes" : "no";
         const qty  = Math.abs(p.quantity||0);
         const bp   = p.buy_price;
@@ -6166,9 +6252,25 @@ function renderLottoStats() {
           <td style="padding:5px 8px">${pnlHtml}</td>
           <td style="padding:5px 8px"><button id="${id}" onclick="sellPos('${p.ticker}','${side}',${qty},'${id}').then(()=>setTimeout(renderLottoStats,900))" style="background:var(--red);color:#fff;border:none;border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">${sellLabel}</button></td></tr>`;
       }).join("")}
-      </tbody></table></div>${openT2.length > 25 ? `<div style="font-size:11px;color:#888;margin-top:6px">${openT2.length} live positions.</div>` : ""}` : "";
+      </tbody></table></div>
+    ${livePag.pages > 1 ? `<div style="font-size:11px;color:#888;margin:8px 0">${paginationControls(livePag.page, livePag.pages, "setLottoLivePage")}</div>` : ""}` : "";
 
   bodyEl.innerHTML = liveHtml + centTable + histHtml;
+}
+
+function setLottoLivePage(page) {
+  lottoLivePage = page;
+  renderLottoStats();
+}
+
+function setLottoCentPage(page) {
+  lottoCentPage = page;
+  renderLottoStats();
+}
+
+function setLottoHistPage(page) {
+  lottoHistPage = page;
+  renderLottoStats();
 }
 
 function loadSettings() {
