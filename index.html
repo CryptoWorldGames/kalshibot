@@ -1327,10 +1327,10 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 <div id="tab-debug" class="tab-pane">
   <div class="card">
     <div class="card-title">🐛 Debug — Real-time Status</div>
-    <div style="font-size:12px;color:#666;margin-bottom:12px">One button below grabs EVERYTHING (this report + server diagnostics + scan preview + recent activity) for pasting to Claude.</div>
+    <div style="font-size:12px;color:#666;margin-bottom:12px">Click "Generate Report" to see the complete diagnostic report, then "Copy Report" to copy it.</div>
     <div style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap">
-      <button onclick="generateDebugReport()" style="background:var(--green);color:#000;border:none;border-radius:6px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer">Generate Report Now</button>
-      <button onclick="copyDiagnostics()" style="background:#1a1a2e;color:#4f9eff;border:1px solid #4f9eff;border-radius:6px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer" title="Copy the complete report for Claude">📋 Copy for Claude</button>
+      <button onclick="generateDebugReport()" style="background:var(--green);color:#000;border:none;border-radius:6px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer">Generate Report</button>
+      <button onclick="copyDebugReport()" style="background:#1a1a2e;color:#4f9eff;border:1px solid #4f9eff;border-radius:6px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer" title="Copy what's shown above">📋 Copy Report</button>
       <button onclick="toggleAutoReporting()" id="autoReportBtn" style="background:#444;color:#fff;border:none;border-radius:6px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer">Start Auto Reports (every 1m)</button>
     </div>
     <div id="debugOutput" style="background:#0a0a0a;border:1px solid #333;border-radius:8px;padding:12px;font-family:monospace;font-size:11px;color:#0f0;max-height:70vh;overflow:auto;line-height:1.5;white-space:pre-wrap;word-break:break-all"></div>
@@ -6438,60 +6438,29 @@ async function generateDebugReport() {
   const out = document.getElementById("debugOutput");
   if (!out) return;
 
-  const timestamp = new Date().toLocaleString("en-US", {
-    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-    second: "2-digit", hour12: false
-  });
-
-  let report = `[${timestamp}] DEBUG REPORT\n`;
-  report += `${"=".repeat(60)}\n\n`;
-
-  // Bot status
-  report += `BOT STATUS:\n`;
-  report += `  Running: ${autoModeOn ? "✓ YES" : "✗ NO"}\n`;
-  report += `  Positions open: ${allPositions.length}\n`;
-  report += `  Sells in flight: ${_inFlightSells.size}\n`;
-  report += `\n`;
-
-  // Cash & balance
-  const cashEl = document.getElementById("navCash");
-  const portEl = document.getElementById("navPortfolio");
-  report += `BALANCE:\n`;
-  report += `  Cash: ${cashEl?.textContent || "?"}\n`;
-  report += `  Portfolio: ${portEl?.textContent || "?"}\n`;
-  report += `\n`;
-
-  // Open positions
-  report += `OPEN POSITIONS (${allPositions.length}):\n`;
-  if (allPositions.length === 0) {
-    report += `  (none)\n`;
-  } else {
-    allPositions.forEach((p, i) => {
-      const side = _posSide(p);
-      const cur = side === "yes" ? p.current_yes : p.current_no;
-      const pnl = (cur && p.buy_price) ? cur - p.buy_price : null;
-      const pnlStr = pnl !== null ? (pnl > 0 ? `+${pnl}¢` : `${pnl}¢`) : "?";
-      report += `  [${i+1}] ${p.ticker} ${p.quantity} ${side} @ ${p.buy_price}¢ (now ${cur}¢, ${pnlStr})\n`;
-    });
+  try {
+    const fullReport = await buildFullReport();
+    out.textContent = fullReport;
+    toast("✓ Report generated — scroll to see all details", "ok");
+    console.log(`[DEBUG] Full report generated`);
+  } catch (e) {
+    out.textContent = `Error generating report: ${e.message}`;
+    console.error("Report generation failed:", e);
   }
-  report += `\n`;
+}
 
-  // Sells in progress
-  if (_inFlightSells.size > 0) {
-    report += `SELLS IN PROGRESS:\n`;
-    _inFlightSells.forEach(key => {
-      report += `  - ${key}\n`;
-    });
-    report += `\n`;
+async function copyDebugReport() {
+  try {
+    const el = document.getElementById("debugOutput");
+    if (!el || !el.textContent.trim()) {
+      toast("⚠️ Generate a report first", "warn");
+      return;
+    }
+    await copyToClipboard(el.textContent);
+    toast("✓ Report copied to clipboard", "ok");
+  } catch (e) {
+    toast(`✗ Copy failed: ${e.message}`, "error");
   }
-
-  // Recent API errors (if any)
-  report += `RECENT STATUS: OK\n\n`;
-
-  out.textContent = (_reportHistory[0] || "") + report + out.textContent.substring(0, 2000);
-  _reportHistory[0] = report;
-
-  console.log(`[DEBUG] Report generated at ${timestamp}`);
 }
 
 let _autoReporting = false;
