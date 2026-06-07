@@ -4369,9 +4369,9 @@ function announceBuy(count, priceCents, totalDollars, category, ticker) {
       }
       if (total_dollars > 0) text += `, total cost ${moneyWords(total_dollars)}`;
       speakText(text);
+      _buyBatchQueue = [];
     }, 250);
 
-    _buyBatchQueue = [];
     _buyBatchTimer = null;
   }, 300);
 }
