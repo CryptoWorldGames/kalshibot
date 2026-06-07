@@ -2104,13 +2104,13 @@ async function loadSettlements() {
   } catch(e) { /* keep whatever's on screen — never blank on a transient failure */ }
 }
 
-window.addEventListener("load", () => {
+window.addEventListener("load", async () => {
   // Show the running build's version in the header, and restore the saved timezone.
   loadVersion();
   const _tzSel = document.getElementById("tzSelect");
   if (_tzSel) _tzSel.value = getTimezone();
   // Load bot status (running/stopped) and cash first
-  loadBotStatus();
+  await loadBotStatus();  // Wait for bot status to sync before continuing
   loadCash();
   loadActiveProfile();   // light up the correct bot LED/pill from the start
   loadLottoSettings();   // pre-fill the Lotto (T2) buy form so it's ready when opened
@@ -2122,7 +2122,7 @@ window.addEventListener("load", () => {
   // Keep the Start/Stop button + banner PERMANENTLY in sync with the real backend
   // bot state — poll every 3s no matter what. Without this the button drifts and
   // shows "Start Bot" while the bot is actually running (then clicking it errors).
-  setInterval(loadBotStatus, 10000);  // reduced from 3s to 10s
+  setInterval(loadBotStatus, 3000);  // Poll every 3 seconds so status updates fast
 
   // Phase 2 (2-5s): Enrich positions with market data
   setTimeout(() => {
