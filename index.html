@@ -1953,32 +1953,37 @@ async function enrichPositionMarkets(tickerList, titleOnly) {
                    : allPositions.map(p => p.ticker)).filter(Boolean);
   if (!tickers.length) return;
 
-  try {
-    const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 25000);
-    const r = await fetch(`/api/enrich-positions?tickers=${tickers.slice(0,50).join(",")}`, {signal: ctrl.signal});
-    clearTimeout(to);
-    const enriched = await r.json() || {};
+  // Process in batches of 50 tickers at a time
+  const batchSize = 50;
+  for (let i = 0; i < tickers.length; i += batchSize) {
+    const batch = tickers.slice(i, i + batchSize);
+    try {
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 25000);
+      const r = await fetch(`/api/enrich-positions?tickers=${batch.join(",")}`, {signal: ctrl.signal});
+      clearTimeout(to);
+      const enriched = await r.json() || {};
 
-    for (const pos of allPositions) {
-      const data = enriched[pos.ticker];
-      if (data) {
-        if (data.event_ticker) pos.event_ticker = data.event_ticker;
-        if (data.title) pos.title = data.title;
-        if (data.category) pos.category = data.category;
-        if (data.close_time) pos.close_time = data.close_time;
-        if (data.kalshi_url) pos.kalshi_url = data.kalshi_url;
-        // On title-only pass, don't overwrite prices (will be enriched next in staged pass)
-        if (!titleOnly) {
-          if (data.current_yes != null) pos.current_yes = data.current_yes;
-          if (data.current_no != null) pos.current_no = data.current_no;
+      for (const pos of allPositions) {
+        const data = enriched[pos.ticker];
+        if (data) {
+          if (data.event_ticker) pos.event_ticker = data.event_ticker;
+          if (data.title) pos.title = data.title;
+          if (data.category) pos.category = data.category;
+          if (data.close_time) pos.close_time = data.close_time;
+          if (data.kalshi_url) pos.kalshi_url = data.kalshi_url;
+          // On title-only pass, don't overwrite prices (will be enriched next in staged pass)
+          if (!titleOnly) {
+            if (data.current_yes != null) pos.current_yes = data.current_yes;
+            if (data.current_no != null) pos.current_no = data.current_no;
+          }
         }
       }
-    }
 
-    renderBotPositions(allPositions);
-  } catch(e) {
-    console.warn("[enrich] error fetching market data:", e);
+      renderBotPositions(allPositions);
+    } catch(e) {
+      console.warn("[enrich] batch error (tickers " + i + "-" + (i + batchSize) + "):", e);
+    }
   }
 }
 
@@ -3554,14 +3559,14 @@ function renderPositionsTable(positions) {
     const cur  = side === "yes" ? p.current_yes : p.current_no;
 
     const spent   = p.buy_price != null ? abs * p.buy_price / 100 : null;
-    const valNow  = cur != null ? abs * cur / 100 : (abs * 1.0);  // fallback to max value if no current bid
+    const valNow  = cur != null ? abs * cur / 100 : null;
     const maxWin  = spent != null ? abs * 0.99 - spent : null;
     // "Captured" = current unrealized profit ÷ max possible profit (cap at 0% minimum, 100% max)
-    const curProfit = (spent != null && cur != null) ? valNow - spent : null;  // only calc if we have actual current price
+    const curProfit = (spent != null && valNow != null) ? valNow - spent : null;
     const captured  = (curProfit != null && maxWin != null && maxWin > 0)
       ? Math.max(0, Math.min(1, curProfit / maxWin))  // clamp to 0-100%
       : null;
-    const pnlDol  = (spent != null && cur != null) ? valNow - spent : null;  // only calc if we have actual current price
+    const pnlDol  = (spent != null && valNow != null) ? valNow - spent : null;
 
     const safeT = p.ticker.replace(/\\/g,"\\\\").replace(/'/g,"\\'");
     const sid   = `sp${i}`;
@@ -3611,10 +3616,10 @@ function renderPositionsTable(positions) {
         </td>
         <td style="font-size:13px;font-weight:600;text-align:center" data-label="Shares">${abs}</td>
         <td style="font-size:13px;font-weight:600;text-align:right" data-label="Cost/Share">${p.buy_price != null ? p.buy_price + "¢" : "—"}</td>
-        <td style="font-size:13px;font-weight:600;text-align:right;color:${cur == null ? '#888' : cur > (p.buy_price || 0) ? 'var(--green)' : cur < (p.buy_price || 0) ? 'var(--red)' : '#fff'};opacity:${cur == null ? 0.6 : 1}" data-label="Current">${cur != null ? cur + "¢" : "(no bid)"}</td>
+        <td style="font-size:13px;font-weight:600;text-align:right;color:${cur == null ? '#fff' : cur > (p.buy_price || 0) ? 'var(--green)' : cur < (p.buy_price || 0) ? 'var(--red)' : '#fff'}" data-label="Current">${cur != null ? cur + "¢" : "—"}</td>
         <td style="font-size:13px;font-weight:600;text-align:right" data-label="Total Invested">${spent != null ? "$" + spent.toFixed(2) : "—"}</td>
-        <td style="font-size:13px;font-weight:700;color:${cur == null ? '#888' : spent == null ? '#fff' : valNow > spent + 0.001 ? 'var(--green)' : valNow < spent - 0.001 ? 'var(--red)' : '#fff'};opacity:${cur == null ? 0.6 : 1};text-align:right" data-label="Current Value">${cur != null ? "$" + valNow.toFixed(2) : "(max: $" + valNow.toFixed(2) + ")"}</td>
-        <td style="font-size:14px;font-weight:800;color:${pnlDol == null ? '#555' : pnlDol > 0.001 ? 'var(--green)' : pnlDol < -0.001 ? 'var(--red)' : '#888'};text-align:right;opacity:${pnlDol == null ? 0.6 : 1}" data-label="P&L Now">${pnlDol != null ? (pnlDol >= 0 ? '+' : '') + '$' + pnlDol.toFixed(2) : '(pending quote)'}</td>
+        <td style="font-size:13px;font-weight:700;color:${valNow == null ? '#fff' : spent == null ? '#fff' : valNow > spent + 0.001 ? 'var(--green)' : valNow < spent - 0.001 ? 'var(--red)' : '#fff'};text-align:right" data-label="Current Value">${valNow != null ? "$" + valNow.toFixed(2) : "—"}</td>
+        <td style="font-size:14px;font-weight:800;color:${pnlDol == null ? '#555' : pnlDol > 0.001 ? 'var(--green)' : pnlDol < -0.001 ? 'var(--red)' : '#888'};text-align:right" data-label="P&L Now">${pnlDol != null ? (pnlDol >= 0 ? '+' : '') + '$' + pnlDol.toFixed(2) : '—'}</td>
         <td style="font-size:13px;color:${maxWin != null && maxWin > 0 ? 'var(--green)' : '#aaa'};font-weight:600;text-align:right" data-label="Max Payout">${maxWin != null ? (maxWin >= 0 ? '+' : '') + '$' + maxWin.toFixed(2) : '—'}</td>
         <td style="white-space:nowrap;text-align:center;font-size:12px" data-label="Captured">${captured != null ? capturedBadge(captured) : '—'}</td>
         <td style="font-size:12px;white-space:nowrap;text-align:right" data-label="Time Left">${p.close_time ? fmtTimeLeft(p.close_time) : '—'}</td>
@@ -3629,8 +3634,8 @@ function renderPositionsTable(positions) {
     const abs = Math.abs(p.quantity ?? 0);
     const spent = p.buy_price != null ? abs * p.buy_price / 100 : 0;
     const cur = (p.quantity ?? 0) > 0 ? p.current_yes : p.current_no;
-    const valNow = cur != null ? abs * cur / 100 : (abs * 1.0);  // fallback to max if no current bid
-    const profitNow = (cur != null && spent != null) ? valNow - spent : 0;  // only count real profit if we have current price
+    const valNow = cur != null ? abs * cur / 100 : null;
+    const profitNow = (spent != null && valNow != null) ? valNow - spent : 0;
     const maxWin = spent > 0 ? abs * 0.99 - spent : 0;
     totalSpent += spent;
     if (valNow != null) totalValNow += valNow;  // only count loaded positions
