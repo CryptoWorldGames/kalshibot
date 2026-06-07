@@ -2894,8 +2894,14 @@ def sell():
 
     with _lock:
         if ticker in tracked:
-            tracked[ticker]["status"]  = "sold"
-            tracked[ticker]["sold_by"] = "human"  # manually sold via UI
+            # Only mark as "sold" if the order actually filled immediately.
+            # For LIMIT orders, "pending" means it's waiting for buyers — don't hide it yet.
+            if order_status in ("filled", "accepted"):
+                tracked[ticker]["status"]  = "sold"
+                tracked[ticker]["sold_by"] = "human"  # manually sold via UI
+            else:
+                # LIMIT order is pending (waiting for match). Keep position visible.
+                tracked[ticker]["status"] = "open"
         # Record the sale for EVERY position (tracked or not) so the portfolio
         # endpoint hides it during Kalshi's settlement-propagation delay. This is
         # what stops non-bot positions from reappearing after a hard refresh.
@@ -2906,10 +2912,16 @@ def sell():
     order = result.get("order", result)
     # Return executed price (if available) so frontend can calculate accurate profit
     executed_price = order.get("price")  # Kalshi returns executed price in order response
+
+    # Distinguish between filled (completed) and pending (waiting for buyers)
+    is_filled = order_status in ("filled", "accepted")
+
     return jsonify({
         "ok": True,
         "order_id": order.get("order_id"),
-        "executed_price_cents": executed_price if executed_price else bid_cents,  # Use bid as fallback if not filled immediately
+        "order_status": order_status,
+        "is_filled": is_filled,  # True = order filled, False = pending/waiting
+        "executed_price_cents": executed_price if executed_price else bid_cents,
         "bid_price_cents": bid_cents,
         "count": count_int
     })

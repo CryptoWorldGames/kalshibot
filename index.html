@@ -3023,11 +3023,16 @@ async function sellPos(ticker, side, count, safeId) {
     const soldProfit = (buyPrice != null && executedPriceCents != null)
       ? count * (executedPriceCents - buyPrice) / 100 : 0;
 
-    toast(`✓ Sold ${count} ${side.toUpperCase()} · ${marketTitle}`, "ok");
-    // Always announce sell — use profit=0 (break even sound) if we can't calculate exact profit
-    const totalReceived = executedPriceCents != null ? count * executedPriceCents / 100 : null;
-    announceSell(count, soldProfit, executedPriceCents, totalReceived, soldPos?.category);
-    addToSaleTicker(marketTitle, soldProfit, side);
+    // Check if order actually filled or is pending (LIMIT order waiting for buyers)
+    if (d.is_filled) {
+      toast(`✓ Sold ${count} ${side.toUpperCase()} · ${marketTitle}`, "ok");
+      const totalReceived = executedPriceCents != null ? count * executedPriceCents / 100 : null;
+      announceSell(count, soldProfit, executedPriceCents, totalReceived, soldPos?.category);
+      addToSaleTicker(marketTitle, soldProfit, side);
+    } else {
+      // LIMIT order pending - waiting for buyers
+      toast(`⏳ LIMIT order placed @ ${executedPriceCents}¢ — waiting for buyers`, "info");
+    }
     selectedPosTickers.delete(ticker);
 
     // Immediately remove from allPositions so it doesn't reappear (remove specific ticker+side, not all with same ticker)
