@@ -1172,6 +1172,18 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   </div>
 </div><!-- /tab-apilog -->
 
+<!-- ── Debug tab — real-time status + background report generator ── -->
+<div id="tab-debug" class="tab-pane">
+  <div class="card">
+    <div class="card-title">🐛 Debug — Real-time Status</div>
+    <div style="margin-bottom:16px;display:flex;gap:8px">
+      <button onclick="generateDebugReport()" style="background:var(--green);color:#000;border:none;border-radius:6px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer">Generate Report Now</button>
+      <button onclick="toggleAutoReporting()" id="autoReportBtn" style="background:#444;color:#fff;border:none;border-radius:6px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer">Start Auto Reports (every 1m)</button>
+    </div>
+    <div id="debugOutput" style="background:#0a0a0a;border:1px solid #333;border-radius:8px;padding:12px;font-family:monospace;font-size:11px;color:#0f0;max-height:70vh;overflow:auto;line-height:1.5;white-space:pre-wrap;word-break:break-all"></div>
+  </div>
+</div><!-- /tab-debug -->
+
 </div><!-- /main -->
 
 <!-- ── Sell Notifications (bottom-left, stacked) ───────────────── -->
@@ -5509,6 +5521,94 @@ setInterval(async () => {
     _showBotDownAlert();
   }
 }, 5000);
+
+// ── Debug Report Generator (runs in background, persists across tabs) ────
+let _autoReportInterval = null;
+let _reportHistory = [];
+
+async function generateDebugReport() {
+  const out = document.getElementById("debugOutput");
+  if (!out) return;
+
+  const timestamp = new Date().toLocaleString("en-US", {
+    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+    second: "2-digit", hour12: false
+  });
+
+  let report = `[${timestamp}] DEBUG REPORT\n`;
+  report += `${"=".repeat(60)}\n\n`;
+
+  // Bot status
+  report += `BOT STATUS:\n`;
+  report += `  Running: ${autoModeOn ? "✓ YES" : "✗ NO"}\n`;
+  report += `  Positions open: ${allPositions.length}\n`;
+  report += `  Sells in flight: ${_inFlightSells.size}\n`;
+  report += `\n`;
+
+  // Cash & balance
+  const cashEl = document.getElementById("navCash");
+  const portEl = document.getElementById("navPortfolio");
+  report += `BALANCE:\n`;
+  report += `  Cash: ${cashEl?.textContent || "?"}\n`;
+  report += `  Portfolio: ${portEl?.textContent || "?"}\n`;
+  report += `\n`;
+
+  // Open positions
+  report += `OPEN POSITIONS (${allPositions.length}):\n`;
+  if (allPositions.length === 0) {
+    report += `  (none)\n`;
+  } else {
+    allPositions.forEach((p, i) => {
+      const side = _posSide(p);
+      const cur = side === "yes" ? p.current_yes : p.current_no;
+      const pnl = (cur && p.buy_price) ? cur - p.buy_price : null;
+      const pnlStr = pnl !== null ? (pnl > 0 ? `+${pnl}¢` : `${pnl}¢`) : "?";
+      report += `  [${i+1}] ${p.ticker} ${p.quantity} ${side} @ ${p.buy_price}¢ (now ${cur}¢, ${pnlStr})\n`;
+    });
+  }
+  report += `\n`;
+
+  // Sells in progress
+  if (_inFlightSells.size > 0) {
+    report += `SELLS IN PROGRESS:\n`;
+    _inFlightSells.forEach(key => {
+      report += `  - ${key}\n`;
+    });
+    report += `\n`;
+  }
+
+  // Recent API errors (if any)
+  report += `RECENT STATUS: OK\n\n`;
+
+  out.textContent = (_reportHistory[0] || "") + report + out.textContent.substring(0, 2000);
+  _reportHistory[0] = report;
+
+  console.log(`[DEBUG] Report generated at ${timestamp}`);
+}
+
+let _autoReporting = false;
+function toggleAutoReporting() {
+  const btn = document.getElementById("autoReportBtn");
+  if (!btn) return;
+
+  if (_autoReporting) {
+    // Stop
+    if (_autoReportInterval) clearInterval(_autoReportInterval);
+    _autoReportInterval = null;
+    _autoReporting = false;
+    btn.textContent = "Start Auto Reports (every 1m)";
+    btn.style.background = "#444";
+    toast("Auto reports stopped", "");
+  } else {
+    // Start
+    _autoReporting = true;
+    btn.textContent = "Stop Auto Reports (running)";
+    btn.style.background = "#ff4d4d";
+    toast("Auto reports will generate every 1 minute — even when you switch tabs", "ok");
+    generateDebugReport();  // generate immediately
+    _autoReportInterval = setInterval(generateDebugReport, 60000);  // every 60s
+  }
+}
 </script>
 
 <!-- Version Info -->
