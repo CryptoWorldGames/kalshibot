@@ -5233,6 +5233,8 @@ async function loadSummary() {
         const side = (x.side || "").toUpperCase();
         const price = x.price != null ? `${x.price}¢` : "";
         const cnt = x.count != null ? `×${x.count}` : "";
+        const profile = x.profile || x.bot || "";
+        const profileBadge = profile ? `<span class="tabtag">${profile}</span>` : "";
         let result = "";
         if (!isBuy && x.profit != null) {
           const pcls = x.profit >= 0 ? "pos" : "neg";
@@ -5244,6 +5246,7 @@ async function loadSummary() {
         return `<div style="display:flex;align-items:center;gap:10px;padding:7px 12px;background:#0c0c0e;border-left:3px solid ${color};border-radius:4px;margin-bottom:5px;font-size:13px">
           <span style="color:#777;min-width:120px;font-variant-numeric:tabular-nums">${fmtTime(x.ts, true)}</span>
           <span style="color:${color};font-weight:800;min-width:38px">${tag}</span>
+          ${profileBadge}
           <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${title} <span style="color:#888">${side} ${cnt} @ ${price}</span></span>
           <span>${result}</span>
         </div>`;
