@@ -490,15 +490,18 @@ def _remember_title(ticker: str, title: str):
         _save_title_cache()
 
 _COIN_NAMES = {
-    "BTC": "Bitcoin", "ETH": "Ethereum", "SOL": "Solana", "XRP": "XRP",
-    "DOGE": "Dogecoin", "ADA": "Cardano", "AVAX": "Avalanche", "LINK": "Chainlink",
-    "BNB": "BNB", "LTC": "Litecoin", "MATIC": "Polygon", "DOT": "Polkadot",
-    "SHIB": "Shiba Inu", "PEPE": "Pepe", "TRX": "Tron", "ATOM": "Cosmos",
+    "BTC": "Bitcoin", "BTCD": "Bitcoin", "BTCW": "Bitcoin", "BTCM": "Bitcoin",
+    "ETH": "Ethereum", "ETHD": "Ethereum", "ETHUSD": "Ethereum",
+    "SOL": "Solana", "SOLD": "Solana",
+    "XRP": "XRP", "DOGE": "Dogecoin", "ADA": "Cardano", "AVAX": "Avalanche",
+    "LINK": "Chainlink", "BNB": "BNB", "LTC": "Litecoin", "MATIC": "Polygon",
+    "DOT": "Polkadot", "SHIB": "Shiba Inu", "PEPE": "Pepe", "TRX": "Tron",
+    "ATOM": "Cosmos", "HYPE": "Hyperliquid",
 }
 
 def _humanize_ticker(ticker: str) -> str:
     """Last-resort readable label when no real title is available — so the UI shows
-    something human instead of a raw code like 'KXBTC-26JUN1217-B64250'.
+    something human instead of a raw code like 'KXBTCD-26JUN0717-T63249.99'.
     Recognizes crypto price markets (KX<COIN>-<date>-<B/T><strike>); otherwise
     returns the ticker unchanged (no worse than before)."""
     if not ticker:
@@ -506,14 +509,18 @@ def _humanize_ticker(ticker: str) -> str:
     parts = ticker.upper().split("-")
     head = parts[0]
     if head.startswith("KX") and len(parts) >= 3:
-        coin = head[2:]                       # KXBTC -> BTC
-        name = _COIN_NAMES.get(coin, coin)
-        strike = "".join(ch for ch in parts[-1] if ch.isdigit())
-        if strike:
-            try:
-                return f"{name} ${int(strike):,}"   # 'Bitcoin $64,250'
-            except ValueError:
-                pass
+        coin = head[2:]                       # KXBTCD -> BTCD
+        name = _COIN_NAMES.get(coin, coin)    # BTCD -> "Bitcoin"
+        # Parse strike from last part; strip leading B/T prefix (e.g. "T63249.99" -> 63249.99)
+        raw_strike = parts[-1].lstrip("BTbt")
+        try:
+            val = float(raw_strike)
+            if val == int(val):
+                return f"{name} ${int(val):,}"
+            else:
+                return f"{name} ${val:,.2f}"
+        except ValueError:
+            pass
         return name
     return ticker
 
@@ -1670,7 +1677,7 @@ def portfolio():
                     close_time   = _m.get("close_time") or _m.get("expiration_time")
                 else:
                     event_ticker = ""
-                    market_title = _title_cache.get(ticker, ticker)  # use remembered pretty title
+                    market_title = _title_cache.get(ticker) or _humanize_ticker(ticker)
                     category = ""
                     current_yes = None
                     current_no = None
@@ -1753,7 +1760,7 @@ def portfolio():
                 continue
         event_ticker = ""
         # Prefer the remembered pretty title over the tracked title or raw ticker.
-        market_title = _title_cache.get(ticker) or info.get("title", ticker)
+        market_title = _title_cache.get(ticker) or info.get("title") or _humanize_ticker(ticker)
         category     = ""
         current_yes  = None
         current_no   = None
@@ -1782,7 +1789,7 @@ def portfolio():
                     _save_tracked()
                     continue
                 event_ticker = mkt.get("event_ticker", "")
-                market_title = _event_title(event_ticker) or mkt.get("title", ticker)
+                market_title = _pretty_title(ticker, _event_title(event_ticker) or mkt.get("title", ticker))
                 category     = mkt.get("category", "")
                 current_yes  = _mark_price_cents(mkt, "yes")
                 current_no   = _mark_price_cents(mkt, "no")
