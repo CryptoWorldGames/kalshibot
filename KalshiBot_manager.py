@@ -2,7 +2,8 @@
 """
 KalshiBot Process Manager
 Manages Flask subprocess with remote control (start/stop/restart)
-Run: python manager.py
+Run: python KalshiBot_manager.py
+Ports configured via .env file (KALSHI_BOT_PORT, KALSHI_MANAGER_PORT)
 """
 
 import subprocess
@@ -11,20 +12,31 @@ import socket
 import sys
 import time
 import json
+import os
 from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
-
-class ReusingHTTPServer(HTTPServer):
-    allow_reuse_address = True  # Must be set before socket.bind() is called
 from urllib.parse import urlparse
 import threading
 
+# Load environment variables from .env
 HERE = Path(__file__).resolve().parent
+env_file = HERE / ".env"
+if env_file.exists():
+    with open(env_file) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                key, value = line.split("=", 1)
+                os.environ[key.strip()] = value.strip()
+
+FLASK_PORT = int(os.getenv("KALSHI_BOT_PORT", "5003"))
+MANAGER_PORT = int(os.getenv("KALSHI_MANAGER_PORT", "5103"))
 FLASK_PROCESS = None
-FLASK_PORT = 5003
-MANAGER_PORT = 5103  # Manager runs on Flask port + 100
 RUNNING = True
-INTENTIONALLY_STOPPED = False  # Track if user manually stopped Flask
+INTENTIONALLY_STOPPED = False
+
+class ReusingHTTPServer(HTTPServer):
+    allow_reuse_address = True
 
 class ManagerHandler(BaseHTTPRequestHandler):
     """HTTP handler for remote control commands"""
@@ -115,20 +127,25 @@ def check_flask_alive():
     return FLASK_PROCESS.poll() is None
 
 def start_flask():
-    """Start Flask process"""
+    """Start Flask process with full path and distinct process title"""
     global FLASK_PROCESS, INTENTIONALLY_STOPPED
     if FLASK_PROCESS is not None and check_flask_alive():
         print("[manager] Flask already running")
         return
 
-    INTENTIONALLY_STOPPED = False  # Clear the stop flag when user starts it
-    print("[manager] Starting Flask...")
+    INTENTIONALLY_STOPPED = False
+    app_path = HERE / "app.py"
+    print(f"[manager] Starting Flask from {app_path}...")
+
+    # Build command with full path and distinct process title for Windows Task Manager
+    cmd = [sys.executable, str(app_path)]
+
     FLASK_PROCESS = subprocess.Popen(
-        [sys.executable, "app.py"],
-        cwd=HERE,
+        cmd,
+        cwd=str(HERE),
         creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0
     )
-    print(f"[manager] Flask started (PID: {FLASK_PROCESS.pid})")
+    print(f"[manager] Flask started on port {FLASK_PORT} (PID: {FLASK_PROCESS.pid})")
 
 def stop_flask():
     """Stop Flask process gracefully"""
