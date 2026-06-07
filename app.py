@@ -443,7 +443,7 @@ _LOTTO_BUY_DEFAULTS = {
     "good_liq": False, "hide_multi": False,
     "min_age_mins": None, "max_age_mins": None, "no_buy_within_mins": None,
 }
-_LOTTO_SELL_DEFAULTS = {"mode": "resolution", "target_pct": 10.0, "stop_loss_pct": 50.0}
+_LOTTO_SELL_DEFAULTS = {"mode": "resolution", "target_pct": 10.0}  # No stop-loss for Lotto (T2) — only wait for resolution
 
 _profiles, _sell_profiles, active_profiles = _load_profiles()
 # Seed buy profiles. T1 inherits the existing live buy_settings (so the current bot
