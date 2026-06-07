@@ -2023,7 +2023,7 @@ window.addEventListener("load", () => {
   // Keep the Start/Stop button + banner PERMANENTLY in sync with the real backend
   // bot state — poll every 3s no matter what. Without this the button drifts and
   // shows "Start Bot" while the bot is actually running (then clicking it errors).
-  setInterval(loadBotStatus, 3000);
+  setInterval(loadBotStatus, 10000);  // reduced from 3s to 10s
 
   // Phase 2 (2-5s): Enrich positions with market data
   setTimeout(() => {
@@ -3828,7 +3828,7 @@ function addRecentBuy(b) {
   // Keep at most 10
   if (recentBuys.length > 10) recentBuys = recentBuys.slice(0, 10);
   renderRecentBuys();
-  if (!recentBuysTimer) recentBuysTimer = setInterval(renderRecentBuys, 2000);
+  if (!recentBuysTimer) recentBuysTimer = setInterval(renderRecentBuys, 5000);  // reduced from 2s to 5s
 }
 
 function renderRecentBuys() {
@@ -4898,7 +4898,7 @@ function switchTab(name) {
   if (name === "apilog") {
     loadApiLog();
     if (window._apiLogRefresh) clearInterval(window._apiLogRefresh);
-    if (!document.hidden) window._apiLogRefresh = setInterval(loadApiLog, 2000);
+    if (!document.hidden) window._apiLogRefresh = setInterval(loadApiLog, 10000);  // reduced from 2s to 10s
   } else {
     if (window._apiLogRefresh) { clearInterval(window._apiLogRefresh); window._apiLogRefresh = null; }
   }
@@ -4909,8 +4909,8 @@ function switchTab(name) {
     if (window._posEnrich)     clearInterval(window._posEnrich);
     if (window._posSettle)     clearInterval(window._posSettle);
     if (!document.hidden) {
-      window._posTabRefresh = setInterval(loadPositionsFast, 8000);        // keep list current
-      window._posEnrich     = setInterval(enrichPositionMarkets, 15000);   // refresh prices
+      window._posTabRefresh = setInterval(loadPositionsFast, 30000);       // keep list current (reduced from 8s)
+      window._posEnrich     = setInterval(enrichPositionMarkets, 60000);   // refresh prices (reduced from 15s)
       window._posSettle     = setInterval(loadSettlements, 60000);         // refresh settlements
     }
   } else {
