@@ -1195,7 +1195,7 @@ def _monitor():
                                          count=pos.get("count"), price=bid,
                                          profit=round(profit_dollars, 2), profit_pct=round(profit_pct, 1),
                                          sold_by="bot", reason=reason.lower(), title=title,
-                                         category=pos.get("category", ""))
+                                         category=pos.get("category", ""), profile=pos.get("profile"))
                     except Exception as e:
                         # If kalshi_post or result processing fails, revert selling status
                         with _lock:
@@ -3052,7 +3052,8 @@ def sell():
         _profit = round(count_int * (exec_c - _bp) / 100, 2) if _bp else None
         _record_activity("sell", ticker=ticker, side=side, count=count_int,
                          price=exec_c, profit=_profit, sold_by="human",
-                         title=_pos.get("title", ticker), category=_pos.get("category", ""))
+                         title=_pos.get("title", ticker), category=_pos.get("category", ""),
+                         profile=_pos.get("profile"))
 
     return jsonify({
         "ok": True,
