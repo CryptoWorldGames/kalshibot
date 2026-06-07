@@ -4028,22 +4028,27 @@ function speakText(text) {
   if (Date.now() < _voiceSnoozeUntil) return;   // snoozed — stay silent
   try {
     if ('speechSynthesis' in window) {
-      // DON'T cancel ongoing speech — queue announcements instead (allows multiple sells to be announced)
-      // window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 1.0;
       utterance.pitch = 1.2;
       utterance.volume = 1.0;
-      // Try to use a female voice
+      // Try female voice first, fall back to any voice
       const voices = window.speechSynthesis.getVoices();
-      const femaleVoice = voices.find(v => v.name.includes('Female')) ||
-                          voices.find(v => v.name.includes('woman')) ||
-                          voices.find(v => v.name.includes('Google US English Female')) ||
-                          voices[1] || voices[0];
-      if (femaleVoice) utterance.voice = femaleVoice;
+      let selectedVoice = null;
+      if (voices.length > 0) {
+        selectedVoice = voices.find(v => v.name.toLowerCase().includes('female')) ||
+                        voices.find(v => v.name.toLowerCase().includes('woman')) ||
+                        voices.find(v => v.name.toLowerCase().includes('google us english female')) ||
+                        voices.find(v => !v.name.toLowerCase().includes('male')) ||  // prefer non-male
+                        voices[0];
+      }
+      if (selectedVoice) utterance.voice = selectedVoice;
+      utterance.onerror = (e) => console.log("[voice] error:", e.error);
       window.speechSynthesis.speak(utterance);
     }
-  } catch(e) {}
+  } catch(e) {
+    console.log("[voice] exception:", e.message);
+  }
 }
 
 // Speak a dollar amount naturally: 0.05 -> "5 cents", 1.50 -> "1 dollar and 50 cents"
@@ -4081,12 +4086,16 @@ function announceBuy(count, priceCents, totalDollars, category) {
 
   if (_buyBatchTimer) clearTimeout(_buyBatchTimer);
   _buyBatchTimer = setTimeout(() => {
+    // ALWAYS play beep/sound, regardless of snooze — snooze only blocks voice
     const beep = localStorage.getItem("customSound_buy");
     if (beep) {
-      try { new Audio(beep).play().catch(() => playBeep(900, 0.15, 0.35)); }
-      catch(e) { playBeep(900, 0.15, 0.35); }
+      try {
+        new Audio(beep).play().catch(() => { try { playBeep(900, 0.15, 0.35); } catch(e) {} });
+      } catch(e) {
+        try { playBeep(900, 0.15, 0.35); } catch(e2) {}
+      }
     } else {
-      playBeep(900, 0.15, 0.35);
+      try { playBeep(900, 0.15, 0.35); } catch(e) {}
     }
 
     const total_count = _buyBatchQueue.reduce((s, b) => s + b.count, 0);
@@ -4172,25 +4181,26 @@ function announceSell(count, profit, sellPriceCents, totalReceived, category) {
   }
 
   if (profit > 0) {
-    // Profit — cash register cha-ching FIRST, THEN voice
-    playChaChingFile();
+    // Profit — cash register cha-ching FIRST, THEN voice (cha-ching always plays, voice respects snooze)
+    try { playChaChingFile(); } catch(e) {}
     setTimeout(() => {
       speakText(detail);
     }, 700);
   } else if (profit < 0) {
-    // Loss — sad trumpet FIRST, THEN voice
+    // Loss — sad trumpet FIRST, THEN voice (trumpet always plays, voice respects snooze)
     const customLoss = localStorage.getItem("customSound_loss");
     if (customLoss) {
-      try { new Audio(customLoss).play().catch(() => playSadTrumpet()); }
-      catch(e) { playSadTrumpet(); }
+      try { new Audio(customLoss).play().catch(() => { try { playSadTrumpet(); } catch(e) {} }); }
+      catch(e) { try { playSadTrumpet(); } catch(e2) {} }
     } else {
-      playSadTrumpet();
+      try { playSadTrumpet(); } catch(e) {}
     }
     setTimeout(() => {
       speakText(detail);  // detail already says "lost" instead of "made"
     }, 700);
   } else {
-    // Break-even (profit === 0) — neutral sound, then announce
+    // Break-even (profit === 0) — small beep, then announce
+    try { playBeep(600, 0.15, 0.25); } catch(e) {}
     setTimeout(() => {
       speakText(detail);  // detail already says "break even"
     }, 500);
