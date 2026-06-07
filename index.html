@@ -3647,9 +3647,9 @@ function renderPositionsTable(positions) {
         </td>
         <td style="font-size:13px;font-weight:600;text-align:center" data-label="Shares">${abs}</td>
         <td style="font-size:13px;font-weight:600;text-align:right" data-label="Cost/Share">${p.buy_price != null ? p.buy_price + "¢" : "—"}</td>
-        <td style="font-size:13px;font-weight:600;text-align:right;color:${cur == null ? '#fff' : cur > (p.buy_price || 0) ? 'var(--green)' : cur < (p.buy_price || 0) ? 'var(--red)' : '#fff'}" data-label="Current">${cur != null ? cur + "¢" : "—"}</td>
+        <td style="font-size:13px;font-weight:600;text-align:right;color:${cur == null ? '#888' : cur > (p.buy_price || 0) ? 'var(--green)' : cur < (p.buy_price || 0) ? 'var(--red)' : '#fff'};opacity:${cur == null ? '0.6' : '1'}" data-label="Current">${(cur != null ? cur : p.buy_price) + "¢"}</td>
         <td style="font-size:13px;font-weight:600;text-align:right" data-label="Total Invested">${spent != null ? "$" + spent.toFixed(2) : "—"}</td>
-        <td style="font-size:13px;font-weight:700;color:${valNow == null ? '#fff' : spent == null ? '#fff' : valNow > spent + 0.001 ? 'var(--green)' : valNow < spent - 0.001 ? 'var(--red)' : '#fff'};text-align:right" data-label="Current Value">${valNow != null ? "$" + valNow.toFixed(2) : "—"}</td>
+        <td style="font-size:13px;font-weight:700;color:${valNow == null ? '#888' : spent == null ? '#fff' : valNow > spent + 0.001 ? 'var(--green)' : valNow < spent - 0.001 ? 'var(--red)' : '#fff'};text-align:right;opacity:${valNow == null ? '0.6' : '1'}" data-label="Current Value">${(valNow != null ? valNow : (spent != null ? spent : 0)).toFixed(2)}</td>
         <td style="font-size:14px;font-weight:800;color:${pnlDol == null ? '#555' : pnlDol > 0.001 ? 'var(--green)' : pnlDol < -0.001 ? 'var(--red)' : '#888'};text-align:right" data-label="P&L Now">${pnlDol != null ? (pnlDol >= 0 ? '+' : '') + '$' + pnlDol.toFixed(2) : '—'}</td>
         <td style="font-size:13px;color:${maxWin != null && maxWin > 0 ? 'var(--green)' : '#aaa'};font-weight:600;text-align:right" data-label="Max Payout">${maxWin != null ? (maxWin >= 0 ? '+' : '') + '$' + maxWin.toFixed(2) : '—'}</td>
         <td style="white-space:nowrap;text-align:center;font-size:12px" data-label="Captured">${captured != null ? capturedBadge(captured) : '—'}</td>
