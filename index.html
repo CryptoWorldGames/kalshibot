@@ -4999,7 +4999,7 @@ async function loadStats() {
   el.textContent = "Loading…";
   try {
     const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 15000); // 15s timeout
+    const t = setTimeout(() => ctrl.abort(), 30000); // 30s timeout
     const r = await fetch("/api/stats", {signal: ctrl.signal});
     clearTimeout(t);
     const d = await r.json();
