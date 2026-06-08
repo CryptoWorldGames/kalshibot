@@ -2993,11 +2993,11 @@ def sell():
         else:
             bid_d = mkt_data.get("no_bid_dollars") or mkt_data.get("no_ask_dollars")
 
-        bid_cents = round(float(bid_d or 0) * 100)
+        bid_cents = round(float(bid_d or 0) * 100, 2)  # Allow decimals (99.5, 99.99)
         if bid_cents < 1:
             return jsonify({"error": f"Cannot sell — current bid is 0¢ (market likely already resolved or no buyers). Check Kalshi directly."}), 400
 
-        # Kalshi API only accepts whole numbers - sell what we can, leave fractional for Kalshi
+        # Kalshi API only accepts whole numbers for count - sell what we can, leave fractional for Kalshi
         count_int = int(count)  # Floor: 1.53 → 1, 0.53 → 0
 
         if count_int < 1:
@@ -3017,6 +3017,7 @@ def sell():
 
         if order_type == "limit":
             # LIMIT: locked in price, won't sell below
+            # Note: Kalshi may accept decimal cents (99.9¢) or may round to whole cents
             price_key = "yes_price" if side == "yes" else "no_price"
             order_payload[price_key] = bid_cents
             print(f"[sell] {ticker} {side} × {count_int} LIMIT @ {bid_cents}¢")
@@ -3045,12 +3046,14 @@ def sell():
 
             market_cents = round(float(market_price) * 100)
 
-            # Calculate profit at market price
+            # Calculate profit at market price (supports decimal cents)
             would_profit_5pct = False
             profit_pct = 0
             if buy_price and market_cents > 0:
                 profit_pct = ((market_cents - buy_price) / buy_price) * 100
                 would_profit_5pct = profit_pct >= 5.0
+
+            market_cents = round(market_cents, 2)  # Allow decimals like 99.9¢
 
             return jsonify({
                 "error": f"No buyers at {bid_cents}¢",
