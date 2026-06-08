@@ -3248,10 +3248,10 @@ function showOrderTypeDialog(ticker, side, count, position, currentBidCents) {
 
   dialog.innerHTML = `
     <div style="font-size: 16px; font-weight: 700; margin-bottom: 12px; color: var(--green)">
-      ⚠ No Buyers at Market Price
+      ⚠ No Buyers at Limit Price
     </div>
     <div style="font-size: 13px; color: #ddd; margin-bottom: 16px; line-height: 1.5">
-      <b>${marketTitle}</b> has no buyers at the current bid (${currentBidCents}¢).<br><br>
+      <b>${marketTitle}</b> LIMIT order failed — no buyers at ${currentBidCents}¢.<br><br>
       What would you like to do?
     </div>
 
