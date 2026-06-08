@@ -3266,8 +3266,11 @@ def set_strategy():
             return jsonify({"error": "target_price_cents must be 1-99"}), 400
         if bip is not None and (bip < 1 or bip > 99):
             return jsonify({"error": "buy_in_price_cents must be 1-99"}), 400
-        if slp is not None and (slp < 1 or slp > 99):
-            return jsonify({"error": "stop_loss_pct must be 1-99"}), 400
+        # stop_loss_pct: 0 or None clears it; 1-99 enables it
+        if slp is not None and slp != 0 and (slp < 1 or slp > 99):
+            return jsonify({"error": "stop_loss_pct must be 0 (off) or 1-99 (%)"}), 400
+        if slp == 0:
+            slp = None  # treat 0 as "clear stop loss"
     except (ValueError, TypeError):
         return jsonify({"error": "Invalid numeric values"}), 400
 
