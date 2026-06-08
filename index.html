@@ -3120,10 +3120,10 @@ async function sellPos(ticker, side, count, safeId) {
     return;
   }
 
-  // Show confirmation with current bid price
+  // Show confirmation with order type choice
   const bidPrice = side === "yes" ? prePos.current_yes : prePos.current_no;
   if (bidPrice != null) {
-    const msg = `Sell ${count} ${side.toUpperCase()} @ ${bidPrice}¢?\n\nUsing LIMIT order (locked in price).\nIf no buyers at this price, you can:\n• Retry at lower price (±5¢)\n• Wait for buyers\n• Cancel and hold`;
+    const msg = `Sell ${count} ${side.toUpperCase()} @ ${bidPrice}¢?\n\nOrder type:\n• LIMIT (locked at ${bidPrice}¢, may not fill if no buyers)\n• MARKET (guaranteed execution at best available price)\n\nOK = LIMIT, Cancel = abort`;
     if (!confirm(msg)) return;
   }
 
