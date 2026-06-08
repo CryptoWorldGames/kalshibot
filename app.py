@@ -2993,7 +2993,9 @@ def sell():
         else:
             bid_d = mkt_data.get("no_bid_dollars") or mkt_data.get("no_ask_dollars")
 
-        bid_cents = round(float(bid_d or 0) * 100, 2)  # Allow decimals (99.5, 99.99)
+        bid_cents_float = round(float(bid_d or 0) * 100, 2)  # Decimal value (99.5, 98.2, etc)
+        bid_cents = int(round(bid_cents_float))  # Convert to integer for Kalshi API (99, 98, etc)
+
         if bid_cents < 1:
             return jsonify({"error": f"Cannot sell — current bid is 0¢ (market likely already resolved or no buyers). Check Kalshi directly."}), 400
 
@@ -3016,8 +3018,7 @@ def sell():
         }
 
         if order_type == "limit":
-            # LIMIT: locked in price, won't sell below
-            # Note: Kalshi may accept decimal cents (99.9¢) or may round to whole cents
+            # LIMIT: locked in price, won't sell below (integer cents)
             price_key = "yes_price" if side == "yes" else "no_price"
             order_payload[price_key] = bid_cents
             print(f"[sell] {ticker} {side} × {count_int} LIMIT @ {bid_cents}¢")
