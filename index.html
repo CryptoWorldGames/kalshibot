@@ -19,6 +19,18 @@
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     });
   }
+
+  // Suppress transient connection errors during Flask restarts
+  // (ERR_CONNECTION_RESET, ERR_NETWORK_CHANGED, etc. are expected and retried)
+  const originalError = console.error;
+  console.error = function(...args) {
+    const msg = String(args[0] || "");
+    // Suppress network errors that are being retried (transient)
+    if (msg.includes("ERR_CONNECTION") || msg.includes("ERR_NETWORK") || msg.includes("net::")) {
+      return; // silently ignore transient network errors
+    }
+    return originalError.apply(console, args);
+  };
 </script>
 <style>
 :root {
