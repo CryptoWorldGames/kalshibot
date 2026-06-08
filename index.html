@@ -749,6 +749,10 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
         <button class="pill" onclick="setTime(43200,'1mo')">1mo</button>
         <button class="pill" onclick="setTime(525600,'Show all')">Show all</button>
       </div>
+      <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+        <input type="number" id="customMinutes" placeholder="Custom (0.25–5 min)" min="0.25" max="5" step="0.25" style="flex:1;padding:6px;font-size:12px;background:#1a1f26;color:#fff;border:1px solid var(--border);border-radius:4px">
+        <button class="pill" onclick="setCustomMinutes()" style="padding:6px 12px;font-size:12px">Set</button>
+      </div>
       </div>
     </div>
   </div>
@@ -2354,6 +2358,19 @@ function setTime(val, label) {
   if (tlEl) tlEl.style.display = c ? "inline" : "none";
   if (c && tcEl) tcEl.oninput = () => { selTime = parseInt(tcEl.value) || 15; saveSettings(); };
   saveSettings();
+}
+
+function setCustomMinutes() {
+  const customInput = document.getElementById("customMinutes");
+  const value = parseFloat(customInput?.value);
+  if (!value || value < 0.25 || value > 5) {
+    alert("Please enter a value between 0.25 and 5 minutes");
+    return;
+  }
+  selTime = value;
+  activatePills("timeGroup", `${value} min`);
+  saveSettings();
+  customInput.value = "";  // Clear input after setting
 }
 
 function activatePills(groupId, label) {

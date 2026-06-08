@@ -515,7 +515,11 @@ def _apply_buy_edits(target: dict, data: dict):
         if k in data:
             target[k] = _pct(data[k], target.get(k, 80.0))
     if "minutes" in data:
-        target["minutes"] = _posint(data["minutes"], target.get("minutes", 15), lo=1)
+        try:
+            mins = float(data["minutes"])
+            target["minutes"] = max(0.25, min(525600, mins))  # Allow 0.25 min (15s) to 365 days
+        except (TypeError, ValueError):
+            pass
     if "buy_amount" in data:
         try:    target["buy_amount"] = max(0.01, float(data["buy_amount"]))
         except (TypeError, ValueError): pass
@@ -1263,7 +1267,7 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
 
     up_min,   up_max   = float(bs.get("up_min", 80)),   float(bs.get("up_max", 96))
     down_min, down_max = float(bs.get("down_min", 80)), float(bs.get("down_max", 96))
-    minutes  = int(bs.get("minutes", 15))
+    minutes  = float(bs.get("minutes", 15))
     buy_amt  = float(bs.get("buy_amount", 0.50))
     max_scan = int(bs.get("max_per_scan", 3))
     max_conc = int(bs.get("max_concurrent", 999))
@@ -2639,7 +2643,7 @@ def scan():
     try:
         min_thr        = float(request.args.get("min_thr", 85))
         max_thr        = float(request.args.get("max_thr", 96))
-        minutes        = int(request.args.get("minutes", 15))
+        minutes        = float(request.args.get("minutes", 15))
         show_crypto    = request.args.get("show_crypto", "false").lower() == "true"
         show_combo     = request.args.get("show_combo", "false").lower() == "true"
         show_sports    = request.args.get("show_sports", "false").lower() == "true"
