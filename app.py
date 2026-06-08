@@ -2970,6 +2970,7 @@ def sell():
     data    = request.get_json(silent=True) or {}
     ticker  = data.get("ticker", "")
     side    = data.get("side", "")
+    order_type = data.get("order_type", "limit")  # "limit" or "market"
 
     # Safely convert count to float (supports fractional quantities like 0.08, 0.91)
     try:
@@ -3004,32 +3005,57 @@ def sell():
             print(f"[sell] {ticker}: {count} contracts (fractional < 1, error)")
             return jsonify({"error": f"Can't sell {count} contracts — less than 1. Position will resolve at expiry."}), 400
 
-        # LIMIT SELL at current bid price — locked in price, won't sell below.
-        # Safer than market orders which could fill at terrible prices if liquidity dries up.
+        # Build order payload — LIMIT or MARKET based on order_type
         order_payload = {
             "ticker": ticker,
             "client_order_id": str(uuid.uuid4()),  # Required by Kalshi API
             "action": "sell",
             "side":   side,
-            "type":   "limit",  # LIMIT: won't sell below this price
+            "type":   order_type,  # "limit" (won't sell below bid) or "market" (best effort)
             "count":  count_int,
         }
-        price_key = "yes_price" if side == "yes" else "no_price"
-        order_payload[price_key] = bid_cents  # sell at this price or better
 
-        print(f"[sell] {ticker} {side} × {count_int} LIMIT @ {bid_cents}¢")
+        if order_type == "limit":
+            # LIMIT: locked in price, won't sell below
+            price_key = "yes_price" if side == "yes" else "no_price"
+            order_payload[price_key] = bid_cents
+            print(f"[sell] {ticker} {side} × {count_int} LIMIT @ {bid_cents}¢")
+        else:
+            # MARKET: no price constraint, executes immediately at best available
+            print(f"[sell] {ticker} {side} × {count_int} MARKET (best effort)")
         result = kalshi_post("/portfolio/orders", order_payload)
         order_status = result.get("order", {}).get("status", "")
 
         # "canceled" = limit order didn't fill (no buyers at that price).
-        # Return error and let frontend offer retry options (lower price, wait, etc).
+        # Check if we'd be profitable at market price before offering market order
         if order_status == "canceled":
             print(f"[sell] {ticker} LIMIT canceled — no buyers at {bid_cents}¢")
+
+            # Check profit at market (ask) price
+            buy_price = None
+            with _lock:
+                if ticker in tracked:
+                    buy_price = tracked[ticker].get("buy_price")
+
+            # Determine market (ask) price
+            if side == "yes":
+                market_price = mkt_data.get("yes_ask_dollars") or mkt_data.get("yes_bid_dollars") or 0
+            else:
+                market_price = mkt_data.get("no_ask_dollars") or mkt_data.get("no_bid_dollars") or 0
+
+            market_cents = round(float(market_price) * 100)
+            would_profit = False
+            if buy_price and market_cents > buy_price:
+                would_profit = True
+
             return jsonify({
                 "error": f"No buyers at {bid_cents}¢",
                 "reason": "limit_no_fill",
                 "tried_price": bid_cents,
-                "suggest_lower": max(1, bid_cents - 5),  # suggest ±5¢ lower as fallback
+                "suggest_lower": max(1, bid_cents - 5),
+                "market_price": market_cents,
+                "buy_price": buy_price,
+                "would_profit": would_profit,  # True = market order would be profitable
             }), 400
     except req.HTTPError as e:
         err_text = e.response.text[:500]

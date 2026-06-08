@@ -3150,22 +3150,37 @@ async function sellPos(ticker, side, count, safeId) {
     clearTimeout(timeout);
     const d = await r.json();
     if (!r.ok) {
-      // Handle limit order fill failures with retry options
-      if (d.reason === "limit_no_fill" && d.suggest_lower) {
-        const retryPrice = d.suggest_lower;
-        const msg = `No buyers at ${d.tried_price}¢\n\nOptions:\n✓ Retry at ${retryPrice}¢ (±5¢ lower)\n✗ Cancel and hold\n\nRetry at lower price?`;
-        if (confirm(msg)) {
-          // Retry with lower price by re-fetching market and using lower bid
-          console.log(`[sell] Retrying ${ticker} at lower price ${retryPrice}¢`);
-          // Note: Full retry logic would fetch market again and retry
-          // For now, just let the user know to try again after waiting
-          toast(`Try selling again in a few seconds when market updates`, "info");
-          _inFlightSells.delete(sellKey);
-          if (btn) { btn.disabled = false; btn.textContent = "Sell"; }
-          return;
+      // Handle limit order fill failures
+      if (d.reason === "limit_no_fill") {
+        const marketProfit = d.would_profit ? (d.market_price - d.buy_price) * count / 100 : null;
+        let msg = `No buyers at ${d.tried_price}¢\n\n`;
+
+        if (d.would_profit) {
+          // Market order would be profitable
+          msg += `Market price: ${d.market_price}¢ (+$${marketProfit.toFixed(2)} profit)\n\n`;
+          msg += `✓ Sell at market (guaranteed)\n✗ Keep waiting for limit fill\n\nSell at market?`;
+          if (confirm(msg)) {
+            console.log(`[sell] Market order profitable (${d.market_price}¢), executing`);
+            // Market order will be triggered by retryMarketSell
+            _inFlightSells.delete(sellKey);
+            if (btn) { btn.disabled = false; btn.textContent = "Sell"; }
+            toast("Retrying at market price…", "");
+            await new Promise(r => setTimeout(r, 200));
+            retryMarketSell(ticker, side, count);
+            return;
+          }
         } else {
-          throw new Error(d.error || "Sell canceled");
+          // Market order would NOT be profitable
+          const marketPrice = d.market_price;
+          const buyPrice = d.buy_price;
+          const wouldLose = Math.abs((marketPrice - buyPrice) * count / 100);
+          msg += `Market price: ${marketPrice}¢ (-$${wouldLose.toFixed(2)} loss)\n\n`;
+          msg += `⚠ Market order would LOSE money!\n\nKeep waiting for better buyers?`;
+          confirm(msg);
         }
+        _inFlightSells.delete(sellKey);
+        if (btn) { btn.disabled = false; btn.textContent = "Sell"; }
+        return;
       }
       throw new Error(d.error || "Sell failed");
     }
@@ -3274,10 +3289,45 @@ function closeOrderDialog() {
 
 async function retryMarketSell(ticker, side, count) {
   closeOrderDialog();
-  toast("Retrying market sell…", "");
-  // Re-trigger the sell (it will try market order again)
-  await new Promise(r => setTimeout(r, 500));
-  sellOne(ticker, side);
+  toast("Executing market sell…", "");
+  // Send MARKET order (no price constraint, best effort execution)
+  const sellKey = `${ticker}:${side}`;
+  _inFlightSells.add(sellKey);
+
+  const btn = document.querySelector(`[data-ticker="${ticker}"][data-side="${side}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = "Selling…"; }
+
+  try {
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 30000);
+    const r = await fetch("/api/sell", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ticker, side, count, order_type: "market"}),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timeout);
+    const d = await r.json();
+
+    if (!r.ok) {
+      toast(`Market order failed: ${d.error}`, "err");
+      return;
+    }
+
+    if (d.is_filled) {
+      toast(`✓ Market sold ${count} ${side.toUpperCase()}`, "ok");
+      const soldProfit = (d.buy_price && d.executed_price_cents)
+        ? count * (d.executed_price_cents - d.buy_price) / 100 : 0;
+      announceSell(count, soldProfit, d.executed_price_cents, null, null, ticker);
+    } else {
+      toast("Market order pending", "info");
+    }
+  } catch(e) {
+    toast(`Market sell error: ${e.message}`, "err");
+  } finally {
+    _inFlightSells.delete(sellKey);
+    if (btn) { btn.disabled = false; btn.textContent = "Sell"; }
+  }
 }
 
 async function placeLimitOrder(ticker, side, count, limitPriceCents) {
