@@ -5487,7 +5487,7 @@ async function loadSummary() {
       card("Buys", t.buys || 0) +
       card("Sells", t.sells || 0) +
       card("Realized P&L", profitStr, profitCls) +
-      card("Spent (buys)", `$${(t.buy_spent||0).toFixed(2)}`) +
+      card("Total Cost", `$${(t.buy_spent||0).toFixed(2)}`) +
       card("Proceeds (sells)", `$${(t.sell_proceeds||0).toFixed(2)}`);
 
     // Per-trade list with pagination
