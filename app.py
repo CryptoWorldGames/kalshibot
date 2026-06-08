@@ -1856,6 +1856,16 @@ def portfolio():
             total_traded = _d2c(p.get("total_traded_dollars")) if "total_traded_dollars" in p else p.get("total_traded", 0)
             realized_pnl = _d2c(p.get("realized_pnl_dollars")) if "realized_pnl_dollars" in p else p.get("realized_pnl", 0)
 
+            # Calculate buy_price first (needed for fallback price logic below)
+            bot_info = tracked.get(ticker)
+            derived_buy_price = None
+            if not bot_info:
+                ttd = float(p.get("total_traded_dollars") or 0)
+                if ttd > 0 and abs(qty) > 0.001:
+                    raw = round(ttd / abs(qty) * 100)
+                    derived_buy_price = raw if raw <= 99 else None
+            buy_price = (bot_info["buy_price"] if bot_info else None) or derived_buy_price
+
             market_title = ticker
             event_ticker = ""
             category     = ""
@@ -1910,20 +1920,6 @@ def portfolio():
 
             if bid:
                 portfolio_value += abs(qty) * bid / 100
-
-            bot_info = tracked.get(ticker)
-
-            # Derive average buy price from total_traded_dollars for non-bot positions
-            # Cap at 99¢ — if derived price > 99 it means total_traded includes
-            # multiple round-trips and isn't a reliable cost basis (show — instead)
-            derived_buy_price = None
-            if not bot_info:
-                ttd = float(p.get("total_traded_dollars") or 0)
-                if ttd > 0 and abs(qty) > 0.001:
-                    raw = round(ttd / abs(qty) * 100)
-                    derived_buy_price = raw if raw <= 99 else None
-
-            buy_price = (bot_info["buy_price"] if bot_info else None) or derived_buy_price
 
             positions.append({
                 "ticker":         ticker,
