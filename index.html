@@ -2360,6 +2360,13 @@ function setTime(val, label) {
   if (tlEl) tlEl.style.display = c ? "inline" : "none";
   if (c && tcEl) tcEl.oninput = () => { selTime = parseInt(tcEl.value) || 15; saveSettings(); };
   saveSettings();
+
+  // If we're on the Summary tab, also update _summaryMins and reload
+  if (document.getElementById("summaryCards")) {
+    _summaryMins = selTime;
+    localStorage.setItem("summaryMins", _summaryMins);
+    loadSummary();  // Reload summary with new time window
+  }
 }
 
 function setCustomMinutes() {
