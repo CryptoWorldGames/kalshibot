@@ -4323,8 +4323,14 @@ async function updateAndRestart() {
     const r = await fetch(mgrUrl, { method: "POST" });
     const d = await r.json().catch(() => ({}));
     const gitMsg = (d.git || d.git_error || "").split("\n").slice(-4).join("\n");
-    alert((d.git_ok === false ? "⚠️ git pull had issues:\n\n" : "✅ Updated & restarting:\n\n") +
-          (gitMsg || "(no git output)") + "\n\nReloading in 4s…");
+    const msg = (d.git_ok === false ? "⚠️ git pull had issues" : "✅ Updated & restarting");
+
+    // Show non-blocking toast notification (auto-dismisses)
+    const toast = document.createElement("div");
+    toast.style.cssText = "position:fixed;top:20px;right:20px;background:#0c1612;border:2px solid #1f6045;color:var(--green);padding:16px 20px;border-radius:8px;font-size:13px;font-weight:600;z-index:9999;max-width:300px;white-space:pre-wrap";
+    toast.textContent = msg + "\n" + (gitMsg || "(no git output)") + "\n\nReloading in 4s…";
+    document.body.appendChild(toast);
+
     setTimeout(() => location.reload(true), 4000);
   } catch(e) {
     alert("Couldn't reach the manager on port " + mgrPort + ".\n\n" +
