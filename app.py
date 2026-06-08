@@ -870,15 +870,15 @@ def _is_economics_cached(market: dict) -> bool:
 # Background position monitor — auto-sell on profit target
 # ---------------------------------------------------------------------------
 
-def _dollars_to_cents(val) -> float | None:
-    """Convert a dollar string like '0.8500' to cents like 85.0"""
+def _dollars_to_cents(val) -> int | None:
+    """Convert a dollar string like '0.8500' to cents like 85"""
     try:
-        return round(float(val) * 100, 2)
+        return int(round(float(val) * 100))
     except (TypeError, ValueError):
         return None
 
 
-def _market_price(m: dict, side: str) -> float | None:
+def _market_price(m: dict, side: str) -> int | None:
     """Get ask price in cents for a side ('yes' or 'no'), trying all known field names."""
     # Try dollar string fields first (e.g. yes_ask_dollars = "0.8500" -> 85)
     v = _dollars_to_cents(m.get(f"{side}_ask_dollars"))
@@ -888,7 +888,7 @@ def _market_price(m: dict, side: str) -> float | None:
     v = m.get(f"{side}_ask")
     if v is not None:
         try:
-            return round(float(v), 2)
+            return int(round(float(v)))
         except (TypeError, ValueError):
             pass
     # Some API versions use 'price' on the yes side only
@@ -897,13 +897,13 @@ def _market_price(m: dict, side: str) -> float | None:
         if v is not None:
             try:
                 f = float(v)
-                return round(f * 100 if f <= 1 else f, 2)
+                return int(round(f * 100 if f <= 1 else f))
             except (TypeError, ValueError):
                 pass
     return None
 
 
-def _market_bid(m: dict, side: str) -> float | None:
+def _market_bid(m: dict, side: str) -> int | None:
     """Get bid price in cents for a side, trying all known field names."""
     v = _dollars_to_cents(m.get(f"{side}_bid_dollars"))
     if v is not None:
@@ -911,13 +911,13 @@ def _market_bid(m: dict, side: str) -> float | None:
     v = m.get(f"{side}_bid")
     if v is not None:
         try:
-            return round(float(v), 2)
+            return int(round(float(v)))
         except (TypeError, ValueError):
             pass
     return None
 
 
-def _mark_price_cents(m: dict, side: str) -> float | None:
+def _mark_price_cents(m: dict, side: str) -> int | None:
     """Best 'current' price (cents) for a held contract on `side`.
 
     Prefer the live bid (the real price you'd get selling). When the book has no
@@ -940,7 +940,7 @@ def _mark_price_cents(m: dict, side: str) -> float | None:
                 yc *= 100
             if yc >= 1:
                 yc = min(99.0, yc)
-                return round(yc if side == "yes" else 100 - yc, 2)
+                return int(round(yc if side == "yes" else 100 - yc))
     except (TypeError, ValueError):
         pass
 
@@ -3045,17 +3045,15 @@ def sell():
             else:
                 market_price = mkt_data.get("no_ask_dollars") or mkt_data.get("no_bid_dollars") or 0
 
-            market_cents = round(float(market_price) * 100)
+            market_cents = int(round(float(market_price) * 100))  # Whole cents only
 
-            # Calculate profit/loss at market price (supports decimal cents)
+            # Calculate profit/loss at market price (whole cent prices)
             # Allow market order if loss is <= 10% (i.e., profit_pct >= -10.0)
             acceptable_market = False
             profit_pct = 0
             if buy_price and market_cents > 0:
                 profit_pct = ((market_cents - buy_price) / buy_price) * 100
                 acceptable_market = profit_pct >= -10.0  # Don't lose more than 10%
-
-            market_cents = round(market_cents, 2)  # Allow decimals like 99.9¢
 
             return jsonify({
                 "error": f"No buyers at {bid_cents}¢",
