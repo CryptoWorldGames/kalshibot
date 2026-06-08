@@ -750,7 +750,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
         <button class="pill" onclick="setTime(525600,'Show all')">Show all</button>
       </div>
       <div style="margin-top:10px;display:flex;gap:6px;align-items:center">
-        <input type="number" id="customMinutes" placeholder="0.25–5" min="0.25" max="5" step="0.25" style="flex:0 0 80px;padding:6px;font-size:12px;background:#1a1f26;color:#fff;border:1px solid var(--border);border-radius:4px;text-align:center">
+        <input type="number" id="customMinutes" placeholder="0.25–5" min="0.25" max="5" step="0.25" style="flex:0 0 80px;padding:6px;font-size:12px;background:#1a1f26;color:#fff;border:1px solid var(--border);border-radius:4px;text-align:center;font-weight:600" oninput="document.getElementById('customMinutes').style.background='#1a1f26';document.getElementById('customMinutes').style.color='#fff'">
         <span style="color:#888;font-size:12px">min</span>
         <button class="pill" onclick="setCustomMinutes()" style="padding:6px 14px;font-size:12px;background:var(--green);color:#000;font-weight:600">Set</button>
         <span id="customMinutesStatus" style="color:var(--green);font-size:12px;font-weight:600;min-width:60px"></span>
@@ -2369,18 +2369,23 @@ function setCustomMinutes() {
   if (!value || value < 0.25 || value > 5) {
     if (statusEl) statusEl.textContent = "Invalid";
     statusEl.style.color = "var(--red)";
+    customInput.style.background = "#1a1f26";
+    customInput.style.color = "#fff";
     return;
   }
   selTime = value;
   activatePills("timeGroup", `${value} min`);
   saveSettings();
-  // Show confirmation
+  // Show visual feedback - turn input green
+  customInput.style.background = "var(--green)";
+  customInput.style.color = "#000";
+  customInput.style.fontWeight = "600";
   if (statusEl) {
     statusEl.textContent = "✓ Saved";
     statusEl.style.color = "var(--green)";
-    setTimeout(() => { statusEl.textContent = ""; }, 2000);
+    setTimeout(() => { statusEl.textContent = ""; }, 1500);
   }
-  customInput.value = "";  // Clear input after setting
+  // Keep the value in the box (don't clear it)
 }
 
 function activatePills(groupId, label) {
