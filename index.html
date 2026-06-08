@@ -2410,7 +2410,10 @@ function setStrategy(mode) {
   saveSettings();
   // pushStrategy() is async, fire-and-forget (don't show toast on radio click)
   pushStrategy().catch(e => {
-    console.error("setStrategy: pushStrategy failed:", e);
+    // Suppress AbortError (expected when navigating away)
+    if (e.name !== "AbortError") {
+      console.error("setStrategy: pushStrategy failed:", e);
+    }
   });
 }
 
@@ -2520,7 +2523,10 @@ async function pushStrategy() {
     console.log(`[pushStrategy] Success! Server saved:`, respData.strategy);
     return respData;
   } catch(e) {
-    console.error(`[pushStrategy] FAILED:`, e.message);
+    // AbortError is expected (tab switch, navigation, timeout) — suppress it
+    if (e.name !== "AbortError") {
+      console.error(`[pushStrategy] FAILED:`, e.message);
+    }
     throw e;  // Re-throw so caller can handle
   }
 }
