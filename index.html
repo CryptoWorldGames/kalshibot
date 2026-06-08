@@ -2882,7 +2882,9 @@ async function startAutoMode() {
       // "Already running" is NOT an error — the backend bot is on, so silently
       // adopt that state instead of popping an ugly alert. Only real failures toast.
       const msg = (d.error || "").toLowerCase();
-      if (!(r.status === 409 || msg.includes("already"))) {
+      if (r.status === 409 || msg.includes("already")) {
+        console.log("[bot] already running (409) — silently accepted");
+      } else {
         toast("Bot start failed: " + (d.error || r.status), "err");
         return;
       }
