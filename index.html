@@ -3166,13 +3166,14 @@ async function sellPos(ticker, side, count, safeId) {
       if (d.reason === "limit_no_fill") {
         let msg = `No buyers at ${d.tried_price}¢\n\n`;
 
-        if (d.would_profit_5pct) {
-          // Market order would be 5%+ profitable — offer it after 30s wait
+        if (d.acceptable_market) {
+          // Market order won't exceed 10% loss — offer it
           const marketProfit = (d.market_price - d.buy_price) * count / 100;
-          msg += `Market price: ${d.market_price}¢ (${d.profit_pct}% profit = $${marketProfit.toFixed(2)})\n\n`;
-          msg += `✓ Sell at market (guaranteed, 5%+ profit)\n✗ Keep waiting (up to 30s more)\n\nSell at market?`;
+          const profitOrLoss = d.profit_pct >= 0 ? `+$${marketProfit.toFixed(2)} profit` : `-$${Math.abs(marketProfit).toFixed(2)} loss`;
+          msg += `Market price: ${d.market_price}¢ (${d.profit_pct}% = ${profitOrLoss})\n\n`;
+          msg += `✓ Sell at market (within 10% loss threshold)\n✗ Keep waiting for limit\n\nSell at market?`;
           if (confirm(msg)) {
-            console.log(`[sell] Market order 5%+ profitable (${d.profit_pct}%), executing`);
+            console.log(`[sell] Market order acceptable (${d.profit_pct}% loss threshold), executing`);
             _inFlightSells.delete(sellKey);
             if (btn) { btn.disabled = false; btn.textContent = "Sell"; }
             toast("Executing market order…", "");
@@ -3180,15 +3181,14 @@ async function sellPos(ticker, side, count, safeId) {
             retryMarketSell(ticker, side, count);
             return;
           } else {
-            // User wants to wait 30s more for limit to fill
-            msg = `Waiting up to 30 seconds for limit fill…\nIf no buyers, market order will be offered again.`;
-            toast(msg, "info");
+            // User wants to wait for limit to fill
+            toast(`Waiting for limit fill. Market would be ${d.profit_pct}% (within threshold).`, "info");
           }
         } else {
-          // Market order would NOT be 5%+ profitable
+          // Market order would exceed 10% loss — don't offer it
           const wouldLose = Math.abs((d.market_price - d.buy_price) * count / 100);
-          msg += `Market price: ${d.market_price}¢ (${d.profit_pct}% = -$${wouldLose.toFixed(2)} or low profit)\n\n`;
-          msg += `⚠ Market would only give ${d.profit_pct}% profit (need 5%+ minimum)\n\nKeeping position open. Check back in 30 seconds.`;
+          msg += `Market price: ${d.market_price}¢ (${d.profit_pct}% loss)\n\n`;
+          msg += `⚠ Market loss exceeds 10% threshold\n\nKeeping position open. Wait for buyers at limit.`;
           toast(msg, "info");
         }
         _inFlightSells.delete(sellKey);

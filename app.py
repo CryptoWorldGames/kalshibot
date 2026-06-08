@@ -3046,12 +3046,13 @@ def sell():
 
             market_cents = round(float(market_price) * 100)
 
-            # Calculate profit at market price (supports decimal cents)
-            would_profit_5pct = False
+            # Calculate profit/loss at market price (supports decimal cents)
+            # Allow market order if loss is <= 10% (i.e., profit_pct >= -10.0)
+            acceptable_market = False
             profit_pct = 0
             if buy_price and market_cents > 0:
                 profit_pct = ((market_cents - buy_price) / buy_price) * 100
-                would_profit_5pct = profit_pct >= 5.0
+                acceptable_market = profit_pct >= -10.0  # Don't lose more than 10%
 
             market_cents = round(market_cents, 2)  # Allow decimals like 99.9¢
 
@@ -3062,7 +3063,7 @@ def sell():
                 "suggest_lower": max(1, bid_cents - 5),
                 "market_price": market_cents,
                 "buy_price": buy_price,
-                "would_profit_5pct": would_profit_5pct,  # True only if 5%+ profit at market
+                "acceptable_market": acceptable_market,  # True if loss <= 10% at market
                 "profit_pct": round(profit_pct, 1),
             }), 400
     except req.HTTPError as e:
