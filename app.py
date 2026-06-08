@@ -3044,9 +3044,13 @@ def sell():
                 market_price = mkt_data.get("no_ask_dollars") or mkt_data.get("no_bid_dollars") or 0
 
             market_cents = round(float(market_price) * 100)
-            would_profit = False
-            if buy_price and market_cents > buy_price:
-                would_profit = True
+
+            # Calculate profit at market price
+            would_profit_5pct = False
+            profit_pct = 0
+            if buy_price and market_cents > 0:
+                profit_pct = ((market_cents - buy_price) / buy_price) * 100
+                would_profit_5pct = profit_pct >= 5.0
 
             return jsonify({
                 "error": f"No buyers at {bid_cents}¢",
@@ -3055,7 +3059,8 @@ def sell():
                 "suggest_lower": max(1, bid_cents - 5),
                 "market_price": market_cents,
                 "buy_price": buy_price,
-                "would_profit": would_profit,  # True = market order would be profitable
+                "would_profit_5pct": would_profit_5pct,  # True only if 5%+ profit at market
+                "profit_pct": round(profit_pct, 1),
             }), 400
     except req.HTTPError as e:
         err_text = e.response.text[:500]
