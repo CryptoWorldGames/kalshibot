@@ -3380,7 +3380,7 @@ def api_summary():
     if sells > 0 or buys > 0:
         _log(f"[api_summary] {buys} buys, {sells} sells, {len(trades)} trades in response")
 
-    return jsonify({
+    resp = jsonify({
         "minutes": minutes,
         "since": since,
         "now": time.time(),
@@ -3394,6 +3394,11 @@ def api_summary():
         },
         "trades": trades[:500],  # cap payload
     })
+    # Ensure fresh data on each request (no caching)
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 
 @app.route("/api/enrich-positions", methods=["GET"])
