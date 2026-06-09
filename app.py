@@ -79,9 +79,16 @@ def _record_activity(kind: str, **fields):
         with _activity_lock:
             with open(ACTIVITY_LOG, "a", encoding="utf-8") as f:
                 f.write(json.dumps(entry, default=str) + "\n")
+        if kind in ("buy", "sell"):
+            _log(f"[activity] ✓✓✓ RECORDED {kind.upper()}: {fields.get('ticker')}")
     except Exception as e:
-        # Never let logging break trading — just note it once.
-        print(f"[activity] write failed: {e}", flush=True)
+        # CRITICAL: Log to both stdout and _log so we see failures
+        msg = f"[activity] ✗✗✗ FAILED {kind.upper()}: {e}"
+        print(msg, flush=True)
+        try:
+            _log(msg)
+        except:
+            print(f"[activity] Even _log failed! {e}", flush=True)
 
 def _read_activity(since_ts: float):
     """Return all activity events with ts >= since_ts, oldest→newest."""
