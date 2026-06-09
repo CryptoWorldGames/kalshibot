@@ -486,6 +486,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   </div>
   <button id="snoozeBtn" onclick="toggleVoiceSnooze()" style="background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;padding:6px 12px;margin-left:auto;transition:all .2s;white-space:nowrap" title="Mute the voice announcements for the snooze period (set the duration in Settings)">🔔 Snooze</button>
   <button id="updateBtn" onclick="updateAndRestart()" style="transition:all .2s;white-space:nowrap;cursor:pointer" title="Pull the latest code from GitHub and restart the bot — deploy updates from any device, no desktop access needed">⟳ Update</button>
+  <button id="restartPolyBtn" onclick="restartPolyBot()" style="transition:all .2s;white-space:nowrap;cursor:pointer;background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:13px;font-weight:700;padding:6px 12px;margin-left:6px" title="Restart PolyBot via git version trigger">🔄 PolyBot</button>
   <button onclick="document.getElementById('settingsModal').classList.toggle('open')" style="background:transparent;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:8px 12px;margin-left:6px;transition:color .2s" title="Settings">⚙️</button>
 </nav>
 
@@ -4100,6 +4101,24 @@ async function updateAndRestart() {
           mgrPort + " is open in the firewall.\n\nError: " + e.message);
     if (btn) { btn.disabled = false; btn.textContent = "⟳ Update"; }
   }
+}
+
+async function restartPolyBot() {
+  if (!confirm("Trigger PolyBot auto-restart via git version update?\n\nPolyBot will restart when it detects the VERSION.txt change.")) return;
+  const btn = document.getElementById("restartPolyBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "🔄 Restarting…"; }
+  try {
+    const r = await fetch(`${location.protocol}//${location.hostname}:${location.port || 5003}/api/polybot/restart`, { method: "POST" });
+    const d = await r.json().catch(() => ({}));
+    if (d.ok) {
+      alert("✅ PolyBot restart triggered!\n\n" + (d.message || "Check PolyBot logs for restart status."));
+    } else {
+      alert("⚠️ Failed to trigger restart:\n\n" + (d.error || "Unknown error"));
+    }
+  } catch(e) {
+    alert("Couldn't reach the API:\n\n" + e.message);
+  }
+  if (btn) { btn.disabled = false; btn.textContent = "🔄 PolyBot"; }
 }
 
 let _voiceSnoozeUntil = 0;     // epoch ms; voice is muted while Date.now() < this
