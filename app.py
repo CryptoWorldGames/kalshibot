@@ -332,8 +332,10 @@ def _save_tracked():
     try:
         with _lock:
             TRACKED_FILE.write_text(json.dumps(tracked, default=str), encoding="utf-8")
+            _log(f"[tracked] Saved {len(tracked)} positions to disk")
     except Exception as e:
-        print(f"[tracked] save error: {e}")
+        _log(f"[tracked] SAVE FAILED: {e}")
+        print(f"[tracked] SAVE FAILED: {e}", flush=True)
 
 # { ticker: { side, count, buy_price, title, strategy, target_pct, bought_at, status } }
 tracked: dict = {}
@@ -3471,6 +3473,16 @@ def api_summary():
             "realized_profit": round(realized_profit, 2) if have_profit else None,
         },
         "trades": trades[:500],  # cap payload
+    })
+
+
+@app.route("/api/diagnostic/tracked")
+def api_diagnostic_tracked():
+    """Return current in-memory tracked positions (for debugging)."""
+    return jsonify({
+        "tracked_count": len(tracked),
+        "tracked_positions": list(tracked.keys())[:50],  # cap at 50
+        "sample_position": next(iter(tracked.values())) if tracked else None,
     })
 
 
