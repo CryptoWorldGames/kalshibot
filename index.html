@@ -4345,34 +4345,25 @@ async function updateAndRestart() {
 async function startPolyBot() {
   const btn = document.getElementById("startPolyBtn");
   if (btn) { btn.disabled = true; btn.textContent = "⏳ Starting…"; }
-  try {
-    // Try to reach PolyBot first - if it's already running, just go to it
-    const r = await fetch(`${location.protocol}//${location.hostname}:5005/api/bot/status`, {
-      method: "GET",
-      timeout: 2000
-    }).catch(() => null);
 
-    if (r && r.ok) {
-      // PolyBot is running - go to it
-      window.location.href = `${location.protocol}//${location.hostname}:5005`;
-      return;
-    }
-  } catch(e) {}
-
-  // PolyBot not responding - try to start it
+  // Try to start PolyBot via the API
   try {
-    const r = await fetch(`${location.protocol}//${location.hostname}:5003/api/start/polybot`, { method: "POST" });
+    const r = await fetch(`${location.protocol}//${location.hostname}:5003/api/start/polybot`, {
+      method: "POST",
+      signal: AbortSignal.timeout(5000)
+    });
     const d = await r.json().catch(() => ({}));
     if (d.ok) {
-      alert("✅ PolyBot started!\n\n" + d.message + "\n\nOpening dashboard in 2 seconds…");
-      setTimeout(() => window.location.href = `${location.protocol}//${location.hostname}:5005`, 2000);
+      alert("✅ PolyBot started!\n\n" + d.message + "\n\nOpening dashboard in 3 seconds…");
+      setTimeout(() => window.location.href = `${location.protocol}//${location.hostname}:5005`, 3000);
     } else {
       alert("⚠️ Failed to start PolyBot:\n\n" + (d.error || "Unknown error"));
+      if (btn) { btn.disabled = false; btn.textContent = "▶️ PolyBot"; }
     }
   } catch(e) {
-    alert("Couldn't reach KalshiBot API to start PolyBot:\n\n" + e.message);
+    alert("Couldn't start PolyBot:\n\n" + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = "▶️ PolyBot"; }
   }
-  if (btn) { btn.disabled = false; btn.textContent = "▶️ PolyBot"; }
 }
 
 let _voiceSnoozeUntil = 0;     // epoch ms; voice is muted while Date.now() < this
