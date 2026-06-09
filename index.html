@@ -4344,9 +4344,9 @@ async function updateAndRestart() {
 
 function startPolyBot() {
   const btn = document.getElementById("startPolyBtn");
-  if (btn) btn.textContent = "▶️ Opening PolyBot…";
+  if (btn) btn.textContent = "▶️ Starting PolyBot (5s)…";
   fetch(`${location.protocol}//${location.hostname}:5003/api/start/polybot`, { method: "POST" }).catch(() => {});
-  setTimeout(() => window.location.href = `${location.protocol}//${location.hostname}:5005`, 1000);
+  setTimeout(() => window.location.href = `${location.protocol}//${location.hostname}:5005`, 5000);
 }
 
 let _voiceSnoozeUntil = 0;     // epoch ms; voice is muted while Date.now() < this
