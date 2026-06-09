@@ -4256,8 +4256,8 @@ def start_polybot_cmd():
         # Windows: start in new cmd window
         if sys.platform == "win32":
             subprocess.Popen(
-                f'start cmd /k "cd /d {polybot_dir} && python app.py"',
-                shell=True,
+                [sys.executable, "app.py"],
+                cwd=str(polybot_dir),
                 creationflags=subprocess.CREATE_NEW_CONSOLE
             )
             _log("[api] Started PolyBot via cmd")
