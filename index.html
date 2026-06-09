@@ -4342,28 +4342,11 @@ async function updateAndRestart() {
   }
 }
 
-async function startPolyBot() {
+function startPolyBot() {
   const btn = document.getElementById("startPolyBtn");
-  if (btn) { btn.disabled = true; btn.textContent = "⏳ Starting…"; }
-
-  // Try to start PolyBot via the API
-  try {
-    const r = await fetch(`${location.protocol}//${location.hostname}:5003/api/start/polybot`, {
-      method: "POST",
-      signal: AbortSignal.timeout(5000)
-    });
-    const d = await r.json().catch(() => ({}));
-    if (d.ok) {
-      toast("✅ PolyBot starting...", "ok");
-      setTimeout(() => window.location.href = `${location.protocol}//${location.hostname}:5005`, 2000);
-    } else {
-      toast("⚠️ Failed: " + (d.error || "Unknown error"), "error");
-      if (btn) { btn.disabled = false; btn.textContent = "▶️ PolyBot"; }
-    }
-  } catch(e) {
-    toast("⚠️ Error: " + e.message, "error");
-    if (btn) { btn.disabled = false; btn.textContent = "▶️ PolyBot"; }
-  }
+  if (btn) btn.textContent = "▶️ Opening PolyBot…";
+  fetch(`${location.protocol}//${location.hostname}:5003/api/start/polybot`, { method: "POST" }).catch(() => {});
+  setTimeout(() => window.location.href = `${location.protocol}//${location.hostname}:5005`, 1000);
 }
 
 let _voiceSnoozeUntil = 0;     // epoch ms; voice is muted while Date.now() < this
