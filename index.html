@@ -4083,7 +4083,7 @@ function chaChing() {
 // Remote deploy: tell the manager (Flask port + 100) to `git pull` + restart Flask.
 // Lets you ship new code from phone/laptop with zero desktop access.
 async function updateAndRestart() {
-  if (!confirm("Pull the latest code from GitHub and restart the bot?\n\nThe bot will be down for a few seconds, then come back on the new code.")) return;
+  if (!confirm("Update and restart KalshiBot + PolyBot?\n\nBoth bots will be down for a few seconds, then restart on the new code.")) return;
   const btn = document.getElementById("updateBtn");
   const mgrPort = (parseInt(location.port || "5003") + 100);
   const mgrUrl = `${location.protocol}//${location.hostname}:${mgrPort}/api/manager/update`;
@@ -4092,8 +4092,16 @@ async function updateAndRestart() {
     const r = await fetch(mgrUrl, { method: "POST" });
     const d = await r.json().catch(() => ({}));
     const gitMsg = (d.git || d.git_error || "").split("\n").slice(-4).join("\n");
-    alert((d.git_ok === false ? "⚠️ git pull had issues:\n\n" : "✅ Updated & restarting:\n\n") +
-          (gitMsg || "(no git output)") + "\n\nReloading in 4s…");
+    alert((d.git_ok === false ? "⚠️ git pull had issues:\n\n" : "✅ Updated & restarting KalshiBot + PolyBot:\n\n") +
+          (gitMsg || "(no git output)") + "\n\nAlso triggering PolyBot restart...");
+
+    // Trigger PolyBot restart via git VERSION.txt
+    try {
+      await fetch(`${location.protocol}//${location.hostname}:${location.port || 5003}/api/restart?bot=polybot`, { method: "POST" });
+    } catch(e) {
+      console.log("PolyBot restart request sent (may or may not have succeeded)");
+    }
+
     setTimeout(() => location.reload(true), 4000);
   } catch(e) {
     alert("Couldn't reach the manager on port " + mgrPort + ".\n\n" +
