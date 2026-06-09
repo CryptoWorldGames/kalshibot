@@ -1897,6 +1897,7 @@ async function loadPositionsFast() {
       if (!p.category    && q.category)    p.category    = q.category;
       if (!p.close_time  && q.close_time)  p.close_time  = q.close_time;
       if (!p.event_ticker && q.event_ticker) p.event_ticker = q.event_ticker;
+      if (!p.buy_price && q.buy_price != null) p.buy_price = q.buy_price;  // Preserve cost basis for P&L calc
     });
     // Anti-blank guard: don't wipe a good list if a starved fetch returns empty.
     if (!((d.positions_ok === false) && np.length === 0 && (window._lastApiPositions || []).length > 0)) {
@@ -3959,8 +3960,8 @@ function renderPositionsTable(positions) {
       const pnlLine  = pnlDol != null
         ? (inProfit ? `+$${pnlDol.toFixed(2)} profit` : inLoss ? `-$${Math.abs(pnlDol).toFixed(2)} loss` : `even`)
         : "";
-      sellBtnHtml = `<button id="${sid}" onclick="sellPos('${safeT}','${side}',${abs},'${sid}')"
-        style="background:${bg};color:${fg};border:none;border-radius:7px;padding:8px 14px;cursor:pointer;font-weight:700;font-size:14px;white-space:nowrap;line-height:1.4;text-align:center">
+      sellBtnHtml = `<button id="${sid}" class="sell-pos-btn" data-ticker="${safeT}" data-side="${side}" data-qty="${abs}" onclick="sellPos('${safeT}','${side}',${abs},'${sid}')"
+        style="background:${bg};color:${fg};border:none;border-radius:7px;padding:8px 14px;cursor:pointer;font-weight:700;font-size:14px;white-space:nowrap;line-height:1.4;text-align:center;transition:all 0.3s">
         Sell This ${sellVal}${pnlLine ? `<br><span style="font-size:11px;opacity:.85">(${pnlLine})</span>` : ""}
       </button>`;
     } else {
