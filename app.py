@@ -1023,21 +1023,28 @@ def _monitor():
         with _lock:
             tickers = list(tracked.keys())
 
+        # Debug: log how many positions we're checking
+        if tickers:
+            _log(f"[monitor] Checking {len(tickers)} tracked positions for sell conditions")
+
         for ticker in tickers:
             with _lock:
                 pos = tracked.get(ticker)
                 if not pos or pos.get("status") not in ("open", "selling"):
+                    _log(f"[monitor] {ticker}: skipped (status={pos.get('status') if pos else 'None'})")
                     continue
                 # Already past its close time — stop probing it every cycle. This was
                 # the source of endless "holding to resolution" log spam plus a wasted
                 # /markets call per cycle for every expired position (which, with a big
                 # tracked file, monopolised the rate-limited API and starved scan/buy).
                 if pos.get("expired"):
+                    _log(f"[monitor] {ticker}: skipped (expired)")
                     continue
                 # Skip only if no profit target exists at all (per-position or global)
                 has_pct_target = pos.get("strategy") == "profit" or sell_strategy.get("mode") == "profit"
                 has_dol_target = pos.get("target_dollars") is not None or sell_strategy.get("target_dollars") is not None
                 if not has_pct_target and not has_dol_target:
+                    _log(f"[monitor] {ticker}: skipped (no sell targets: strategy={pos.get('strategy')}, targets={has_pct_target}/{has_dol_target})")
                     continue
 
             try:
@@ -3478,11 +3485,28 @@ def api_summary():
 
 @app.route("/api/diagnostic/tracked")
 def api_diagnostic_tracked():
-    """Return current in-memory tracked positions (for debugging)."""
+    """Return current in-memory tracked positions vs saved on disk (for debugging)."""
+    # Compare in-memory vs saved on disk
+    saved_positions = {}
+    try:
+        if TRACKED_FILE.exists():
+            saved_positions = json.loads(TRACKED_FILE.read_text(encoding="utf-8"))
+    except Exception as e:
+        pass
+
+    in_memory_open = [t for t, p in tracked.items() if p.get("status") == "open"]
+    saved_open = [t for t, p in saved_positions.items() if p.get("status") == "open"]
+    mismatch = list(set(in_memory_open) - set(saved_open))
+
     return jsonify({
-        "tracked_count": len(tracked),
-        "tracked_positions": list(tracked.keys())[:50],  # cap at 50
-        "sample_position": next(iter(tracked.values())) if tracked else None,
+        "in_memory_total": len(tracked),
+        "in_memory_open_count": len(in_memory_open),
+        "in_memory_open_sample": in_memory_open[:10],
+        "saved_total": len(saved_positions),
+        "saved_open_count": len(saved_open),
+        "NOT_SAVED_count": len(mismatch),
+        "NOT_SAVED_tickers": mismatch[:10],
+        "sample_inmemory": next(((t, p) for t, p in tracked.items() if p.get("status") == "open"), None),
     })
 
 
