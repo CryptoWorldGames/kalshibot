@@ -3510,6 +3510,37 @@ def api_diagnostic_tracked():
     })
 
 
+@app.route("/api/diagnostic/activity")
+def api_diagnostic_activity():
+    """Return activity log statistics (buys, sells, scans)."""
+    # Read all activity from log
+    events = _read_activity(0)  # all events since epoch
+
+    buys = [e for e in events if e.get("kind") == "buy"]
+    sells = [e for e in events if e.get("kind") == "sell"]
+    scans = [e for e in events if e.get("kind") == "scan"]
+
+    # Count by time window
+    now = time.time()
+    last_hour = [e for e in events if e.get("ts", 0) >= now - 3600]
+    last_day = [e for e in events if e.get("ts", 0) >= now - 86400]
+
+    return jsonify({
+        "total_buys": len(buys),
+        "total_sells": len(sells),
+        "total_scans": len(scans),
+        "buys_last_hour": len([e for e in buys if e.get("ts", 0) >= now - 3600]),
+        "sells_last_hour": len([e for e in sells if e.get("ts", 0) >= now - 3600]),
+        "buys_last_24h": len([e for e in buys if e.get("ts", 0) >= now - 86400]),
+        "sells_last_24h": len([e for e in sells if e.get("ts", 0) >= now - 86400]),
+        "scans_last_24h": len([e for e in scans if e.get("ts", 0) >= now - 86400]),
+        "activity_log_file": str(ACTIVITY_LOG),
+        "activity_log_exists": ACTIVITY_LOG.exists(),
+        "sample_buy": buys[-1] if buys else None,
+        "sample_sell": sells[-1] if sells else None,
+    })
+
+
 @app.route("/api/enrich-positions", methods=["GET"])
 def enrich_positions():
     """Fetch market data for specific position tickers (called after initial fast load).
