@@ -4133,6 +4133,31 @@ def bot_stop():
     return jsonify({"ok": True, "status": "stopped"})
 
 
+@app.route("/api/polybot/restart", methods=["POST"])
+def restart_polybot():
+    """Restart the PolyBot manager (starts PolyBot if it's down)."""
+    import subprocess
+    try:
+        # Change to PolyBot directory and start the manager
+        polybot_dir = Path(HERE.parent) / "polybot"
+        if not polybot_dir.exists():
+            return jsonify({"error": "PolyBot directory not found", "path": str(polybot_dir)}), 404
+
+        # Start PolyBot manager in background
+        subprocess.Popen(
+            ["python", "KalshiBot_manager.py"],
+            cwd=str(polybot_dir),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0
+        )
+        _log("[api] PolyBot restart triggered")
+        return jsonify({"ok": True, "message": "PolyBot manager started"}), 200
+    except Exception as e:
+        _log(f"[api] PolyBot restart failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/apilog", methods=["GET"])
 def api_log():
     """Recent OUTBOUND Kalshi API calls + a 60s summary, for the API Log tab so you
