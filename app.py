@@ -67,6 +67,8 @@ def _record_activity(kind: str, **fields):
         with _activity_lock:
             with open(ACTIVITY_LOG, "a", encoding="utf-8") as f:
                 f.write(json.dumps(entry, default=str) + "\n")
+        if kind in ("buy", "sell"):
+            _log(f"[activity] Recorded {kind}: {fields.get('ticker')} {fields.get('side')}")
     except Exception as e:
         # Never let logging break trading — just note it once.
         print(f"[activity] write failed: {e}", flush=True)
@@ -3373,6 +3375,10 @@ def api_summary():
 
     # newest first for display
     trades.sort(key=lambda x: x.get("ts", 0), reverse=True)
+
+    # Debug: log trades for debugging
+    if sells > 0 or buys > 0:
+        _log(f"[api_summary] {buys} buys, {sells} sells, {len(trades)} trades in response")
 
     return jsonify({
         "minutes": minutes,
