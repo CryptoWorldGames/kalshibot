@@ -5831,6 +5831,34 @@ async function buildFullReport() {
     }
   } catch(e) { L.push(`  (activity unavailable: ${e.message})`); }
 
+  // Activity log diagnostics
+  try {
+    const r = await fetch("/api/diagnostic/activity");
+    if (r.ok) {
+      const d = await r.json();
+      L.push(``);
+      L.push(`ACTIVITY LOG DIAGNOSTICS:`);
+      L.push(`  Total: ${d.total_buys} buys | ${d.total_sells} sells | ${d.total_scans} scans`);
+      L.push(`  Last 1h: ${d.buys_last_hour} buys | ${d.sells_last_hour} sells`);
+      L.push(`  Last 24h: ${d.buys_last_24h} buys | ${d.sells_last_24h} sells | ${d.scans_last_24h} scans`);
+      L.push(`  Activity log file exists: ${d.activity_log_exists}`);
+    }
+  } catch(e) { L.push(`  (activity log diagnostics unavailable: ${e.message})`); }
+
+  // Position tracking diagnostics
+  try {
+    const r = await fetch("/api/diagnostic/tracked");
+    if (r.ok) {
+      const d = await r.json();
+      L.push(``);
+      L.push(`POSITION TRACKING DIAGNOSTICS:`);
+      L.push(`  In memory: ${d.in_memory_total} total | ${d.in_memory_open_count} open`);
+      L.push(`  Saved to disk: ${d.saved_total} total | ${d.saved_open_count} open`);
+      L.push(`  ⚠️ NOT SAVED: ${d.NOT_SAVED_count} positions (${d.NOT_SAVED_tickers.join(", ")})`);
+      if (d.in_memory_open_sample.length > 0) L.push(`  Sample open: ${d.in_memory_open_sample.slice(0, 5).join(", ")}`);
+    }
+  } catch(e) { L.push(`  (position diagnostics unavailable: ${e.message})`); }
+
   // Open positions detail
   L.push(``);
   L.push(`OPEN POSITIONS (${allPositions.length}):`);
