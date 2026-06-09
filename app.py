@@ -4133,72 +4133,84 @@ def bot_stop():
     return jsonify({"ok": True, "status": "stopped"})
 
 
-@app.route("/api/polybot/restart", methods=["POST"])
-def restart_polybot():
-    """Trigger PolyBot auto-restart by pushing VERSION.txt via git."""
+def _trigger_bot_restart(bot_name):
+    """Trigger any bot restart by updating VERSION.txt and pushing to git."""
     import subprocess
     from datetime import datetime
-    try:
-        polybot_dir = Path(HERE.parent) / "polybot"
-        if not polybot_dir.exists():
-            return jsonify({"error": "PolyBot directory not found", "path": str(polybot_dir)}), 404
 
+    bot_dir = Path(HERE.parent) / bot_name.lower()
+    if not bot_dir.exists():
+        return {"error": f"{bot_name} directory not found at {bot_dir}"}, 404
+
+    try:
         # Step 1: git pull origin main
         result = subprocess.run(
             ["git", "pull", "origin", "main"],
-            cwd=str(polybot_dir),
+            cwd=str(bot_dir),
             capture_output=True,
             text=True,
             timeout=10
         )
         if result.returncode != 0:
-            return jsonify({"error": f"git pull failed: {result.stderr}"}), 500
+            return {"error": f"git pull failed: {result.stderr}"}, 500
 
         # Step 2: Create/update VERSION.txt with timestamp
-        version_file = polybot_dir / "VERSION.txt"
+        version_file = bot_dir / "VERSION.txt"
         timestamp = datetime.now().isoformat()
         version_file.write_text(timestamp)
 
         # Step 3: git add VERSION.txt
         result = subprocess.run(
             ["git", "add", "VERSION.txt"],
-            cwd=str(polybot_dir),
+            cwd=str(bot_dir),
             capture_output=True,
             text=True,
             timeout=10
         )
         if result.returncode != 0:
-            return jsonify({"error": f"git add failed: {result.stderr}"}), 500
+            return {"error": f"git add failed: {result.stderr}"}, 500
 
-        # Step 4: git commit -m "Auto-restart trigger from KalshiBot"
+        # Step 4: git commit
         result = subprocess.run(
-            ["git", "commit", "-m", "Auto-restart trigger from KalshiBot"],
-            cwd=str(polybot_dir),
+            ["git", "commit", "-m", f"Auto-restart trigger via {bot_name}"],
+            cwd=str(bot_dir),
             capture_output=True,
             text=True,
             timeout=10
         )
         if result.returncode != 0 and "nothing to commit" not in result.stderr.lower():
-            return jsonify({"error": f"git commit failed: {result.stderr}"}), 500
+            return {"error": f"git commit failed: {result.stderr}"}, 500
 
         # Step 5: git push origin main
         result = subprocess.run(
             ["git", "push", "origin", "main"],
-            cwd=str(polybot_dir),
+            cwd=str(bot_dir),
             capture_output=True,
             text=True,
             timeout=10
         )
         if result.returncode != 0:
-            return jsonify({"error": f"git push failed: {result.stderr}"}), 500
+            return {"error": f"git push failed: {result.stderr}"}, 500
 
-        _log("[api] PolyBot restart triggered via git")
-        return jsonify({"ok": True, "message": f"PolyBot auto-restart triggered (VERSION: {timestamp})"}), 200
+        _log(f"[api] {bot_name} restart triggered via git (VERSION: {timestamp})")
+        return {"ok": True, "bot": bot_name, "message": f"{bot_name} auto-restart triggered (VERSION: {timestamp})"}, 200
     except subprocess.TimeoutExpired:
-        return jsonify({"error": "Git command timed out"}), 500
+        return {"error": "Git command timed out"}, 500
     except Exception as e:
-        _log(f"[api] PolyBot restart failed: {e}")
-        return jsonify({"error": str(e)}), 500
+        _log(f"[api] {bot_name} restart failed: {e}")
+        return {"error": str(e)}, 500
+
+
+@app.route("/api/restart", methods=["POST"])
+def restart_bot():
+    """Restart any bot (kalshibot or polybot) via git VERSION.txt trigger."""
+    bot = request.args.get("bot", "polybot").lower()
+
+    if bot not in ["kalshibot", "polybot"]:
+        return jsonify({"error": f"Unknown bot: {bot}. Use 'kalshibot' or 'polybot'"}), 400
+
+    data, status = _trigger_bot_restart(bot)
+    return jsonify(data), status
 
 
 @app.route("/api/apilog", methods=["GET"])

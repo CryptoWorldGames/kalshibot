@@ -4104,14 +4104,14 @@ async function updateAndRestart() {
 }
 
 async function restartPolyBot() {
-  if (!confirm("Trigger PolyBot auto-restart via git version update?\n\nPolyBot will restart when it detects the VERSION.txt change.")) return;
+  if (!confirm("Restart PolyBot?\n\nPolyBot will restart when it detects the VERSION.txt change.")) return;
   const btn = document.getElementById("restartPolyBtn");
   if (btn) { btn.disabled = true; btn.textContent = "🔄 Restarting…"; }
   try {
-    const r = await fetch(`${location.protocol}//${location.hostname}:${location.port || 5003}/api/polybot/restart`, { method: "POST" });
+    const r = await fetch(`${location.protocol}//${location.hostname}:${location.port || 5003}/api/restart?bot=polybot`, { method: "POST" });
     const d = await r.json().catch(() => ({}));
     if (d.ok) {
-      alert("✅ PolyBot restart triggered!\n\n" + (d.message || "Check PolyBot logs for restart status."));
+      alert("✅ PolyBot restart triggered!\n\n" + (d.message || "PolyBot will restart when it detects the change."));
     } else {
       alert("⚠️ Failed to trigger restart:\n\n" + (d.error || "Unknown error"));
     }
