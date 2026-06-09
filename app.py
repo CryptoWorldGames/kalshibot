@@ -4240,6 +4240,43 @@ def _print_banner():
     print(f"╚{bar}╝")
 
 
+@app.route("/api/start/polybot", methods=["POST"])
+def start_polybot_cmd():
+    """Start PolyBot by executing cmd command on Windows."""
+    import subprocess
+    try:
+        polybot_dir = Path(HERE.parent) / "polybot"
+        if not polybot_dir.exists():
+            return jsonify({"error": f"PolyBot directory not found: {polybot_dir}"}), 404
+
+        app_file = polybot_dir / "app.py"
+        if not app_file.exists():
+            return jsonify({"error": f"PolyBot app.py not found: {app_file}"}), 404
+
+        # Windows: start in new cmd window
+        if sys.platform == "win32":
+            subprocess.Popen(
+                f'start cmd /k "cd /d {polybot_dir} && python app.py"',
+                shell=True,
+                creationflags=subprocess.CREATE_NEW_CONSOLE
+            )
+            _log("[api] Started PolyBot via cmd")
+            return jsonify({"ok": True, "message": "PolyBot started in new window"}), 200
+        else:
+            # Linux/Mac: just run in background
+            subprocess.Popen(
+                ["python", "app.py"],
+                cwd=str(polybot_dir),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            _log("[api] Started PolyBot")
+            return jsonify({"ok": True, "message": "PolyBot started"}), 200
+    except Exception as e:
+        _log(f"[api] Failed to start PolyBot: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     _print_banner()
     if _already_running(FLASK_PORT):
