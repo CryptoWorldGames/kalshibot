@@ -4321,6 +4321,22 @@ if __name__ == "__main__":
         print(f"\n⚠️  WARNING: Cannot reach Kalshi API: {e}")
         print("Bot will start, but will be unable to trade until the connection is restored.\n")
 
+    # Start PolyBot in background if available
+    polybot_dir = Path(HERE.parent) / "polybot"
+    if polybot_dir.exists() and (polybot_dir / "app.py").exists():
+        try:
+            import subprocess
+            subprocess.Popen(
+                [sys.executable, "app.py"],
+                cwd=str(polybot_dir),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0
+            )
+            print("✓ PolyBot started in background")
+        except Exception as e:
+            print(f"⚠️  Could not start PolyBot: {e}")
+
     # threaded=True is critical: the scan loop and slow Kalshi API calls can each
     # tie up a worker for seconds at a time. Single-threaded (the Werkzeug default)
     # means a phone/laptop page-load (GET /) queues behind that work and times out,
