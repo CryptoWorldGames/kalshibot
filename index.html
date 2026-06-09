@@ -4354,14 +4354,14 @@ async function startPolyBot() {
     });
     const d = await r.json().catch(() => ({}));
     if (d.ok) {
-      alert("✅ PolyBot started!\n\n" + d.message + "\n\nOpening dashboard in 3 seconds…");
-      setTimeout(() => window.location.href = `${location.protocol}//${location.hostname}:5005`, 3000);
+      toast("✅ PolyBot starting...", "ok");
+      setTimeout(() => window.location.href = `${location.protocol}//${location.hostname}:5005`, 2000);
     } else {
-      alert("⚠️ Failed to start PolyBot:\n\n" + (d.error || "Unknown error"));
+      toast("⚠️ Failed: " + (d.error || "Unknown error"), "error");
       if (btn) { btn.disabled = false; btn.textContent = "▶️ PolyBot"; }
     }
   } catch(e) {
-    alert("Couldn't start PolyBot:\n\n" + e.message);
+    toast("⚠️ Error: " + e.message, "error");
     if (btn) { btn.disabled = false; btn.textContent = "▶️ PolyBot"; }
   }
 }
