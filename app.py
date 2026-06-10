@@ -50,6 +50,29 @@ BASE_URL = "https://api.elections.kalshi.com"
 API_PREFIX = "/trade-api/v2"
 FLASK_PORT = int(os.getenv("KALSHI_BOT_PORT", "5003"))
 
+# Auth token for protecting money-moving endpoints (/api/buy, /api/sell, /api/bot/start, etc.)
+# Generate a token: python -c "import secrets; print(secrets.token_urlsafe(32))"
+# Set KALSHI_AUTH_TOKEN in .env or environment. If not set, auth is disabled (open access).
+AUTH_TOKEN = os.getenv("KALSHI_AUTH_TOKEN", None)
+AUTH_ENABLED = AUTH_TOKEN is not None
+
+def require_auth(f):
+    """Decorator: check Authorization: Bearer <token> header on protected endpoints."""
+    from functools import wraps
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not AUTH_ENABLED:
+            return f(*args, **kwargs)  # Auth disabled, allow all
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return jsonify({"error": "Unauthorized: missing or invalid Authorization header"}), 401
+        token = auth_header[7:]  # Strip "Bearer "
+        if token != AUTH_TOKEN:
+            return jsonify({"error": "Unauthorized: invalid token"}), 403
+        return f(*args, **kwargs)
+    return decorated_function
+
+
 # Bot identity — shown in the terminal banner/title and the web UI header so you
 # always know which build is running. Bump BOT_VERSION when you ship changes.
 BOT_NAME = "KalshiBot"
@@ -79,9 +102,16 @@ def _record_activity(kind: str, **fields):
         with _activity_lock:
             with open(ACTIVITY_LOG, "a", encoding="utf-8") as f:
                 f.write(json.dumps(entry, default=str) + "\n")
+        if kind in ("buy", "sell"):
+            _log(f"[activity] ✓✓✓ RECORDED {kind.upper()}: {fields.get('ticker')}")
     except Exception as e:
-        # Never let logging break trading — just note it once.
-        print(f"[activity] write failed: {e}", flush=True)
+        # CRITICAL: Log to both stdout and _log so we see failures
+        msg = f"[activity] ✗✗✗ FAILED {kind.upper()}: {e}"
+        print(msg, flush=True)
+        try:
+            _log(msg)
+        except:
+            print(f"[activity] Even _log failed! {e}", flush=True)
 
 def _read_activity(since_ts: float):
     """Return all activity events with ts >= since_ts, oldest→newest."""
@@ -332,8 +362,10 @@ def _save_tracked():
     try:
         with _lock:
             TRACKED_FILE.write_text(json.dumps(tracked, default=str), encoding="utf-8")
+            _log(f"[tracked] Saved {len(tracked)} positions to disk")
     except Exception as e:
-        print(f"[tracked] save error: {e}")
+        _log(f"[tracked] SAVE FAILED: {e}")
+        print(f"[tracked] SAVE FAILED: {e}", flush=True)
 
 # { ticker: { side, count, buy_price, title, strategy, target_pct, bought_at, status } }
 tracked: dict = {}
@@ -1021,6 +1053,10 @@ def _monitor():
         with _lock:
             tickers = list(tracked.keys())
 
+        # Debug: log how many positions we're checking
+        if tickers:
+            _log(f"[monitor] Checking {len(tickers)} tracked positions for sell conditions")
+
         for ticker in tickers:
             try:
                 with _lock:
@@ -1637,11 +1673,13 @@ def serve_icons(filename):
 
 
 @app.route("/api/debug")
+@require_auth
 def debug():
     data = kalshi_get("/markets", {"status": "open", "limit": 3})
     return jsonify(data.get("markets", []))
 
 @app.route("/api/debug/balance")
+@require_auth
 def debug_balance():
     # Cached raw balance (shared cache; same shape the /mobile page expects).
     b = _get_balance()
@@ -1661,6 +1699,7 @@ def show_public_key():
 
 
 @app.route("/api/auth-test")
+@require_auth
 def auth_test():
     endpoint = "/portfolio/balance"
     full_path = API_PREFIX + endpoint
@@ -2249,6 +2288,7 @@ def _recent_settlements(hours: int = 24) -> list:
 
 
 @app.route("/api/debug_positions")
+@require_auth
 def debug_positions():
     out = {}
     probes = [
@@ -2270,6 +2310,7 @@ def debug_positions():
 
 
 @app.route("/api/debug_events")
+@require_auth
 def debug_events():
     """Return first page of /events so we can see the structure and event_tickers."""
     try:
@@ -2294,6 +2335,7 @@ def debug_events():
 
 
 @app.route("/api/debug_series")
+@require_auth
 def debug_series():
     """List all series + test timestamp-filtered market query."""
     result = {}
@@ -2351,6 +2393,7 @@ def debug_series():
 
 
 @app.route("/api/debug_scan")
+@require_auth
 def debug_scan():
     """Combined debug: 60-min market window + series probe + timestamp filter test."""
     now    = datetime.now(timezone.utc)
@@ -2843,6 +2886,7 @@ def scan():
 
 
 @app.route("/api/buy", methods=["POST"])
+@require_auth
 def buy():
     data     = request.get_json(silent=True) or {}
     ticker   = data.get("ticker", "")
@@ -2971,6 +3015,7 @@ def buy():
 
 
 @app.route("/api/sell", methods=["POST"])
+@require_auth
 def sell():
     data    = request.get_json(silent=True) or {}
     ticker  = data.get("ticker", "")
@@ -3441,7 +3486,7 @@ def api_summary():
     sell_proceeds = 0.0
     realized_profit = 0.0
     have_profit = False
-    trades = []  # buy/sell events for the expandable text list
+    trades = []  # buy/sell/settlement events for the expandable text list
 
     for e in events:
         kind = e.get("kind")
@@ -3460,9 +3505,51 @@ def api_summary():
             sell_proceeds += float(e.get("count") or 0) * float(e.get("price") or 0) / 100
             trades.append(e)
 
+    # Merge Kalshi's authoritative settlements into the list. In "resolution" mode
+    # (the default) positions close by SETTLING, not selling — without these rows the
+    # Summary only ever shows buys and the user can't see how positions closed.
+    settlements = 0
+    settlement_pnl = 0.0
+    have_settle_pnl = False
+    try:
+        hours = max(1, int(minutes / 60) + 1)
+        for s in _cached_settlements(hours=hours):
+            if s.get("result") == "sold_early":
+                continue  # bot-sold positions are already in the activity log as "sell"
+            ts_str = s.get("settled_time", "")
+            try:
+                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")).timestamp()
+            except (ValueError, TypeError):
+                continue
+            if ts < since:
+                continue
+            settlements += 1
+            pnl = s.get("pnl")
+            if pnl is not None:
+                settlement_pnl += float(pnl)
+                have_settle_pnl = True
+            cnt = float(s.get("count") or 0)
+            rev = float(s.get("revenue") or 0)
+            trades.append({
+                "kind":    "settlement",
+                "ts":      ts,
+                "ticker":  s.get("ticker", ""),
+                "title":   s.get("title", ""),
+                "side":    s.get("side", ""),
+                "count":   cnt,
+                "price":   round(rev / cnt * 100) if cnt > 0.001 and rev > 0 else 0,
+                "profit":  pnl,
+                "result":  s.get("result", ""),
+                "won":     s.get("won", False),
+                "profile": s.get("profile"),
+            })
+    except Exception as e:
+        print(f"[summary] settlements merge error: {e}")
+
     # newest first for display
     trades.sort(key=lambda x: x.get("ts", 0), reverse=True)
 
+    total_realized = (realized_profit if have_profit else 0.0) + (settlement_pnl if have_settle_pnl else 0.0)
     return jsonify({
         "minutes": minutes,
         "since": since,
@@ -3471,11 +3558,71 @@ def api_summary():
             "scans": scans,
             "buys": buys,
             "sells": sells,
+            "settlements": settlements,
             "buy_spent": round(buy_spent, 2),
             "sell_proceeds": round(sell_proceeds, 2),
-            "realized_profit": round(realized_profit, 2) if have_profit else None,
+            "settlement_pnl": round(settlement_pnl, 2) if have_settle_pnl else None,
+            "realized_profit": round(total_realized, 2) if (have_profit or have_settle_pnl) else None,
         },
         "trades": trades[:500],  # cap payload
+    })
+
+
+@app.route("/api/diagnostic/tracked")
+def api_diagnostic_tracked():
+    """Return current in-memory tracked positions vs saved on disk (for debugging)."""
+    # Compare in-memory vs saved on disk
+    saved_positions = {}
+    try:
+        if TRACKED_FILE.exists():
+            saved_positions = json.loads(TRACKED_FILE.read_text(encoding="utf-8"))
+    except Exception as e:
+        pass
+
+    in_memory_open = [t for t, p in tracked.items() if p.get("status") == "open"]
+    saved_open = [t for t, p in saved_positions.items() if p.get("status") == "open"]
+    mismatch = list(set(in_memory_open) - set(saved_open))
+
+    return jsonify({
+        "in_memory_total": len(tracked),
+        "in_memory_open_count": len(in_memory_open),
+        "in_memory_open_sample": in_memory_open[:10],
+        "saved_total": len(saved_positions),
+        "saved_open_count": len(saved_open),
+        "NOT_SAVED_count": len(mismatch),
+        "NOT_SAVED_tickers": mismatch[:10],
+        "sample_inmemory": next(((t, p) for t, p in tracked.items() if p.get("status") == "open"), None),
+    })
+
+
+@app.route("/api/diagnostic/activity")
+def api_diagnostic_activity():
+    """Return activity log statistics (buys, sells, scans)."""
+    # Read all activity from log
+    events = _read_activity(0)  # all events since epoch
+
+    buys = [e for e in events if e.get("kind") == "buy"]
+    sells = [e for e in events if e.get("kind") == "sell"]
+    scans = [e for e in events if e.get("kind") == "scan"]
+
+    # Count by time window
+    now = time.time()
+    last_hour = [e for e in events if e.get("ts", 0) >= now - 3600]
+    last_day = [e for e in events if e.get("ts", 0) >= now - 86400]
+
+    return jsonify({
+        "total_buys": len(buys),
+        "total_sells": len(sells),
+        "total_scans": len(scans),
+        "buys_last_hour": len([e for e in buys if e.get("ts", 0) >= now - 3600]),
+        "sells_last_hour": len([e for e in sells if e.get("ts", 0) >= now - 3600]),
+        "buys_last_24h": len([e for e in buys if e.get("ts", 0) >= now - 86400]),
+        "sells_last_24h": len([e for e in sells if e.get("ts", 0) >= now - 86400]),
+        "scans_last_24h": len([e for e in scans if e.get("ts", 0) >= now - 86400]),
+        "activity_log_file": str(ACTIVITY_LOG),
+        "activity_log_exists": ACTIVITY_LOG.exists(),
+        "sample_buy": buys[-1] if buys else None,
+        "sample_sell": sells[-1] if sells else None,
     })
 
 
@@ -4038,6 +4185,7 @@ def coach():
 # ---------------------------------------------------------------------------
 
 @app.route("/api/bot/start", methods=["POST"])
+@require_auth
 def bot_start():
     """Start the headless auto-trading loop."""
     global _bot_running, _bot_start_time
@@ -4052,6 +4200,7 @@ def bot_start():
 
 
 @app.route("/api/bot/stop", methods=["POST"])
+@require_auth
 def bot_stop():
     """Stop the headless auto-trading loop gracefully."""
     global _bot_running
@@ -4062,6 +4211,125 @@ def bot_stop():
     _save_bot_config(False)  # Persist so it doesn't restart if home PC reboots
     print("[bot] Trading loop stopped")
     return jsonify({"ok": True, "status": "stopped"})
+
+
+def _trigger_bot_restart(bot_name):
+    """Trigger any bot restart by updating VERSION.txt and pushing to git."""
+    import subprocess
+    from datetime import datetime
+
+    bot_dir = Path(HERE.parent) / bot_name.lower()
+    if not bot_dir.exists():
+        return {"error": f"{bot_name} directory not found at {bot_dir}"}, 404
+
+    try:
+        # Step 1: git pull origin main
+        result = subprocess.run(
+            ["git", "pull", "origin", "main"],
+            cwd=str(bot_dir),
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode != 0:
+            return {"error": f"git pull failed: {result.stderr}"}, 500
+
+        # Step 2: Create/update VERSION.txt with timestamp
+        version_file = bot_dir / "VERSION.txt"
+        timestamp = datetime.now().isoformat()
+        version_file.write_text(timestamp)
+
+        # Step 3: git add VERSION.txt
+        result = subprocess.run(
+            ["git", "add", "VERSION.txt"],
+            cwd=str(bot_dir),
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode != 0:
+            return {"error": f"git add failed: {result.stderr}"}, 500
+
+        # Step 4: git commit
+        result = subprocess.run(
+            ["git", "commit", "-m", f"Auto-restart trigger via {bot_name}"],
+            cwd=str(bot_dir),
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode != 0 and "nothing to commit" not in result.stderr.lower():
+            return {"error": f"git commit failed: {result.stderr}"}, 500
+
+        # Step 5: git push origin main
+        result = subprocess.run(
+            ["git", "push", "origin", "main"],
+            cwd=str(bot_dir),
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode != 0:
+            return {"error": f"git push failed: {result.stderr}"}, 500
+
+        _log(f"[api] {bot_name} restart triggered via git (VERSION: {timestamp})")
+        return {"ok": True, "bot": bot_name, "message": f"{bot_name} auto-restart triggered (VERSION: {timestamp})"}, 200
+    except subprocess.TimeoutExpired:
+        return {"error": "Git command timed out"}, 500
+    except Exception as e:
+        _log(f"[api] {bot_name} restart failed: {e}")
+        return {"error": str(e)}, 500
+
+
+@app.route("/api/restart", methods=["POST"])
+def restart_bot():
+    """Restart any bot (kalshibot or polybot) via git VERSION.txt trigger."""
+    bot = request.args.get("bot", "polybot").lower()
+
+    if bot not in ["kalshibot", "polybot"]:
+        return jsonify({"error": f"Unknown bot: {bot}. Use 'kalshibot' or 'polybot'"}), 400
+
+    data, status = _trigger_bot_restart(bot)
+    return jsonify(data), status
+
+
+def _self_restart():
+    """Spawn a fresh copy of this app (running the just-pulled code), then exit.
+    Runs on a short delay from a background thread so the HTTP response that
+    triggered the restart gets flushed to the browser first. Uses Popen+exit
+    instead of os.execv because execv on Windows mangles paths with spaces
+    (e.g. OneDrive folders)."""
+    time.sleep(1.5)
+    try:
+        _save_tracked()
+    except Exception:
+        pass
+    print("[update] restarting on new code…")
+    import subprocess
+    script = os.path.abspath(sys.argv[0])
+    subprocess.Popen([sys.executable, script] + sys.argv[1:], cwd=str(HERE))
+    os._exit(0)
+
+
+@app.route("/api/self-update", methods=["POST"])
+@require_auth
+def self_update():
+    """Fallback updater for when kalshi-manager.py isn't running: git-pull THIS
+    repo, then restart this process on the new code. The Update button tries the
+    manager first and falls back here, so updating works with app.py alone."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["git", "pull", "origin", "main"],
+            cwd=str(HERE), capture_output=True, text=True, timeout=60,
+        )
+        git_ok = result.returncode == 0
+        git_out = (result.stdout + "\n" + result.stderr).strip()
+    except Exception as e:
+        return jsonify({"ok": False, "git_ok": False, "git_error": str(e)}), 500
+
+    threading.Thread(target=_self_restart, daemon=True).start()
+    return jsonify({"ok": True, "git_ok": git_ok, "git": git_out, "restarting": True})
 
 
 @app.route("/api/apilog", methods=["GET"])
@@ -4171,6 +4439,22 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n⚠️  WARNING: Cannot reach Kalshi API: {e}")
         print("Bot will start, but will be unable to trade until the connection is restored.\n")
+
+    # Start PolyBot in background if available
+    polybot_dir = Path(HERE.parent) / "polybot"
+    if polybot_dir.exists() and (polybot_dir / "app.py").exists():
+        try:
+            import subprocess
+            subprocess.Popen(
+                [sys.executable, "app.py"],
+                cwd=str(polybot_dir),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0
+            )
+            print("✓ PolyBot started in background")
+        except Exception as e:
+            print(f"⚠️  Could not start PolyBot: {e}")
 
     # threaded=True is critical: the scan loop and slow Kalshi API calls can each
     # tie up a worker for seconds at a time. Single-threaded (the Werkzeug default)

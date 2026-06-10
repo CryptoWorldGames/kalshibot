@@ -503,6 +503,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   <button id="snoozeBtn" onclick="toggleVoiceSnooze()" style="background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;padding:6px 12px;margin-left:auto;transition:all .2s;white-space:nowrap" title="Mute the voice announcements for the snooze period (set the duration in Settings)">🔔 Snooze</button>
   <button id="startPolyBtn" onclick="startPolyBot()" style="background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;padding:6px 12px;margin-left:6px;transition:all .2s;white-space:nowrap" title="Start PolyBot or open its dashboard">▶️ PolyBot</button>
   <button id="updateBtn" onclick="updateAndRestart()" style="transition:all .2s;white-space:nowrap;cursor:pointer" title="Pull the latest code from GitHub and restart the bot — deploy updates from any device, no desktop access needed">⟳ Update</button>
+  <button id="restartPolyBtn" onclick="restartPolyBot()" style="transition:all .2s;white-space:nowrap;cursor:pointer;background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:13px;font-weight:700;padding:6px 12px;margin-left:6px" title="Restart PolyBot via git version trigger">🔄 PolyBot</button>
   <button onclick="document.getElementById('settingsModal').classList.toggle('open')" style="background:transparent;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:8px 12px;margin-left:6px;transition:color .2s" title="Settings">⚙️</button>
 </nav>
 
@@ -1555,9 +1556,9 @@ function renderSaleTicker() {
     </div>`;
   const items = _saleHistory.slice(0, 12).map(s => {
     const color = s.profit > 0.001 ? 'var(--green)' : s.profit < -0.001 ? 'var(--red)' : '#888';
-    const pnl   = s.profit != null ? `${s.profit >= 0 ? '+' : ''}$${s.profit.toFixed(2)}` : '';
+    const pnl   = s.profit != null ? `${s.profit >= 0 ? '+' : ''}$${s.profit.toFixed(2)}` : '—';
     return `<div style="flex:0 0 auto;padding:2px 10px;font-size:12px;color:${color};border-right:1px solid #1a1a1a;white-space:nowrap" title="${esc(s.short)} ${pnl}">
-      <span style="font-weight:700">${pnl}</span> <span style="color:#777;font-size:11px">${esc(s.short)}</span>
+      <span style="font-weight:700">${esc(s.short)}</span> <span style="color:#777;font-size:11px">${pnl}</span>
     </div>`;
   }).join("");
   wrap.innerHTML = header + items;
@@ -3008,8 +3009,7 @@ async function stopAutoMode(reason) {
   _waitingForCash = false;
   if (_cashPauseTimer) { clearInterval(_cashPauseTimer); _cashPauseTimer = null; }
   const r = reason || "Stopped";
-  document.getElementById("autoModeStatus").textContent =
-    `${r} · ${autoModeBought} buy(s) made`;
+  const ams = document.getElementById("autoModeStatus"); if (ams) ams.textContent = `${r} · ${autoModeBought} buy(s) made`;
   // Always show a persistent toast so user sees exactly why it stopped
   const el = document.getElementById("toast");
   if (el) {
@@ -3040,8 +3040,7 @@ function updateAutoStatus() {
     timeStr = "Running (manual stop)";
   }
 
-  document.getElementById("autoModeStatus").textContent =
-    `${timeStr} · ${autoModeBought} bought`;
+  const ams = document.getElementById("autoModeStatus"); if (ams) ams.textContent = `${timeStr} · ${autoModeBought} bought`;
 }
 
 // checkAutoStopConditions() removed — the portfolio-level profit/loss auto-stop it
@@ -3179,10 +3178,24 @@ async function sellPos(ticker, side, count, safeId) {
     return;
   }
 
-  // Show confirmation with order type choice
+  // Check if this position already has a pending LIMIT order
+  const limitOrders = JSON.parse(localStorage.getItem("kb_limit_orders") || "{}");
+  const orderKey = `${ticker}_${side}`;
+  const hasPendingOrder = limitOrders[orderKey];
+
+  if (hasPendingOrder) {
+    const pendingPrice = hasPendingOrder.limit_price;
+    const msg = `LIMIT order already pending @ ${pendingPrice}¢\n\nOptions:\n✓ Wait for buyers at ${pendingPrice}¢\n✗ Cancel order and retry at market price\n\nCancel pending order?`;
+    if (!confirm(msg)) return;
+    // Delete the pending order to allow a new sell attempt
+    delete limitOrders[orderKey];
+    localStorage.setItem("kb_limit_orders", JSON.stringify(limitOrders));
+  }
+
+  // Show confirmation with current bid price
   const bidPrice = side === "yes" ? prePos.current_yes : prePos.current_no;
-  if (bidPrice != null) {
-    const msg = `Sell ${count} ${side.toUpperCase()} @ ${bidPrice}¢?\n\nOrder type:\n• LIMIT (locked at ${bidPrice}¢, may not fill if no buyers)\n• MARKET (guaranteed execution at best available price)\n\nOK = LIMIT, Cancel = abort`;
+  if (bidPrice != null && !hasPendingOrder) {
+    const msg = `Sell ${count} ${side.toUpperCase()} @ ${bidPrice}¢?\n\nUsing LIMIT order (locked in price).\nIf no buyers at this price, you can:\n• Retry at lower price (±5¢)\n• Wait for buyers\n• Cancel and hold`;
     if (!confirm(msg)) return;
   }
 
@@ -3679,7 +3692,7 @@ function fmtSecs(s) {
 
 function clearMarkets() {
   document.getElementById("marketsWrap").innerHTML = "";
-  document.getElementById("buySummary").style.display = "none";
+  const bs = document.getElementById("buySummary"); if (bs) bs.style.display = "none";
   const _bab = document.getElementById("buyAllBtn"); if (_bab) _bab.disabled = true;
   markets = []; selectedMarkets.clear();
   if (cdTimer) { clearInterval(cdTimer); cdTimer = null; }
@@ -4316,7 +4329,7 @@ function chaChing() {
 // Remote deploy: tell the manager (Flask port + 100) to `git pull` + restart Flask.
 // Lets you ship new code from phone/laptop with zero desktop access.
 async function updateAndRestart() {
-  if (!confirm("Pull the latest code from GitHub and restart the bot?\n\nThe bot will be down for a few seconds, then come back on the new code.")) return;
+  if (!confirm("Update and restart KalshiBot + PolyBot?\n\nBoth bots will be down for a few seconds, then restart on the new code.")) return;
   const btn = document.getElementById("updateBtn");
   const mgrPort = (parseInt(location.port || "5003") + 100);
   const mgrUrl = `${location.protocol}//${location.hostname}:${mgrPort}/api/manager/update`;
@@ -4333,13 +4346,53 @@ async function updateAndRestart() {
     toast.textContent = msg + "\n" + (gitMsg || "(no git output)") + "\n\nReloading in 4s…";
     document.body.appendChild(toast);
 
+    // Trigger PolyBot restart via git VERSION.txt
+    try {
+      await fetch(`${location.protocol}//${location.hostname}:${location.port || 5003}/api/restart?bot=polybot`, { method: "POST" });
+    } catch(e) {
+      console.log("PolyBot restart request sent (may or may not have succeeded)");
+    }
+
     setTimeout(() => location.reload(true), 4000);
   } catch(e) {
-    alert("Couldn't reach the manager on port " + mgrPort + ".\n\n" +
-          "Make sure kalshi-manager.py is running (not just app.py), and that port " +
-          mgrPort + " is open in the firewall.\n\nError: " + e.message);
-    if (btn) { btn.disabled = false; btn.textContent = "⟳ Update"; }
+    // Manager not running — fall back to the app's built-in self-updater
+    // (git pull + restart inside app.py itself), so Update works without
+    // kalshi-manager.py.
+    try {
+      const r2 = await fetch("/api/self-update", { method: "POST" });
+      const d2 = await r2.json().catch(() => ({}));
+      if (!r2.ok || !d2.ok) throw new Error(d2.git_error || d2.error || ("HTTP " + r2.status));
+      const gitMsg2 = (d2.git || "").split("\n").slice(-4).join("\n");
+      alert((d2.git_ok === false ? "⚠️ git pull had issues:\n\n" : "✅ Updated & restarting KalshiBot:\n\n") +
+            (gitMsg2 || "(no git output)") +
+            "\n\n(Manager not running — used the app's built-in updater. PolyBot was NOT restarted.)");
+      setTimeout(() => location.reload(true), 6000);
+      return;
+    } catch(e2) {
+      alert("Couldn't reach the manager on port " + mgrPort + " OR the app's built-in updater.\n\n" +
+            "Manager error: " + e.message + "\nApp updater error: " + e2.message + "\n\n" +
+            "Make sure app.py is running, or start kalshi-manager.py for full manager features.");
+      if (btn) { btn.disabled = false; btn.textContent = "⟳ Update"; }
+    }
   }
+}
+
+async function restartPolyBot() {
+  if (!confirm("Restart PolyBot?\n\nPolyBot will restart when it detects the VERSION.txt change.")) return;
+  const btn = document.getElementById("restartPolyBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "🔄 Restarting…"; }
+  try {
+    const r = await fetch(`${location.protocol}//${location.hostname}:${location.port || 5003}/api/restart?bot=polybot`, { method: "POST" });
+    const d = await r.json().catch(() => ({}));
+    if (d.ok) {
+      alert("✅ PolyBot restart triggered!\n\n" + (d.message || "PolyBot will restart when it detects the change."));
+    } else {
+      alert("⚠️ Failed to trigger restart:\n\n" + (d.error || "Unknown error"));
+    }
+  } catch(e) {
+    alert("Couldn't reach the API:\n\n" + e.message);
+  }
+  if (btn) { btn.disabled = false; btn.textContent = "🔄 PolyBot"; }
 }
 
 function startPolyBot() {
@@ -4661,8 +4714,8 @@ async function refreshClippy() {
     const el = document.getElementById("clippy");
     if (!el) return;
     if (sig !== _clippyLast) {
-      document.getElementById("clippyMsg").innerHTML = pick.msg.replace(/\*\*(.+?)\*\*/g, '<b style="color:var(--green)">$1</b>');
-      document.getElementById("clippyN").textContent = d.totals?.trades || 0;
+      const cm = document.getElementById("clippyMsg"); if (cm) cm.innerHTML = pick.msg.replace(/\*\*(.+?)\*\*/g, '<b style="color:var(--green)">$1</b>');
+      const cn = document.getElementById("clippyN"); if (cn) cn.textContent = d.totals?.trades || 0;
       el.style.display = "block";
       _clippyLast = sig;
       // Auto-dismiss after 2 minutes
@@ -4734,12 +4787,12 @@ async function loadApiLog() {
          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">${label}</div>
        </div>`;
     const rl = d.rate_limited_60s || 0;
-    document.getElementById("apiLogSummary").innerHTML =
+    const als = document.getElementById("apiLogSummary"); if (als) als.innerHTML =
       chip("Calls / 60s", d.calls_60s ?? 0, "#fff") +
       chip("Errors / 60s", d.errors_60s ?? 0, (d.errors_60s ? "var(--yellow)" : "#fff")) +
       chip("429 rate-limited / 60s", rl, (rl ? "var(--red)" : "var(--green)"));
     const top = (d.top_endpoints_60s || []).map(([k,n]) => `${k} <b style="color:#fff">${n}</b>`).join(" · ");
-    document.getElementById("apiLogTop").innerHTML = top ? ("Busiest (60s): " + top) : "";
+    const alt = document.getElementById("apiLogTop"); if (alt) alt.innerHTML = top ? ("Busiest (60s): " + top) : "";
     const body = document.getElementById("apiLogBody");
     const rows = d.recent || [];
     if (!rows.length) { body.innerHTML = '<tr><td colspan="5" style="padding:14px;color:var(--muted)">No calls yet.</td></tr>'; return; }
@@ -5543,15 +5596,16 @@ async function loadSummary() {
       card("Scans", t.scans || 0) +
       card("Buys", t.buys || 0) +
       card("Sells", t.sells || 0) +
+      card("Settled", t.settlements || 0) +
       card("Realized P&L", profitStr, profitCls) +
       card("Total Cost", `$${(t.buy_spent||0).toFixed(2)}`) +
       card("Proceeds (sells)", `$${(t.sell_proceeds||0).toFixed(2)}`);
 
-    // Per-trade list with pagination
-    const trades = (d.trades || []).filter(x => x.kind === "buy" || x.kind === "sell" || x.kind === "resolution");
+    // Per-trade list
+    const trades = (d.trades || []).filter(x => ["buy", "sell", "settlement", "resolution"].includes(x.kind));
     metaEl.textContent = `(${trades.length} in last ${_rangeLabel(_summaryMins)}, ${tzAbbr()})`;
     if (!trades.length) {
-      tradesEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:10px 0">No buys or sells in this window.</div>`;
+      tradesEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:10px 0">No buys, sells, or settlements in this window.</div>`;
     } else {
       const pageSize = 100;
       const pag = paginate(trades, pageSize, summaryPage);
@@ -5559,25 +5613,29 @@ async function loadSummary() {
 
       const tradesHtml = pag.items.map(x => {
         const isBuy = x.kind === "buy";
+        const isSettle = x.kind === "settlement";
         const isResolution = x.kind === "resolution";
-        const color = isBuy ? "var(--blue)" : "var(--green)";
-        const tag = isBuy ? "BUY" : (isResolution ? "RESOLVED" : "SELL");
+        const color = isBuy ? "var(--blue)" : isSettle ? (x.won ? "var(--green)" : "var(--red)") : "var(--green)";
+        const tag = isBuy ? "BUY" : isSettle ? "SETTLED" : isResolution ? "RESOLVED" : "SELL";
         const title = esc(x.title || x.ticker || "");
         const side = (x.side || "").toUpperCase();
         const price = x.price != null ? `${x.price}¢` : "";
         const cnt = x.count != null ? `×${x.count}` : "";
+        const profile = x.profile || x.bot || "";
+        const profileBadge = profile ? `<span class="tabtag">${profile}</span>` : "";
         let result = "";
         if (!isBuy && x.profit != null) {
           const pcls = x.profit >= 0 ? "pos" : "neg";
           result = ` · <span class="${pcls}" style="font-weight:700">${x.profit >= 0 ? "+" : ""}$${Number(x.profit).toFixed(2)}</span>`;
-          if (x.reason) result += ` <span style="color:#888">(${esc(x.reason)})</span>`;
+          if (isSettle) result += ` <span style="color:#888">(${x.won ? "won" : "lost"})</span>`;
+          else if (x.reason) result += ` <span style="color:#888">(${esc(x.reason)})</span>`;
         } else if (isBuy && x.spent != null) {
           result = ` · <span style="color:#aaa">-$${Number(x.spent).toFixed(2)}</span>`;
         }
         return `<div style="display:flex;align-items:center;gap:10px;padding:7px 12px;background:#0c0c0e;border-left:3px solid ${color};border-radius:4px;margin-bottom:5px;font-size:13px">
           <span style="color:#777;min-width:120px;font-variant-numeric:tabular-nums">${fmtTime(x.ts, true)}</span>
-          <span style="color:${color};font-weight:800;min-width:38px">${tag}</span>
-          ${x.profile ? `<span style="color:#888;font-size:11px;padding:2px 6px;background:#1a1a1a;border-radius:3px;font-weight:600">${x.profile}</span>` : ""}
+          <span style="color:${color};font-weight:800;min-width:62px">${tag}</span>
+          ${profileBadge}
           <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${title} <span style="color:#888">${side} ${cnt} @ ${price}</span></span>
           <span>${result}</span>
         </div>`;
@@ -5610,14 +5668,22 @@ function stopSummaryClock() {
 
 function switchTab(name) {
   window.scrollTo(0, 0); // Jump to top when switching tabs
-  document.querySelectorAll(".tab-btn").forEach(b => {
-    const m = b.getAttribute("onclick")?.match(/'(\w+)'/);
-    b.classList.toggle("active", m?.[1] === name);
+  // Fast path: use data attributes instead of parsing onclick
+  const btnToActivate = Array.from(document.querySelectorAll(".tab-btn")).find(b => {
+    const tabName = b.id?.replace("tab", "")?.toLowerCase() ||
+                    b.getAttribute("onclick")?.match(/'(\w+)'/)?.[1];
+    return tabName === name;
   });
-  document.querySelectorAll(".tab-pane").forEach(p => {
-    p.classList.toggle("active", p.id === "tab-" + name);
-  });
-  localStorage.setItem("activeTab", name);
+  if (btnToActivate) {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    btnToActivate.classList.add("active");
+  }
+  const paneToActivate = document.getElementById("tab-" + name);
+  if (paneToActivate) {
+    document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
+    paneToActivate.classList.add("active");
+  }
+  try { localStorage.setItem("activeTab", name); } catch(e) {}
   if (name === "debug") {
     loadStats();
     if (window._statsRefresh) clearInterval(window._statsRefresh);
@@ -5771,10 +5837,10 @@ async function runDebugScan() {
 
     el.textContent = out || "No data.";
     // Show copy button when there's content
-    document.getElementById("copyDebugBtn").style.display = "block";
+    const cdb = document.getElementById("copyDebugBtn"); if (cdb) cdb.style.display = "block";
   } catch(e) {
     el.textContent = "Error: " + e.message;
-    document.getElementById("copyDebugBtn").style.display = "none";
+    const cdb = document.getElementById("copyDebugBtn"); if (cdb) cdb.style.display = "none";
   }
 }
 
