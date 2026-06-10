@@ -5545,7 +5545,7 @@ async function loadSummary() {
       card("Proceeds (sells)", `$${(t.sell_proceeds||0).toFixed(2)}`);
 
     // Per-trade list with pagination
-    const trades = (d.trades || []).filter(x => x.kind === "buy" || x.kind === "sell");
+    const trades = (d.trades || []).filter(x => x.kind === "buy" || x.kind === "sell" || x.kind === "resolution");
     metaEl.textContent = `(${trades.length} in last ${_rangeLabel(_summaryMins)}, ${tzAbbr()})`;
     if (!trades.length) {
       tradesEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:10px 0">No buys or sells in this window.</div>`;
@@ -5556,8 +5556,9 @@ async function loadSummary() {
 
       const tradesHtml = pag.items.map(x => {
         const isBuy = x.kind === "buy";
+        const isResolution = x.kind === "resolution";
         const color = isBuy ? "var(--blue)" : "var(--green)";
-        const tag = isBuy ? "BUY" : "SELL";
+        const tag = isBuy ? "BUY" : (isResolution ? "RESOLVED" : "SELL");
         const title = esc(x.title || x.ticker || "");
         const side = (x.side || "").toUpperCase();
         const price = x.price != null ? `${x.price}¢` : "";

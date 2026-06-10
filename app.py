@@ -2026,6 +2026,10 @@ def portfolio():
                         if ticker in tracked and tracked[ticker].get("status") in ("open", "selling"):
                             tracked[ticker]["status"] = "sold"
                     _save_tracked()
+                    # Record resolution in activity log
+                    _record_activity("resolution", ticker=ticker, side=info.get("side"),
+                                   count=info.get("count"), market_status=mkt_status,
+                                   title=market_title)
                     continue
                 event_ticker = mkt.get("event_ticker", "")
                 market_title = _pretty_title(ticker, _event_title(event_ticker) or mkt.get("title", ticker))
@@ -3470,6 +3474,9 @@ def api_summary():
                 realized_profit += float(pr)
                 have_profit = True
             sell_proceeds += float(e.get("count") or 0) * float(e.get("price") or 0) / 100
+            trades.append(e)
+        elif kind == "resolution":
+            sells += 1  # count resolutions as sells (market auto-closed)
             trades.append(e)
 
     # newest first for display
