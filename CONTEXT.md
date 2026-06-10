@@ -24,6 +24,10 @@ Flask + single-page HTML trading bot for [Kalshi](https://kalshi.com) prediction
 | `bot_strategy.json` | Persisted sell strategy (survives Flask restarts) |
 | `CONTEXT.md` | This file — cross-device/session memory |
 
+**Bot folder on desktop:** `C:\Users\mycry\bots\kalshibot` (verified 2026-06-10 — NOT the OneDrive path)
+**Run on desktop:** `cd /d C:\Users\mycry\bots\kalshibot` then `python KalshiBot_manager.py`
+(manager supervises Flask, auto-restarts on crash, auto-pulls main every 5 min → merging to main = remote deploy)
+
 **Credentials:** `C:\Users\mycry\OneDrive\Documents\claude code\kalshi-keys\`
 - `kalshi_api_key` — UUID
 - `test2.txt` — RSA private key PEM
