@@ -3484,7 +3484,7 @@ def api_summary():
     sell_proceeds = 0.0
     realized_profit = 0.0
     have_profit = False
-    trades = []  # buy/sell events for the expandable text list
+    trades = []  # buy/sell/settlement events for the expandable text list
 
     for e in events:
         kind = e.get("kind")
@@ -3503,9 +3503,51 @@ def api_summary():
             sell_proceeds += float(e.get("count") or 0) * float(e.get("price") or 0) / 100
             trades.append(e)
 
+    # Merge Kalshi's authoritative settlements into the list. In "resolution" mode
+    # (the default) positions close by SETTLING, not selling — without these rows the
+    # Summary only ever shows buys and the user can't see how positions closed.
+    settlements = 0
+    settlement_pnl = 0.0
+    have_settle_pnl = False
+    try:
+        hours = max(1, int(minutes / 60) + 1)
+        for s in _cached_settlements(hours=hours):
+            if s.get("result") == "sold_early":
+                continue  # bot-sold positions are already in the activity log as "sell"
+            ts_str = s.get("settled_time", "")
+            try:
+                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")).timestamp()
+            except (ValueError, TypeError):
+                continue
+            if ts < since:
+                continue
+            settlements += 1
+            pnl = s.get("pnl")
+            if pnl is not None:
+                settlement_pnl += float(pnl)
+                have_settle_pnl = True
+            cnt = float(s.get("count") or 0)
+            rev = float(s.get("revenue") or 0)
+            trades.append({
+                "kind":    "settlement",
+                "ts":      ts,
+                "ticker":  s.get("ticker", ""),
+                "title":   s.get("title", ""),
+                "side":    s.get("side", ""),
+                "count":   cnt,
+                "price":   round(rev / cnt * 100) if cnt > 0.001 and rev > 0 else 0,
+                "profit":  pnl,
+                "result":  s.get("result", ""),
+                "won":     s.get("won", False),
+                "profile": s.get("profile"),
+            })
+    except Exception as e:
+        print(f"[summary] settlements merge error: {e}")
+
     # newest first for display
     trades.sort(key=lambda x: x.get("ts", 0), reverse=True)
 
+    total_realized = (realized_profit if have_profit else 0.0) + (settlement_pnl if have_settle_pnl else 0.0)
     return jsonify({
         "minutes": minutes,
         "since": since,
@@ -3514,9 +3556,11 @@ def api_summary():
             "scans": scans,
             "buys": buys,
             "sells": sells,
+            "settlements": settlements,
             "buy_spent": round(buy_spent, 2),
             "sell_proceeds": round(sell_proceeds, 2),
-            "realized_profit": round(realized_profit, 2) if have_profit else None,
+            "settlement_pnl": round(settlement_pnl, 2) if have_settle_pnl else None,
+            "realized_profit": round(total_realized, 2) if (have_profit or have_settle_pnl) else None,
         },
         "trades": trades[:500],  # cap payload
     })

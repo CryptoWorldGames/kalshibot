@@ -5245,20 +5245,22 @@ async function loadSummary() {
       card("Scans", t.scans || 0) +
       card("Buys", t.buys || 0) +
       card("Sells", t.sells || 0) +
+      card("Settled", t.settlements || 0) +
       card("Realized P&L", profitStr, profitCls) +
       card("Spent (buys)", `$${(t.buy_spent||0).toFixed(2)}`) +
       card("Proceeds (sells)", `$${(t.sell_proceeds||0).toFixed(2)}`);
 
     // Per-trade list
-    const trades = (d.trades || []).filter(x => x.kind === "buy" || x.kind === "sell");
+    const trades = (d.trades || []).filter(x => x.kind === "buy" || x.kind === "sell" || x.kind === "settlement");
     metaEl.textContent = `(${trades.length} in last ${_rangeLabel(_summaryMins)}, ${tzAbbr()})`;
     if (!trades.length) {
-      tradesEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:10px 0">No buys or sells in this window.</div>`;
+      tradesEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:10px 0">No buys, sells, or settlements in this window.</div>`;
     } else {
       tradesEl.innerHTML = trades.map(x => {
         const isBuy = x.kind === "buy";
-        const color = isBuy ? "var(--blue)" : "var(--green)";
-        const tag = isBuy ? "BUY" : "SELL";
+        const isSettle = x.kind === "settlement";
+        const color = isBuy ? "var(--blue)" : isSettle ? (x.won ? "var(--green)" : "var(--red)") : "var(--green)";
+        const tag = isBuy ? "BUY" : isSettle ? "SETTLED" : "SELL";
         const title = esc(x.title || x.ticker || "");
         const side = (x.side || "").toUpperCase();
         const price = x.price != null ? `${x.price}¢` : "";
@@ -5269,13 +5271,14 @@ async function loadSummary() {
         if (!isBuy && x.profit != null) {
           const pcls = x.profit >= 0 ? "pos" : "neg";
           result = ` · <span class="${pcls}" style="font-weight:700">${x.profit >= 0 ? "+" : ""}$${Number(x.profit).toFixed(2)}</span>`;
-          if (x.reason) result += ` <span style="color:#888">(${esc(x.reason)})</span>`;
+          if (isSettle) result += ` <span style="color:#888">(${x.won ? "won" : "lost"})</span>`;
+          else if (x.reason) result += ` <span style="color:#888">(${esc(x.reason)})</span>`;
         } else if (isBuy && x.spent != null) {
           result = ` · <span style="color:#aaa">-$${Number(x.spent).toFixed(2)}</span>`;
         }
         return `<div style="display:flex;align-items:center;gap:10px;padding:7px 12px;background:#0c0c0e;border-left:3px solid ${color};border-radius:4px;margin-bottom:5px;font-size:13px">
           <span style="color:#777;min-width:120px;font-variant-numeric:tabular-nums">${fmtTime(x.ts, true)}</span>
-          <span style="color:${color};font-weight:800;min-width:38px">${tag}</span>
+          <span style="color:${color};font-weight:800;min-width:62px">${tag}</span>
           ${profileBadge}
           <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${title} <span style="color:#888">${side} ${cnt} @ ${price}</span></span>
           <span>${result}</span>
