@@ -10,7 +10,6 @@ import json
 import socket
 import math
 import os
-import subprocess
 import sys
 import threading
 import time
@@ -80,16 +79,9 @@ def _record_activity(kind: str, **fields):
         with _activity_lock:
             with open(ACTIVITY_LOG, "a", encoding="utf-8") as f:
                 f.write(json.dumps(entry, default=str) + "\n")
-        if kind in ("buy", "sell"):
-            _log(f"[activity] ✓✓✓ RECORDED {kind.upper()}: {fields.get('ticker')}")
     except Exception as e:
-        # CRITICAL: Log to both stdout and _log so we see failures
-        msg = f"[activity] ✗✗✗ FAILED {kind.upper()}: {e}"
-        print(msg, flush=True)
-        try:
-            _log(msg)
-        except:
-            print(f"[activity] Even _log failed! {e}", flush=True)
+        # Never let logging break trading — just note it once.
+        print(f"[activity] write failed: {e}", flush=True)
 
 def _read_activity(since_ts: float):
     """Return all activity events with ts >= since_ts, oldest→newest."""
@@ -340,10 +332,8 @@ def _save_tracked():
     try:
         with _lock:
             TRACKED_FILE.write_text(json.dumps(tracked, default=str), encoding="utf-8")
-            _log(f"[tracked] Saved {len(tracked)} positions to disk")
     except Exception as e:
-        _log(f"[tracked] SAVE FAILED: {e}")
-        print(f"[tracked] SAVE FAILED: {e}", flush=True)
+        print(f"[tracked] save error: {e}")
 
 # { ticker: { side, count, buy_price, title, strategy, target_pct, bought_at, status } }
 tracked: dict = {}
@@ -1031,31 +1021,23 @@ def _monitor():
         with _lock:
             tickers = list(tracked.keys())
 
-        # Debug: log how many positions we're checking
-        if tickers:
-            _log(f"[monitor] Checking {len(tickers)} tracked positions for sell conditions")
-
         for ticker in tickers:
-            with _lock:
-                pos = tracked.get(ticker)
-                if not pos or pos.get("status") not in ("open", "selling"):
-                    _log(f"[monitor] {ticker}: skipped (status={pos.get('status') if pos else 'None'})")
-                    continue
-                # Already past its close time — stop probing it every cycle. This was
-                # the source of endless "holding to resolution" log spam plus a wasted
-                # /markets call per cycle for every expired position (which, with a big
-                # tracked file, monopolised the rate-limited API and starved scan/buy).
-                if pos.get("expired"):
-                    _log(f"[monitor] {ticker}: skipped (expired)")
-                    continue
-                # Skip only if no profit target exists at all (per-position or global)
-                has_pct_target = pos.get("strategy") == "profit" or sell_strategy.get("mode") == "profit"
-                has_dol_target = pos.get("target_dollars") is not None or sell_strategy.get("target_dollars") is not None
-                if not has_pct_target and not has_dol_target:
-                    _log(f"[monitor] {ticker}: skipped (no sell targets: strategy={pos.get('strategy')}, targets={has_pct_target}/{has_dol_target})")
-                    continue
-
             try:
+                with _lock:
+                    pos = tracked.get(ticker)
+                    if not pos or pos.get("status") not in ("open", "selling"):
+                        continue
+                    # Already past its close time — stop probing it every cycle. This was
+                    # the source of endless "holding to resolution" log spam plus a wasted
+                    # /markets call per cycle for every expired position (which, with a big
+                    # tracked file, monopolised the rate-limited API and starved scan/buy).
+                    if pos.get("expired"):
+                        continue
+                    # Skip only if no profit target exists at all (per-position or global)
+                    has_pct_target = pos.get("strategy") == "profit" or sell_strategy.get("mode") == "profit"
+                    has_dol_target = pos.get("target_dollars") is not None or sell_strategy.get("target_dollars") is not None
+                    if not has_pct_target and not has_dol_target:
+                        continue
                 data = _kalshi_get_with_timeout(f"/markets/{ticker}", timeout_secs=5.0)
                 if not isinstance(data, dict):
                     print(f"[monitor] Invalid market response for {ticker}: {type(data)}")
@@ -2026,10 +2008,6 @@ def portfolio():
                         if ticker in tracked and tracked[ticker].get("status") in ("open", "selling"):
                             tracked[ticker]["status"] = "sold"
                     _save_tracked()
-                    # Record resolution in activity log
-                    _record_activity("resolution", ticker=ticker, side=info.get("side"),
-                                   count=info.get("count"), market_status=mkt_status,
-                                   title=market_title)
                     continue
                 event_ticker = mkt.get("event_ticker", "")
                 market_title = _pretty_title(ticker, _event_title(event_ticker) or mkt.get("title", ticker))
@@ -2975,6 +2953,12 @@ def buy():
     _save_tracked()
     _balance_cache["ts"] = 0  # cash changed — force a fresh balance on next read
 
+    # Record this manual buy in activity log
+    spent = round(contracts * price_c / 100, 2)
+    _record_activity("buy", ticker=ticker, side=side, count=contracts,
+                     price=price_c, spent=spent, profile="manual",
+                     title=title, category=category)
+
     return jsonify({
         "ok":        True,
         "order_id":  order.get("order_id"),
@@ -2982,7 +2966,7 @@ def buy():
         "contracts": contracts,
         "ticker":    ticker,
         "side":      side.upper(),
-        "spent":     round(contracts * price_c / 100, 2),
+        "spent":     spent,
     })
 
 
@@ -3221,7 +3205,7 @@ def pnl_history():
                 cnt = yes_cnt if yes_cnt > 0.001 else no_cnt
                 fee = round(cnt * 0.01, 4) if rev > 0.001 else 0
                 pnl = rev - cost - fee
-                settle_by_time[ts_float] = pnl
+                settle_by_time[ts_float] = settle_by_time.get(ts_float, 0) + pnl
             cursor = data.get("cursor")
             if not cursor: break
             pages += 1
@@ -3475,9 +3459,6 @@ def api_summary():
                 have_profit = True
             sell_proceeds += float(e.get("count") or 0) * float(e.get("price") or 0) / 100
             trades.append(e)
-        elif kind == "resolution":
-            sells += 1  # count resolutions as sells (market auto-closed)
-            trades.append(e)
 
     # newest first for display
     trades.sort(key=lambda x: x.get("ts", 0), reverse=True)
@@ -3495,64 +3476,6 @@ def api_summary():
             "realized_profit": round(realized_profit, 2) if have_profit else None,
         },
         "trades": trades[:500],  # cap payload
-    })
-
-
-@app.route("/api/diagnostic/tracked")
-def api_diagnostic_tracked():
-    """Return current in-memory tracked positions vs saved on disk (for debugging)."""
-    # Compare in-memory vs saved on disk
-    saved_positions = {}
-    try:
-        if TRACKED_FILE.exists():
-            saved_positions = json.loads(TRACKED_FILE.read_text(encoding="utf-8"))
-    except Exception as e:
-        pass
-
-    in_memory_open = [t for t, p in tracked.items() if p.get("status") == "open"]
-    saved_open = [t for t, p in saved_positions.items() if p.get("status") == "open"]
-    mismatch = list(set(in_memory_open) - set(saved_open))
-
-    return jsonify({
-        "in_memory_total": len(tracked),
-        "in_memory_open_count": len(in_memory_open),
-        "in_memory_open_sample": in_memory_open[:10],
-        "saved_total": len(saved_positions),
-        "saved_open_count": len(saved_open),
-        "NOT_SAVED_count": len(mismatch),
-        "NOT_SAVED_tickers": mismatch[:10],
-        "sample_inmemory": next(((t, p) for t, p in tracked.items() if p.get("status") == "open"), None),
-    })
-
-
-@app.route("/api/diagnostic/activity")
-def api_diagnostic_activity():
-    """Return activity log statistics (buys, sells, scans)."""
-    # Read all activity from log
-    events = _read_activity(0)  # all events since epoch
-
-    buys = [e for e in events if e.get("kind") == "buy"]
-    sells = [e for e in events if e.get("kind") == "sell"]
-    scans = [e for e in events if e.get("kind") == "scan"]
-
-    # Count by time window
-    now = time.time()
-    last_hour = [e for e in events if e.get("ts", 0) >= now - 3600]
-    last_day = [e for e in events if e.get("ts", 0) >= now - 86400]
-
-    return jsonify({
-        "total_buys": len(buys),
-        "total_sells": len(sells),
-        "total_scans": len(scans),
-        "buys_last_hour": len([e for e in buys if e.get("ts", 0) >= now - 3600]),
-        "sells_last_hour": len([e for e in sells if e.get("ts", 0) >= now - 3600]),
-        "buys_last_24h": len([e for e in buys if e.get("ts", 0) >= now - 86400]),
-        "sells_last_24h": len([e for e in sells if e.get("ts", 0) >= now - 86400]),
-        "scans_last_24h": len([e for e in scans if e.get("ts", 0) >= now - 86400]),
-        "activity_log_file": str(ACTIVITY_LOG),
-        "activity_log_exists": ACTIVITY_LOG.exists(),
-        "sample_buy": buys[-1] if buys else None,
-        "sample_sell": sells[-1] if sells else None,
     })
 
 
@@ -4141,31 +4064,6 @@ def bot_stop():
     return jsonify({"ok": True, "status": "stopped"})
 
 
-@app.route("/api/polybot/restart", methods=["POST"])
-def restart_polybot():
-    """Restart the PolyBot manager (starts PolyBot if it's down)."""
-    import subprocess
-    try:
-        # Change to PolyBot directory and start the manager
-        polybot_dir = Path(HERE.parent) / "polybot"
-        if not polybot_dir.exists():
-            return jsonify({"error": "PolyBot directory not found", "path": str(polybot_dir)}), 404
-
-        # Start PolyBot manager in background
-        subprocess.Popen(
-            ["python", "KalshiBot_manager.py"],
-            cwd=str(polybot_dir),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0
-        )
-        _log("[api] PolyBot restart triggered")
-        return jsonify({"ok": True, "message": "PolyBot manager started"}), 200
-    except Exception as e:
-        _log(f"[api] PolyBot restart failed: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
 @app.route("/api/apilog", methods=["GET"])
 def api_log():
     """Recent OUTBOUND Kalshi API calls + a 60s summary, for the API Log tab so you
@@ -4248,43 +4146,6 @@ def _print_banner():
     print(f"╚{bar}╝")
 
 
-@app.route("/api/start/polybot", methods=["POST"])
-def start_polybot_cmd():
-    """Start PolyBot by executing cmd command on Windows."""
-    import subprocess
-    try:
-        polybot_dir = Path(HERE.parent) / "polybot"
-        if not polybot_dir.exists():
-            return jsonify({"error": f"PolyBot directory not found: {polybot_dir}"}), 404
-
-        app_file = polybot_dir / "app.py"
-        if not app_file.exists():
-            return jsonify({"error": f"PolyBot app.py not found: {app_file}"}), 404
-
-        # Windows: start in new cmd window
-        if sys.platform == "win32":
-            subprocess.Popen(
-                [sys.executable, "app.py"],
-                cwd=str(polybot_dir),
-                creationflags=subprocess.CREATE_NEW_CONSOLE
-            )
-            _log("[api] Started PolyBot via cmd")
-            return jsonify({"ok": True, "message": "PolyBot started in new window"}), 200
-        else:
-            # Linux/Mac: just run in background
-            subprocess.Popen(
-                ["python", "app.py"],
-                cwd=str(polybot_dir),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-            _log("[api] Started PolyBot")
-            return jsonify({"ok": True, "message": "PolyBot started"}), 200
-    except Exception as e:
-        _log(f"[api] Failed to start PolyBot: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
 if __name__ == "__main__":
     _print_banner()
     if _already_running(FLASK_PORT):
@@ -4310,27 +4171,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n⚠️  WARNING: Cannot reach Kalshi API: {e}")
         print("Bot will start, but will be unable to trade until the connection is restored.\n")
-
-    # Start PolyBot silently in background if available
-    polybot_dir = Path(HERE.parent) / "polybot"
-    if polybot_dir.exists() and (polybot_dir / "app.py").exists():
-        try:
-            if sys.platform == "win32":
-                subprocess.Popen(
-                    [sys.executable, "app.py"],
-                    cwd=str(polybot_dir),
-                    creationflags=subprocess.CREATE_NO_WINDOW
-                )
-            else:
-                subprocess.Popen(
-                    [sys.executable, "app.py"],
-                    cwd=str(polybot_dir),
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL
-                )
-            print("✓ PolyBot started")
-        except Exception as e:
-            print(f"⚠️  Could not start PolyBot: {e}")
 
     # threaded=True is critical: the scan loop and slow Kalshi API calls can each
     # tie up a worker for seconds at a time. Single-threaded (the Werkzeug default)

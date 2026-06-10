@@ -5138,9 +5138,10 @@ function controlBot(action) {
   const statusEl = document.getElementById("botStatus");
   if (!statusEl) return;
 
+  const mgrPort = (parseInt(location.port || "5003") + 100);
   const managerUrl = window.location.hostname === "localhost"
-    ? `http://localhost:5100/api/manager/${action}`
-    : `http://${window.location.hostname}:5100/api/manager/${action}`;
+    ? `http://localhost:${mgrPort}/api/manager/${action}`
+    : `http://${window.location.hostname}:${mgrPort}/api/manager/${action}`;
 
   statusEl.textContent = "Status: sending...";
 
@@ -5160,9 +5161,10 @@ function checkBotStatus() {
   const statusEl = document.getElementById("botStatus");
   if (!statusEl) return;
 
+  const mgrPort = (parseInt(location.port || "5003") + 100);
   const managerUrl = window.location.hostname === "localhost"
-    ? "http://localhost:5100/api/manager/status"
-    : `http://${window.location.hostname}:5100/api/manager/status`;
+    ? `http://localhost:${mgrPort}/api/manager/status`
+    : `http://${window.location.hostname}:${mgrPort}/api/manager/status`;
 
   fetch(managerUrl)
     .then(r => r.json())
@@ -5198,9 +5200,10 @@ function updateBotControlBar() {
   const centerStatus = document.getElementById("botStatusCenter");
   if (!btn || !status) return;
 
+  const mgrPort = (parseInt(location.port || "5003") + 100);
   const managerUrl = window.location.hostname === "localhost"
-    ? "http://localhost:5100/api/manager/status"
-    : `http://${window.location.hostname}:5100/api/manager/status`;
+    ? `http://localhost:${mgrPort}/api/manager/status`
+    : `http://${window.location.hostname}:${mgrPort}/api/manager/status`;
 
   fetch(managerUrl)
     .then(r => r.json())
@@ -5948,7 +5951,7 @@ async function loadStats() {
           <td class="${row.wins > 0 ? "pos" : "neu"}">${row.wins}</td>
           <td class="${row.losses > 0 ? "neg" : "neu"}">${row.losses}</td>
           <td style="color:#aaa">${row.win_rate != null ? row.win_rate + "%" : "—"}</td>
-          <td class="${row.total_pnl > 0 ? "pos" : row.total_pnl < 0 ? "neg" : "neu"}" style="font-weight:600">${row.total_pnl >= 0 ? "+" : ""}$${row.total_pnl.toFixed(2)}</td>
+          <td class="${(row.total_pnl ?? 0) > 0 ? "pos" : (row.total_pnl ?? 0) < 0 ? "neg" : "neu"}" style="font-weight:600">${(row.total_pnl ?? 0) >= 0 ? "+" : ""}$${(row.total_pnl ?? 0).toFixed(2)}</td>
         </tr>`).join("");
       el.innerHTML = `
         <div class="tbl-wrap"><table>
