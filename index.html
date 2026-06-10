@@ -4106,10 +4106,25 @@ async function updateAndRestart() {
 
     setTimeout(() => location.reload(true), 4000);
   } catch(e) {
-    alert("Couldn't reach the manager on port " + mgrPort + ".\n\n" +
-          "Make sure kalshi-manager.py is running (not just app.py), and that port " +
-          mgrPort + " is open in the firewall.\n\nError: " + e.message);
-    if (btn) { btn.disabled = false; btn.textContent = "⟳ Update"; }
+    // Manager not running — fall back to the app's built-in self-updater
+    // (git pull + restart inside app.py itself), so Update works without
+    // kalshi-manager.py.
+    try {
+      const r2 = await fetch("/api/self-update", { method: "POST" });
+      const d2 = await r2.json().catch(() => ({}));
+      if (!r2.ok || !d2.ok) throw new Error(d2.git_error || d2.error || ("HTTP " + r2.status));
+      const gitMsg2 = (d2.git || "").split("\n").slice(-4).join("\n");
+      alert((d2.git_ok === false ? "⚠️ git pull had issues:\n\n" : "✅ Updated & restarting KalshiBot:\n\n") +
+            (gitMsg2 || "(no git output)") +
+            "\n\n(Manager not running — used the app's built-in updater. PolyBot was NOT restarted.)");
+      setTimeout(() => location.reload(true), 6000);
+      return;
+    } catch(e2) {
+      alert("Couldn't reach the manager on port " + mgrPort + " OR the app's built-in updater.\n\n" +
+            "Manager error: " + e.message + "\nApp updater error: " + e2.message + "\n\n" +
+            "Make sure app.py is running, or start kalshi-manager.py for full manager features.");
+      if (btn) { btn.disabled = false; btn.textContent = "⟳ Update"; }
+    }
   }
 }
 

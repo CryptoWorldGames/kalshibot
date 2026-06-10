@@ -4291,6 +4291,45 @@ def restart_bot():
     return jsonify(data), status
 
 
+def _self_restart():
+    """Spawn a fresh copy of this app (running the just-pulled code), then exit.
+    Runs on a short delay from a background thread so the HTTP response that
+    triggered the restart gets flushed to the browser first. Uses Popen+exit
+    instead of os.execv because execv on Windows mangles paths with spaces
+    (e.g. OneDrive folders)."""
+    time.sleep(1.5)
+    try:
+        _save_tracked()
+    except Exception:
+        pass
+    print("[update] restarting on new code…")
+    import subprocess
+    script = os.path.abspath(sys.argv[0])
+    subprocess.Popen([sys.executable, script] + sys.argv[1:], cwd=str(HERE))
+    os._exit(0)
+
+
+@app.route("/api/self-update", methods=["POST"])
+@require_auth
+def self_update():
+    """Fallback updater for when kalshi-manager.py isn't running: git-pull THIS
+    repo, then restart this process on the new code. The Update button tries the
+    manager first and falls back here, so updating works with app.py alone."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["git", "pull", "origin", "main"],
+            cwd=str(HERE), capture_output=True, text=True, timeout=60,
+        )
+        git_ok = result.returncode == 0
+        git_out = (result.stdout + "\n" + result.stderr).strip()
+    except Exception as e:
+        return jsonify({"ok": False, "git_ok": False, "git_error": str(e)}), 500
+
+    threading.Thread(target=_self_restart, daemon=True).start()
+    return jsonify({"ok": True, "git_ok": git_ok, "git": git_out, "restarting": True})
+
+
 @app.route("/api/apilog", methods=["GET"])
 def api_log():
     """Recent OUTBOUND Kalshi API calls + a 60s summary, for the API Log tab so you
