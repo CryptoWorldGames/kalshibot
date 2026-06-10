@@ -50,6 +50,29 @@ BASE_URL = "https://api.elections.kalshi.com"
 API_PREFIX = "/trade-api/v2"
 FLASK_PORT = int(os.getenv("KALSHI_BOT_PORT", "5003"))
 
+# Auth token for protecting money-moving endpoints (/api/buy, /api/sell, /api/bot/start, etc.)
+# Generate a token: python -c "import secrets; print(secrets.token_urlsafe(32))"
+# Set KALSHI_AUTH_TOKEN in .env or environment. If not set, auth is disabled (open access).
+AUTH_TOKEN = os.getenv("KALSHI_AUTH_TOKEN", None)
+AUTH_ENABLED = AUTH_TOKEN is not None
+
+def require_auth(f):
+    """Decorator: check Authorization: Bearer <token> header on protected endpoints."""
+    from functools import wraps
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not AUTH_ENABLED:
+            return f(*args, **kwargs)  # Auth disabled, allow all
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return jsonify({"error": "Unauthorized: missing or invalid Authorization header"}), 401
+        token = auth_header[7:]  # Strip "Bearer "
+        if token != AUTH_TOKEN:
+            return jsonify({"error": "Unauthorized: invalid token"}), 403
+        return f(*args, **kwargs)
+    return decorated_function
+
+
 # Bot identity — shown in the terminal banner/title and the web UI header so you
 # always know which build is running. Bump BOT_VERSION when you ship changes.
 BOT_NAME = "KalshiBot"
@@ -1654,11 +1677,13 @@ def serve_icons(filename):
 
 
 @app.route("/api/debug")
+@require_auth
 def debug():
     data = kalshi_get("/markets", {"status": "open", "limit": 3})
     return jsonify(data.get("markets", []))
 
 @app.route("/api/debug/balance")
+@require_auth
 def debug_balance():
     # Cached raw balance (shared cache; same shape the /mobile page expects).
     b = _get_balance()
@@ -1678,6 +1703,7 @@ def show_public_key():
 
 
 @app.route("/api/auth-test")
+@require_auth
 def auth_test():
     endpoint = "/portfolio/balance"
     full_path = API_PREFIX + endpoint
@@ -2266,6 +2292,7 @@ def _recent_settlements(hours: int = 24) -> list:
 
 
 @app.route("/api/debug_positions")
+@require_auth
 def debug_positions():
     out = {}
     probes = [
@@ -2287,6 +2314,7 @@ def debug_positions():
 
 
 @app.route("/api/debug_events")
+@require_auth
 def debug_events():
     """Return first page of /events so we can see the structure and event_tickers."""
     try:
@@ -2311,6 +2339,7 @@ def debug_events():
 
 
 @app.route("/api/debug_series")
+@require_auth
 def debug_series():
     """List all series + test timestamp-filtered market query."""
     result = {}
@@ -2368,6 +2397,7 @@ def debug_series():
 
 
 @app.route("/api/debug_scan")
+@require_auth
 def debug_scan():
     """Combined debug: 60-min market window + series probe + timestamp filter test."""
     now    = datetime.now(timezone.utc)
@@ -2860,6 +2890,7 @@ def scan():
 
 
 @app.route("/api/buy", methods=["POST"])
+@require_auth
 def buy():
     data     = request.get_json(silent=True) or {}
     ticker   = data.get("ticker", "")
@@ -2982,6 +3013,7 @@ def buy():
 
 
 @app.route("/api/sell", methods=["POST"])
+@require_auth
 def sell():
     data    = request.get_json(silent=True) or {}
     ticker  = data.get("ticker", "")
@@ -4107,6 +4139,7 @@ def coach():
 # ---------------------------------------------------------------------------
 
 @app.route("/api/bot/start", methods=["POST"])
+@require_auth
 def bot_start():
     """Start the headless auto-trading loop."""
     global _bot_running, _bot_start_time
@@ -4121,6 +4154,7 @@ def bot_start():
 
 
 @app.route("/api/bot/stop", methods=["POST"])
+@require_auth
 def bot_stop():
     """Stop the headless auto-trading loop gracefully."""
     global _bot_running
