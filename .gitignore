@@ -23,6 +23,7 @@ build/
 bot_positions.json
 bot_strategy.json
 bot_config.json
+activity.jsonl
 activity_log.jsonl
 scan_log.jsonl
 portfolio_snapshots.json

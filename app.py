@@ -1058,26 +1058,22 @@ def _monitor():
             _log(f"[monitor] Checking {len(tickers)} tracked positions for sell conditions")
 
         for ticker in tickers:
-            with _lock:
-                pos = tracked.get(ticker)
-                if not pos or pos.get("status") not in ("open", "selling"):
-                    _log(f"[monitor] {ticker}: skipped (status={pos.get('status') if pos else 'None'})")
-                    continue
-                # Already past its close time — stop probing it every cycle. This was
-                # the source of endless "holding to resolution" log spam plus a wasted
-                # /markets call per cycle for every expired position (which, with a big
-                # tracked file, monopolised the rate-limited API and starved scan/buy).
-                if pos.get("expired"):
-                    _log(f"[monitor] {ticker}: skipped (expired)")
-                    continue
-                # Skip only if no profit target exists at all (per-position or global)
-                has_pct_target = pos.get("strategy") == "profit" or sell_strategy.get("mode") == "profit"
-                has_dol_target = pos.get("target_dollars") is not None or sell_strategy.get("target_dollars") is not None
-                if not has_pct_target and not has_dol_target:
-                    _log(f"[monitor] {ticker}: skipped (no sell targets: strategy={pos.get('strategy')}, targets={has_pct_target}/{has_dol_target})")
-                    continue
-
             try:
+                with _lock:
+                    pos = tracked.get(ticker)
+                    if not pos or pos.get("status") not in ("open", "selling"):
+                        continue
+                    # Already past its close time — stop probing it every cycle. This was
+                    # the source of endless "holding to resolution" log spam plus a wasted
+                    # /markets call per cycle for every expired position (which, with a big
+                    # tracked file, monopolised the rate-limited API and starved scan/buy).
+                    if pos.get("expired"):
+                        continue
+                    # Skip only if no profit target exists at all (per-position or global)
+                    has_pct_target = pos.get("strategy") == "profit" or sell_strategy.get("mode") == "profit"
+                    has_dol_target = pos.get("target_dollars") is not None or sell_strategy.get("target_dollars") is not None
+                    if not has_pct_target and not has_dol_target:
+                        continue
                 data = _kalshi_get_with_timeout(f"/markets/{ticker}", timeout_secs=5.0)
                 if not isinstance(data, dict):
                     print(f"[monitor] Invalid market response for {ticker}: {type(data)}")
@@ -3001,6 +2997,12 @@ def buy():
     _save_tracked()
     _balance_cache["ts"] = 0  # cash changed — force a fresh balance on next read
 
+    # Record this manual buy in activity log
+    spent = round(contracts * price_c / 100, 2)
+    _record_activity("buy", ticker=ticker, side=side, count=contracts,
+                     price=price_c, spent=spent, profile="manual",
+                     title=title, category=category)
+
     return jsonify({
         "ok":        True,
         "order_id":  order.get("order_id"),
@@ -3008,7 +3010,7 @@ def buy():
         "contracts": contracts,
         "ticker":    ticker,
         "side":      side.upper(),
-        "spent":     round(contracts * price_c / 100, 2),
+        "spent":     spent,
     })
 
 
@@ -3248,7 +3250,7 @@ def pnl_history():
                 cnt = yes_cnt if yes_cnt > 0.001 else no_cnt
                 fee = round(cnt * 0.01, 4) if rev > 0.001 else 0
                 pnl = rev - cost - fee
-                settle_by_time[ts_float] = pnl
+                settle_by_time[ts_float] = settle_by_time.get(ts_float, 0) + pnl
             cursor = data.get("cursor")
             if not cursor: break
             pages += 1

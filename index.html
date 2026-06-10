@@ -8,6 +8,7 @@
 <!-- PWA: installable app (icon + standalone window) -->
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0a0a0a">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="KalshiBot">
@@ -18,6 +19,18 @@
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     });
   }
+
+  // Suppress transient connection errors during Flask restarts
+  // (ERR_CONNECTION_RESET, ERR_NETWORK_CHANGED, etc. are expected and retried)
+  const originalError = console.error;
+  console.error = function(...args) {
+    const msg = String(args[0] || "");
+    // Suppress network errors that are being retried (transient)
+    if (msg.includes("ERR_CONNECTION") || msg.includes("ERR_NETWORK") || msg.includes("net::")) {
+      return; // silently ignore transient network errors
+    }
+    return originalError.apply(console, args);
+  };
 </script>
 <style>
 :root {
@@ -465,7 +478,10 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 
 <!-- ── NAV ──────────────────────────────────────────────────────── -->
 <nav>
-  <span class="nav-logo">Kalshi<span>Bot</span><span id="navVersion" style="font-size:10px;color:#888;font-weight:600;margin-left:5px;letter-spacing:0">v—</span></span>
+  <div style="display:flex;flex-direction:column;gap:2px;margin-right:32px">
+    <span class="nav-logo">Kalshi<span>Bot</span></span>
+    <span id="navVersion" style="font-size:14px;color:#fff;font-weight:700;letter-spacing:0">v—</span>
+  </div>
   <div class="nav-funds">
     <div class="fund-block">
       <span class="fund-amount" id="navCash">—</span>
@@ -484,9 +500,8 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   <div style="display:flex;align-items:center;gap:12px;font-size:13px;color:var(--muted);margin:0 12px">
     <span id="botStatusEl" style="font-weight:600;white-space:nowrap">🔴 Stopped</span>
   </div>
-  <button onclick="window.location.href=`${location.protocol}//${location.hostname}:5003`" style="background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--green);font-size:13px;font-weight:700;cursor:pointer;padding:6px 12px;margin-left:auto;transition:all .2s;white-space:nowrap" title="Go to KalshiBot dashboard">🎯 KalshiBot</button>
-  <button onclick="window.location.href=`${location.protocol}//${location.hostname}:5005`" style="background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;padding:6px 12px;margin-left:6px;transition:all .2s;white-space:nowrap" title="Go to PolyBot dashboard">🎲 PolyBot</button>
-  <button id="snoozeBtn" onclick="toggleVoiceSnooze()" style="background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;padding:6px 12px;margin-left:6px;transition:all .2s;white-space:nowrap" title="Mute the voice announcements for the snooze period (set the duration in Settings)">🔔 Snooze</button>
+  <button id="snoozeBtn" onclick="toggleVoiceSnooze()" style="background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;padding:6px 12px;margin-left:auto;transition:all .2s;white-space:nowrap" title="Mute the voice announcements for the snooze period (set the duration in Settings)">🔔 Snooze</button>
+  <button id="startPolyBtn" onclick="startPolyBot()" style="background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;padding:6px 12px;margin-left:6px;transition:all .2s;white-space:nowrap" title="Start PolyBot or open its dashboard">▶️ PolyBot</button>
   <button id="updateBtn" onclick="updateAndRestart()" style="transition:all .2s;white-space:nowrap;cursor:pointer" title="Pull the latest code from GitHub and restart the bot — deploy updates from any device, no desktop access needed">⟳ Update</button>
   <button id="restartPolyBtn" onclick="restartPolyBot()" style="transition:all .2s;white-space:nowrap;cursor:pointer;background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:13px;font-weight:700;padding:6px 12px;margin-left:6px" title="Restart PolyBot via git version trigger">🔄 PolyBot</button>
   <button onclick="document.getElementById('settingsModal').classList.toggle('open')" style="background:transparent;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:8px 12px;margin-left:6px;transition:color .2s" title="Settings">⚙️</button>
@@ -736,6 +751,12 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
         <button class="pill" onclick="setTime(43200,'1mo')">1mo</button>
         <button class="pill" onclick="setTime(525600,'Show all')">Show all</button>
       </div>
+      <div style="margin-top:10px;display:flex;gap:6px;align-items:center">
+        <input type="number" id="customMinutes" placeholder="0.25–5" min="0.25" max="5" step="0.25" style="flex:0 0 80px;padding:6px;font-size:12px;background:#1a1f26;color:#fff;border:1px solid var(--border);border-radius:4px;text-align:center;font-weight:600" oninput="document.getElementById('customMinutes').style.background='#1a1f26';document.getElementById('customMinutes').style.color='#fff'">
+        <span style="color:#888;font-size:12px">min</span>
+        <button class="pill" onclick="setCustomMinutes()" style="padding:6px 14px;font-size:12px;background:var(--green);color:#000;font-weight:600">Set</button>
+        <span id="customMinutesStatus" style="color:var(--green);font-size:12px;font-weight:600;min-width:60px"></span>
+      </div>
       </div>
     </div>
   </div>
@@ -953,6 +974,46 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     </div>
   </div>
 
+  <!-- AUTO MODE (T2) — identical to Scanner -->
+  <div class="card" style="margin-bottom:10px">
+    <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:12px">⚙️ AUTO MODE — scans + auto-buys</div>
+    <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+      <label class="radio-pill" id="L_rpTime" onclick="setLottoRunMode('time')"><input type="radio" name="L_runMode" value="time">
+        Run for minutes
+      </label>
+      <label class="radio-pill" id="L_rpBuys" onclick="setLottoRunMode('buys')"><input type="radio" name="L_runMode" value="buys">
+        Stop after X buys
+      </label>
+      <label class="radio-pill active" id="L_rpForever" onclick="setLottoRunMode('forever')"><input type="radio" name="L_runMode" value="forever" checked>
+        Until stopped
+      </label>
+    </div>
+    <!-- Buys picker — shown when "Stop after X buys" is selected -->
+    <div id="L_buysPickerWrap" style="margin-bottom:10px;display:none;align-items:center;gap:6px;flex-wrap:wrap">
+      <span style="font-size:13px;color:#aaa">Stop after how many buys:</span>
+      <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setLottoAutoBuys(1)">1</button>
+      <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setLottoAutoBuys(3)">3</button>
+      <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setLottoAutoBuys(5)">5</button>
+      <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setLottoAutoBuys(10)">10</button>
+      <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setLottoAutoBuys(20)">20</button>
+      <input type="number" id="L_autoBuysMax" value="10" min="1" style="width:70px" oninput="pushLottoSettings()">
+      <span style="font-size:13px;color:#aaa">buys then stop</span>
+    </div>
+
+    <!-- Minutes picker — shown when "Run for minutes" is selected -->
+    <div id="L_minsPickerWrap" style="margin-bottom:10px;display:none;align-items:center;gap:6px;flex-wrap:wrap">
+      <span style="font-size:13px;color:#aaa">How many minutes:</span>
+      <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setLottoAutoMins(5)">5</button>
+      <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setLottoAutoMins(15)">15</button>
+      <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setLottoAutoMins(30)">30</button>
+      <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setLottoAutoMins(60)">1h</button>
+      <button class="sm ghost" style="padding:4px 10px;font-size:12px" onclick="setLottoAutoMins(120)">2h</button>
+      <input type="number" id="L_autoMins" value="30" min="1" style="width:70px" oninput="updateLottoMinsHint();pushLottoSettings()">
+      <span style="font-size:13px;color:#aaa">min</span>
+      <span id="L_autoMinsHint" style="font-size:11px;color:#888"></span>
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-title">🎟️ Lotto Bot Settings (T2)</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:14px">A second, independent bot. Set it up however you like — it only trades when its switch above is <b>ON</b> (it can run at the same time as the Scanner bot). Changes save automatically.</div>
@@ -962,24 +1023,38 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
       <!-- BUY UP -->
       <div style="flex:1;border:1px solid var(--border);border-radius:8px;padding:12px">
         <label class="check-row" style="font-weight:700;color:var(--green);display:block;margin-bottom:8px"><input type="checkbox" id="L_enableBuyUp" checked onchange="pushLottoSettings()"> 📈 BUY UP (YES)</label>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
           <span style="font-size:12px;color:var(--muted)">From</span>
           <input type="number" id="L_minProb" min="1" max="99" value="1" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
           <span style="font-size:12px;color:var(--muted)">to</span>
           <input type="number" id="L_maxProb" min="1" max="99" value="15" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
           <span style="font-size:12px;color:var(--muted)">¢</span>
         </div>
+        <div style="display:flex;gap:3px;flex-wrap:wrap">
+          <button type="button" class="sm ghost" style="padding:4px 8px;font-size:11px;background:var(--blue);color:#000;font-weight:600" onclick="L_minProb.value='1';L_maxProb.value='10';pushLottoSettings()">1-10¢</button>
+          <button type="button" class="sm ghost" style="padding:4px 8px;font-size:11px;background:var(--blue);color:#000;font-weight:600" onclick="L_minProb.value='1';L_maxProb.value='15';pushLottoSettings()">1-15¢</button>
+          <button type="button" class="sm ghost" style="padding:4px 8px;font-size:11px;background:var(--blue);color:#000;font-weight:600" onclick="L_minProb.value='1';L_maxProb.value='20';pushLottoSettings()">1-20¢</button>
+          <button type="button" class="sm ghost" style="padding:4px 8px;font-size:11px;background:var(--blue);color:#000;font-weight:600" onclick="L_minProb.value='1';L_maxProb.value='25';pushLottoSettings()">1-25¢</button>
+          <button type="button" class="sm ghost" style="padding:4px 8px;font-size:11px;background:var(--blue);color:#000;font-weight:600" onclick="L_minProb.value='1';L_maxProb.value='50';pushLottoSettings()">1-50¢</button>
+        </div>
       </div>
 
       <!-- BUY DOWN -->
       <div style="flex:1;border:1px solid var(--border);border-radius:8px;padding:12px">
         <label class="check-row" style="font-weight:700;color:var(--red);display:block;margin-bottom:8px"><input type="checkbox" id="L_enableBuyDown" onchange="pushLottoSettings()"> 📉 BUY DOWN (NO)</label>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
           <span style="font-size:12px;color:var(--muted)">From</span>
           <input type="number" id="L_minProbDown" min="1" max="99" value="1" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
           <span style="font-size:12px;color:var(--muted)">to</span>
           <input type="number" id="L_maxProbDown" min="1" max="99" value="15" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
           <span style="font-size:12px;color:var(--muted)">¢</span>
+        </div>
+        <div style="display:flex;gap:3px;flex-wrap:wrap">
+          <button type="button" class="sm ghost" style="padding:4px 8px;font-size:11px;background:var(--blue);color:#000;font-weight:600" onclick="L_minProbDown.value='1';L_maxProbDown.value='10';pushLottoSettings()">1-10¢</button>
+          <button type="button" class="sm ghost" style="padding:4px 8px;font-size:11px;background:var(--blue);color:#000;font-weight:600" onclick="L_minProbDown.value='1';L_maxProbDown.value='15';pushLottoSettings()">1-15¢</button>
+          <button type="button" class="sm ghost" style="padding:4px 8px;font-size:11px;background:var(--blue);color:#000;font-weight:600" onclick="L_minProbDown.value='1';L_maxProbDown.value='20';pushLottoSettings()">1-20¢</button>
+          <button type="button" class="sm ghost" style="padding:4px 8px;font-size:11px;background:var(--blue);color:#000;font-weight:600" onclick="L_minProbDown.value='1';L_maxProbDown.value='25';pushLottoSettings()">1-25¢</button>
+          <button type="button" class="sm ghost" style="padding:4px 8px;font-size:11px;background:var(--blue);color:#000;font-weight:600" onclick="L_minProbDown.value='1';L_maxProbDown.value='50';pushLottoSettings()">1-50¢</button>
         </div>
       </div>
     </div>
@@ -1399,6 +1474,13 @@ let scanInProgress     = false;
 let selectedPosTickers = new Set();
 let selectedMarkets    = new Set();
 
+// ── Pagination state ─────────────────────────────────────────────────────
+let summaryPage = 0;      // Current page in summary trades
+let posPage = 0;          // Current page in positions
+let lottoLivePage = 0;    // Current page in lotto live bets
+let lottoHistPage = 0;    // Current page in lotto history
+let lottoCentPage = 0;    // Current page in lotto cent table
+
 // ── PnL tracking ─────────────────────────────────────────────────────────
 
 const PNL_PERIODS = ["1h","4h","6h","12h","24h","7d","30d"];
@@ -1411,9 +1493,12 @@ function refreshPnlDisplay() {
   const wrap = document.getElementById("navPnlAll");
   if (!wrap) return;
   wrap.innerHTML = PNL_PERIODS.map(period => {
-    const past = pnlPastValues[period];
-    if (past == null) return `<div class="fund-block"><span class="fund-amount" style="color:#444;font-size:14px">—</span><span class="fund-label">P&L ${period}</span></div>`;
-    const pnl   = pnlCurrentTotal - past;
+    // The backend already returns the realized P&L FOR each window (e.g. "1h" =
+    // settlements in the last hour). Display it directly — do NOT subtract it from
+    // the all-time total (that old math showed ~all-time total in every cell, e.g.
+    // "-$830 in 1H" on a $50 account).
+    const pnl = pnlPastValues[period];
+    if (pnl == null) return `<div class="fund-block"><span class="fund-amount" style="color:#444;font-size:14px">—</span><span class="fund-label">P&L ${period}</span></div>`;
     const color = pnl > 0.005 ? "var(--green)" : pnl < -0.005 ? "var(--red)" : "#888";
     const sign  = pnl >= 0 ? "+" : "-";
     return `<div class="fund-block"><span class="fund-amount" style="color:${color};font-size:14px">${sign}$${Math.abs(pnl).toFixed(2)}</span><span class="fund-label">P&L ${period}</span></div>`;
@@ -1675,7 +1760,7 @@ async function loadBalance(enrich=true) {
           const profit = cur != null ? qty * (cur - p.buy_price) / 100 : null;
           if (profit != null) {
             const totalReceived = cur != null ? qty * cur / 100 : null;
-            setTimeout(() => announceSell(qty, profit, cur, totalReceived, p.category), announceDelay);
+            setTimeout(() => announceSell(qty, profit, cur, totalReceived, p.category, p.ticker), announceDelay);
             announceDelay += 4000;  // 4 seconds between announcements to prevent overlapping voices
           }
           // Determine if this was a bot auto-sell or market resolution
@@ -1766,7 +1851,7 @@ async function checkRecentBuys() {
     const d = await r.json();
     if (d.buys && d.buys.length > 0) {
       for (const buy of d.buys) {
-        announceBuy(buy.count, buy.spent * 100 / buy.count, buy.spent, buy.category);
+        announceBuy(buy.count, buy.spent * 100 / buy.count, buy.spent, buy.category, buy.ticker);
       }
     }
   } catch(e) {
@@ -1814,6 +1899,7 @@ async function loadPositionsFast() {
       if (!p.category    && q.category)    p.category    = q.category;
       if (!p.close_time  && q.close_time)  p.close_time  = q.close_time;
       if (!p.event_ticker && q.event_ticker) p.event_ticker = q.event_ticker;
+      if (!p.buy_price && q.buy_price != null) p.buy_price = q.buy_price;  // Preserve cost basis for P&L calc
     });
     // Anti-blank guard: don't wipe a good list if a starved fetch returns empty.
     if (!((d.positions_ok === false) && np.length === 0 && (window._lastApiPositions || []).length > 0)) {
@@ -2122,7 +2208,7 @@ window.addEventListener("load", () => {
   // Keep the Start/Stop button + banner PERMANENTLY in sync with the real backend
   // bot state — poll every 3s no matter what. Without this the button drifts and
   // shows "Start Bot" while the bot is actually running (then clicking it errors).
-  setInterval(loadBotStatus, 10000);  // reduced from 3s to 10s
+  setInterval(loadBotStatus, 3000);  // Poll every 3 seconds so status updates fast
 
   // Phase 2 (2-5s): Enrich positions with market data
   setTimeout(() => {
@@ -2268,13 +2354,48 @@ function onProbDownInput() {
 // Removed duplicate/broken handlers — HTML already has oninput="onProbInput()" and onProbDownInput()
 
 function setTime(val, label) {
-  selTime = val === "custom" ? parseInt(document.getElementById("timeCustom").value) : val;
+  selTime = val === "custom" ? parseInt(document.getElementById("timeCustom")?.value) : val;
   activatePills("timeGroup", val === "custom" ? "Custom" : (label || val + " min"));
   const c = val === "custom";
-  document.getElementById("timeCustom").style.display      = c ? "inline-block" : "none";
-  document.getElementById("timeCustomLabel").style.display = c ? "inline" : "none";
-  if (c) document.getElementById("timeCustom").oninput = () => { selTime = parseInt(document.getElementById("timeCustom").value) || 15; saveSettings(); };
+  const tcEl = document.getElementById("timeCustom");
+  const tlEl = document.getElementById("timeCustomLabel");
+  if (tcEl) tcEl.style.display = c ? "inline-block" : "none";
+  if (tlEl) tlEl.style.display = c ? "inline" : "none";
+  if (c && tcEl) tcEl.oninput = () => { selTime = parseInt(tcEl.value) || 15; saveSettings(); };
   saveSettings();
+
+  // If we're on the Summary tab, also update _summaryMins and reload
+  if (document.getElementById("summaryCards")) {
+    _summaryMins = selTime;
+    localStorage.setItem("summaryMins", _summaryMins);
+    loadSummary();  // Reload summary with new time window
+  }
+}
+
+function setCustomMinutes() {
+  const customInput = document.getElementById("customMinutes");
+  const statusEl = document.getElementById("customMinutesStatus");
+  const value = parseFloat(customInput?.value);
+  if (!value || value < 0.25 || value > 5) {
+    if (statusEl) statusEl.textContent = "Invalid";
+    statusEl.style.color = "var(--red)";
+    customInput.style.background = "#1a1f26";
+    customInput.style.color = "#fff";
+    return;
+  }
+  selTime = value;
+  activatePills("timeGroup", `${value} min`);
+  saveSettings();
+  // Show visual feedback - turn input green
+  customInput.style.background = "var(--green)";
+  customInput.style.color = "#000";
+  customInput.style.fontWeight = "600";
+  if (statusEl) {
+    statusEl.textContent = "✓ Saved";
+    statusEl.style.color = "var(--green)";
+    setTimeout(() => { statusEl.textContent = ""; }, 1500);
+  }
+  // Keep the value in the box (don't clear it)
 }
 
 function activatePills(groupId, label) {
@@ -2331,7 +2452,10 @@ function setStrategy(mode) {
   saveSettings();
   // pushStrategy() is async, fire-and-forget (don't show toast on radio click)
   pushStrategy().catch(e => {
-    console.error("setStrategy: pushStrategy failed:", e);
+    // Suppress AbortError (expected when navigating away)
+    if (e.name !== "AbortError") {
+      console.error("setStrategy: pushStrategy failed:", e);
+    }
   });
 }
 
@@ -2441,7 +2565,10 @@ async function pushStrategy() {
     console.log(`[pushStrategy] Success! Server saved:`, respData.strategy);
     return respData;
   } catch(e) {
-    console.error(`[pushStrategy] FAILED:`, e.message);
+    // AbortError is expected (tab switch, navigation, timeout) — suppress it
+    if (e.name !== "AbortError") {
+      console.error(`[pushStrategy] FAILED:`, e.message);
+    }
     throw e;  // Re-throw so caller can handle
   }
 }
@@ -2766,6 +2893,42 @@ function updateMinsHint() {
   }
 }
 
+// Lotto (T2) AUTO MODE functions — identical to Scanner
+function setLottoRunMode(mode) {
+  ["L_rpTime","L_rpBuys","L_rpForever"].forEach(id => document.getElementById(id).classList.remove("active"));
+  document.getElementById({time:"L_rpTime",buys:"L_rpBuys",forever:"L_rpForever"}[mode]).classList.add("active");
+  const radio = document.querySelector(`input[name="L_runMode"][value="${mode}"]`);
+  if (radio) radio.checked = true;
+  const minsWrap = document.getElementById("L_minsPickerWrap");
+  const buysWrap = document.getElementById("L_buysPickerWrap");
+  if (minsWrap) minsWrap.style.display = mode === "time" ? "flex" : "none";
+  if (buysWrap) buysWrap.style.display = mode === "buys" ? "flex" : "none";
+  pushLottoSettings();
+}
+
+function setLottoAutoBuys(n) {
+  document.getElementById("L_autoBuysMax").value = n;
+  pushLottoSettings();
+}
+
+function setLottoAutoMins(n) {
+  document.getElementById("L_autoMins").value = n;
+  updateLottoMinsHint();
+  pushLottoSettings();
+}
+
+function updateLottoMinsHint() {
+  const mins = parseInt(document.getElementById("L_autoMins").value) || 0;
+  const el   = document.getElementById("L_autoMinsHint");
+  if (!el) return;
+  if (mins >= 60) {
+    const h = (mins / 60).toFixed(mins % 60 === 0 ? 0 : 1);
+    el.textContent = `(${h}h)`;
+  } else {
+    el.textContent = "";
+  }
+}
+
 function toggleAutoMode() {
   autoModeOn ? stopAutoMode("Stopped manually") : startAutoMode();
 }
@@ -2779,7 +2942,9 @@ async function startAutoMode() {
       // "Already running" is NOT an error — the backend bot is on, so silently
       // adopt that state instead of popping an ugly alert. Only real failures toast.
       const msg = (d.error || "").toLowerCase();
-      if (!(r.status === 409 || msg.includes("already"))) {
+      if (r.status === 409 || msg.includes("already")) {
+        console.log("[bot] already running (409) — silently accepted");
+      } else {
         toast("Bot start failed: " + (d.error || r.status), "err");
         return;
       }
@@ -2914,7 +3079,7 @@ async function buyOne(idx, override=false) {
     msgEl.textContent = `✓ ${d.contracts} contracts · $${d.spent}`;
     msgEl.className = "row-msg ok";
     toast(`✓ Bought ${d.contracts} ${m.side.toUpperCase()} · ${m.title || m.ticker}`, "ok");
-    announceBuy(d.contracts, m.price, parseFloat(d.spent), m.category);
+    announceBuy(d.contracts, m.price, parseFloat(d.spent), m.category, m.ticker);
     // Flash the row green so it's obvious the bot bought it
     const row = document.getElementById(`btn-${idx}`)?.closest("tr");
     if (row) {
@@ -3057,22 +3222,38 @@ async function sellPos(ticker, side, count, safeId) {
     clearTimeout(timeout);
     const d = await r.json();
     if (!r.ok) {
-      // Handle limit order fill failures with retry options
-      if (d.reason === "limit_no_fill" && d.suggest_lower) {
-        const retryPrice = d.suggest_lower;
-        const msg = `No buyers at ${d.tried_price}¢\n\nOptions:\n✓ Retry at ${retryPrice}¢ (±5¢ lower)\n✗ Cancel and hold\n\nRetry at lower price?`;
-        if (confirm(msg)) {
-          // Retry with lower price by re-fetching market and using lower bid
-          console.log(`[sell] Retrying ${ticker} at lower price ${retryPrice}¢`);
-          // Note: Full retry logic would fetch market again and retry
-          // For now, just let the user know to try again after waiting
-          toast(`Try selling again in a few seconds when market updates`, "info");
-          _inFlightSells.delete(sellKey);
-          if (btn) { btn.disabled = false; btn.textContent = "Sell"; }
-          return;
+      // Handle limit order fill failures
+      if (d.reason === "limit_no_fill") {
+        let msg = `No buyers at ${d.tried_price}¢\n\n`;
+
+        if (d.acceptable_market) {
+          // Market order won't exceed 10% loss — offer it
+          const marketProfit = (d.market_price - d.buy_price) * count / 100;
+          const profitOrLoss = d.profit_pct >= 0 ? `+$${marketProfit.toFixed(2)} profit` : `-$${Math.abs(marketProfit).toFixed(2)} loss`;
+          msg += `Market price: ${d.market_price}¢ (${d.profit_pct}% = ${profitOrLoss})\n\n`;
+          msg += `✓ Sell at market (within 10% loss threshold)\n✗ Keep waiting for limit\n\nSell at market?`;
+          if (confirm(msg)) {
+            console.log(`[sell] Market order acceptable (${d.profit_pct}% loss threshold), executing`);
+            _inFlightSells.delete(sellKey);
+            if (btn) { btn.disabled = false; btn.textContent = "Sell"; }
+            toast("Executing market order…", "");
+            await new Promise(r => setTimeout(r, 200));
+            retryMarketSell(ticker, side, count);
+            return;
+          } else {
+            // User wants to wait for limit to fill
+            toast(`Waiting for limit fill. Market would be ${d.profit_pct}% (within threshold).`, "info");
+          }
         } else {
-          throw new Error(d.error || "Sell canceled");
+          // Market order would exceed 10% loss — don't offer it
+          const wouldLose = Math.abs((d.market_price - d.buy_price) * count / 100);
+          msg += `Market price: ${d.market_price}¢ (${d.profit_pct}% loss)\n\n`;
+          msg += `⚠ Market loss exceeds 10% threshold\n\nKeeping position open. Wait for buyers at limit.`;
+          toast(msg, "info");
         }
+        _inFlightSells.delete(sellKey);
+        if (btn) { btn.disabled = false; btn.textContent = "Sell"; }
+        return;
       }
       throw new Error(d.error || "Sell failed");
     }
@@ -3090,7 +3271,7 @@ async function sellPos(ticker, side, count, safeId) {
     if (d.is_filled) {
       toast(`✓ Sold ${count} ${side.toUpperCase()} · ${marketTitle}`, "ok");
       const totalReceived = executedPriceCents != null ? count * executedPriceCents / 100 : null;
-      announceSell(count, soldProfit, executedPriceCents, totalReceived, soldPos?.category);
+      announceSell(count, soldProfit, executedPriceCents, totalReceived, soldPos?.category, soldPos?.ticker);
       addToSaleTicker(marketTitle, soldProfit, side);
     } else {
       // LIMIT order pending - waiting for buyers
@@ -3108,7 +3289,7 @@ async function sellPos(ticker, side, count, safeId) {
     // Check if it's a "no fill" error (no buyers at market price)
     if (errorMsg.includes("no buyers") || errorMsg.includes("no fill")) {
       // Ask user if they want to try a limit order instead
-      const bidPrice = prePos ? (side === "yes" ? prePos.current_yes : prePos.current_no) : null;
+      const bidPrice = side === "yes" ? prePos?.current_yes : prePos?.current_no;
       showOrderTypeDialog(ticker, side, count, prePos, bidPrice);
     } else {
       toast(errorMsg, "err");
@@ -3139,10 +3320,10 @@ function showOrderTypeDialog(ticker, side, count, position, currentBidCents) {
 
   dialog.innerHTML = `
     <div style="font-size: 16px; font-weight: 700; margin-bottom: 12px; color: var(--green)">
-      ⚠ No Buyers at Market Price
+      ⚠ No Buyers at Limit Price
     </div>
     <div style="font-size: 13px; color: #ddd; margin-bottom: 16px; line-height: 1.5">
-      <b>${marketTitle}</b> has no buyers at the current bid (${currentBidCents}¢).<br><br>
+      <b>${marketTitle}</b> LIMIT order failed — no buyers at ${currentBidCents}¢.<br><br>
       What would you like to do?
     </div>
 
@@ -3181,10 +3362,45 @@ function closeOrderDialog() {
 
 async function retryMarketSell(ticker, side, count) {
   closeOrderDialog();
-  toast("Retrying market sell…", "");
-  // Re-trigger the sell (it will try market order again)
-  await new Promise(r => setTimeout(r, 500));
-  sellOne(ticker, side);
+  toast("Executing market sell…", "");
+  // Send MARKET order (no price constraint, best effort execution)
+  const sellKey = `${ticker}:${side}`;
+  _inFlightSells.add(sellKey);
+
+  const btn = document.querySelector(`[data-ticker="${ticker}"][data-side="${side}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = "Selling…"; }
+
+  try {
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 30000);
+    const r = await fetch("/api/sell", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ticker, side, count, order_type: "market"}),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timeout);
+    const d = await r.json();
+
+    if (!r.ok) {
+      toast(`Market order failed: ${d.error}`, "err");
+      return;
+    }
+
+    if (d.is_filled) {
+      toast(`✓ Market sold ${count} ${side.toUpperCase()}`, "ok");
+      const soldProfit = (d.buy_price && d.executed_price_cents)
+        ? count * (d.executed_price_cents - d.buy_price) / 100 : 0;
+      announceSell(count, soldProfit, d.executed_price_cents, null, null, ticker);
+    } else {
+      toast("Market order pending", "info");
+    }
+  } catch(e) {
+    toast(`Market sell error: ${e.message}`, "err");
+  } finally {
+    _inFlightSells.delete(sellKey);
+    if (btn) { btn.disabled = false; btn.textContent = "Sell"; }
+  }
 }
 
 async function placeLimitOrder(ticker, side, count, limitPriceCents) {
@@ -3687,6 +3903,16 @@ function filterPos() {
   return filtered;
 }
 
+function setPosPage(page) {
+  posPage = page;
+  const src  = document.getElementById("posFilterSource")?.value || "";
+  const cat  = document.getElementById("posFilterCat")?.value   || "";
+  const sort = document.getElementById("posSort")?.value || "recent";
+  const hideSmall = document.getElementById("hideSmallPositions")?.checked || false;
+  const hide95Loss = document.getElementById("hide95LossPositions")?.checked || false;
+  filterPos(); // This will re-render with new page
+}
+
 function renderPositionsTable(positions) {
   const wrap = document.getElementById("posWrap");
   if (!wrap) return;
@@ -3699,7 +3925,13 @@ function renderPositionsTable(positions) {
     wrap.innerHTML = '<div style="text-align:center;color:var(--muted);padding:24px;font-size:14px">No positions match filter</div>';
     return;
   }
-  const rows = positions.map((p, i) => {
+
+  const pageSize = 25;
+  const pag = paginate(positions, pageSize, posPage);
+  posPage = pag.page;
+
+  const rows = pag.items.map((p, idx) => {
+    const i = pag.start + idx; // Adjust index for pagination
     const qty  = p.quantity ?? 0;
     const side = qty > 0 ? "yes" : "no";
     const abs  = Math.abs(qty);
@@ -3742,8 +3974,8 @@ function renderPositionsTable(positions) {
       const pnlLine  = pnlDol != null
         ? (inProfit ? `+$${pnlDol.toFixed(2)} profit` : inLoss ? `-$${Math.abs(pnlDol).toFixed(2)} loss` : `even`)
         : "";
-      sellBtnHtml = `<button id="${sid}" onclick="sellPos('${safeT}','${side}',${abs},'${sid}')"
-        style="background:${bg};color:${fg};border:none;border-radius:7px;padding:8px 14px;cursor:pointer;font-weight:700;font-size:14px;white-space:nowrap;line-height:1.4;text-align:center">
+      sellBtnHtml = `<button id="${sid}" class="sell-pos-btn" data-ticker="${safeT}" data-side="${side}" data-qty="${abs}" onclick="sellPos('${safeT}','${side}',${abs},'${sid}')"
+        style="background:${bg};color:${fg};border:none;border-radius:7px;padding:8px 14px;cursor:pointer;font-weight:700;font-size:14px;white-space:nowrap;line-height:1.4;text-align:center;transition:all 0.3s">
         Sell This ${sellVal}${pnlLine ? `<br><span style="font-size:11px;opacity:.85">(${pnlLine})</span>` : ""}
       </button>`;
     } else {
@@ -3775,9 +4007,9 @@ function renderPositionsTable(positions) {
       </tr>`;
   }).join("");
 
-  // Calculate totals for positions (only include positions that have loaded data)
+  // Calculate totals for positions on current page (only include positions that have loaded data)
   let totalSpent = 0, totalValNow = 0, totalProfitNow = 0, totalMaxProfit = 0;
-  positions.forEach(p => {
+  pag.items.forEach(p => {
     const abs = Math.abs(p.quantity ?? 0);
     const spent = p.buy_price != null ? abs * p.buy_price / 100 : 0;
     const cur = (p.quantity ?? 0) > 0 ? p.current_yes : p.current_no;
@@ -3785,8 +4017,8 @@ function renderPositionsTable(positions) {
     const profitNow = (spent != null && valNow != null) ? valNow - spent : 0;
     const maxWin = spent > 0 ? abs * 0.99 - spent : 0;
     totalSpent += spent;
-    if (valNow != null) totalValNow += valNow;  // only count loaded positions
-    if (valNow != null) totalProfitNow += profitNow;  // only count loaded positions
+    if (valNow != null) totalValNow += valNow;
+    if (valNow != null) totalProfitNow += profitNow;
     totalMaxProfit += maxWin;
   });
   const totalProfitCls = totalProfitNow > 0.001 ? "pos" : totalProfitNow < -0.001 ? "neg" : "neu";
@@ -3819,7 +4051,9 @@ function renderPositionsTable(positions) {
           <td colspan="3"></td>
         </tr>
       </tbody>
-    </table></div>`;
+    </table></div>
+    ${pag.pages > 1 ? `<div style="font-size:11px;color:#888;margin-top:10px;margin-bottom:10px">Showing ${pag.start + 1}–${pag.end} of ${pag.total}</div>` : ""}
+    ${paginationControls(pag.page, pag.pages, "setPosPage")}`;
   updateSellSelBtn();
 }
 
@@ -4037,10 +4271,20 @@ function renderRecentBuys() {
 // ── Audio Feedback: Buys, Sells, and Voices ──────────────────────────────
 
 let _audioCtx = null;
+let _audioResumed = false;
+
+function resumeAudioContext() {
+  if (_audioCtx && _audioCtx.state === "suspended") {
+    _audioCtx.resume().catch(() => {});
+    _audioResumed = true;
+  }
+}
 
 function playBeep(freq = 800, duration = 0.2, volume = 0.3) {
   try {
     if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    resumeAudioContext();
+    if (_audioCtx.state === "suspended") return;
     const ctx = _audioCtx;
     const now = ctx.currentTime;
     const osc = ctx.createOscillator();
@@ -4094,8 +4338,13 @@ async function updateAndRestart() {
     const r = await fetch(mgrUrl, { method: "POST" });
     const d = await r.json().catch(() => ({}));
     const gitMsg = (d.git || d.git_error || "").split("\n").slice(-4).join("\n");
-    alert((d.git_ok === false ? "⚠️ git pull had issues:\n\n" : "✅ Updated & restarting KalshiBot + PolyBot:\n\n") +
-          (gitMsg || "(no git output)") + "\n\nAlso triggering PolyBot restart...");
+    const msg = (d.git_ok === false ? "⚠️ git pull had issues" : "✅ Updated & restarting");
+
+    // Show non-blocking toast notification (auto-dismisses)
+    const toast = document.createElement("div");
+    toast.style.cssText = "position:fixed;top:20px;right:20px;background:#0c1612;border:2px solid #1f6045;color:var(--green);padding:16px 20px;border-radius:8px;font-size:13px;font-weight:600;z-index:9999;max-width:300px;white-space:pre-wrap";
+    toast.textContent = msg + "\n" + (gitMsg || "(no git output)") + "\n\nReloading in 4s…";
+    document.body.appendChild(toast);
 
     // Trigger PolyBot restart via git VERSION.txt
     try {
@@ -4146,6 +4395,13 @@ async function restartPolyBot() {
   if (btn) { btn.disabled = false; btn.textContent = "🔄 PolyBot"; }
 }
 
+function startPolyBot() {
+  const btn = document.getElementById("startPolyBtn");
+  if (btn) btn.textContent = "▶️ Starting PolyBot (5s)…";
+  fetch(`${location.protocol}//${location.hostname}:5003/api/start/polybot`, { method: "POST" }).catch(() => {});
+  setTimeout(() => window.location.href = `${location.protocol}//${location.hostname}:5005`, 5000);
+}
+
 let _voiceSnoozeUntil = 0;     // epoch ms; voice is muted while Date.now() < this
 let _snoozeTickTimer  = null;
 
@@ -4186,15 +4442,21 @@ function updateSnoozeBtn() {
 }
 
 function speakText(text) {
-  if (Date.now() < _voiceSnoozeUntil) return;   // snoozed — stay silent
+  console.log("[voice] speakText called with:", text);
+  if (Date.now() < _voiceSnoozeUntil) {
+    console.log("[voice] BLOCKED by snooze");
+    return;
+  }
   try {
     if ('speechSynthesis' in window) {
+      console.log("[voice] speechSynthesis available, creating utterance");
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 1.0;
       utterance.pitch = 1.2;
       utterance.volume = 1.0;
       // Try female voice first, fall back to any voice
       const voices = window.speechSynthesis.getVoices();
+      console.log("[voice] found", voices.length, "voices");
       let selectedVoice = null;
       if (voices.length > 0) {
         selectedVoice = voices.find(v => v.name.toLowerCase().includes('female')) ||
@@ -4203,9 +4465,15 @@ function speakText(text) {
                         voices.find(v => !v.name.toLowerCase().includes('male')) ||  // prefer non-male
                         voices[0];
       }
-      if (selectedVoice) utterance.voice = selectedVoice;
+      if (selectedVoice) {
+        console.log("[voice] selected voice:", selectedVoice.name);
+        utterance.voice = selectedVoice;
+      }
       utterance.onerror = (e) => console.log("[voice] error:", e.error);
       window.speechSynthesis.speak(utterance);
+      console.log("[voice] speak() called");
+    } else {
+      console.log("[voice] speechSynthesis NOT available");
     }
   } catch(e) {
     console.log("[voice] exception:", e.message);
@@ -4240,10 +4508,27 @@ function contractPhrase(count, category) {
   return `${count} ${cat}contract${count > 1 ? "s" : ""}`;
 }
 
+// Map ticker symbols to pronounceable crypto names
+function cryptoName(ticker) {
+  const map = {
+    'KXBTC': 'bitcoin', 'KXBTCD': 'bitcoin', 'KXBTCW': 'bitcoin', 'KXBTCM': 'bitcoin',
+    'KXBTC15M': 'bitcoin', 'KXBTC30M': 'bitcoin', 'KXBTC1H': 'bitcoin',
+    'KXETH': 'ethereum', 'KXETHD': 'ethereum', 'KXETHUSD': 'ethereum',
+    'KXETH15M': 'ethereum', 'KXETH30M': 'ethereum', 'KXETH1H': 'ethereum',
+    'KXSOL': 'solana', 'KXSOLD': 'solana', 'KXSOL15M': 'solana', 'KXSOL30M': 'solana', 'KXSOL1H': 'solana',
+    'KXDOGE': 'doge', 'KXDOGE15M': 'doge',
+    'KXBNB': 'binance coin', 'KXBNB15M': 'binance coin',
+    'KXXRP': 'ripple', 'KXXRP15M': 'ripple',
+    'KXHYPE': 'hype', 'KXHYPE15M': 'hype',
+  };
+  if (map[ticker]) return map[ticker];
+  return ticker.toLowerCase().replace(/^kx/, '');
+}
+
 // Batch rapid buys (within 300ms) into one announcement to avoid stuttering
 let _buyBatchQueue = [], _buyBatchTimer = null;
-function announceBuy(count, priceCents, totalDollars, category) {
-  _buyBatchQueue.push({count, priceCents, totalDollars, category});
+function announceBuy(count, priceCents, totalDollars, category, ticker) {
+  _buyBatchQueue.push({count, priceCents, totalDollars, category, ticker});
 
   if (_buyBatchTimer) clearTimeout(_buyBatchTimer);
   _buyBatchTimer = setTimeout(() => {
@@ -4261,16 +4546,25 @@ function announceBuy(count, priceCents, totalDollars, category) {
 
     const total_count = _buyBatchQueue.reduce((s, b) => s + b.count, 0);
     const total_dollars = _buyBatchQueue.reduce((s, b) => s + (b.totalDollars || 0), 0);
-    const categories = [...new Set(_buyBatchQueue.map(b => b.category))].join(" / ");
+    const tickerNames = [...new Set(_buyBatchQueue.map(b => b.ticker ? cryptoName(b.ticker) : b.category))];
+    const cryptoStr = tickerNames.length === 1 ? tickerNames[0] : tickerNames.join(" and ");
 
     setTimeout(() => {
-      let text = `you bought ${total_count} contract${total_count === 1 ? "" : "s"}`;
-      if (categories) text += ` (${categories})`;
-      if (total_dollars > 0) text += `, for a total of ${moneyWords(total_dollars)}`;
+      if (_buyBatchQueue.length === 0) {
+        console.log("[voice] buy queue empty, skipping announcement");
+        return;
+      }
+      let text = `you bought ${contractPhrase(total_count, null)}`;
+      if (cryptoStr) text += ` of ${cryptoStr}`;
+      if (total_count === 1 && _buyBatchQueue[0] && _buyBatchQueue[0].priceCents != null) {
+        text += ` for ${Math.round(_buyBatchQueue[0].priceCents)} cents`;
+      }
+      if (total_dollars > 0) text += `, total cost ${moneyWords(total_dollars)}`;
+      console.log("[voice] announcing buy:", text);
       speakText(text);
+      _buyBatchQueue = [];
     }, 250);
 
-    _buyBatchQueue = [];
     _buyBatchTimer = null;
   }, 300);
 }
@@ -4301,10 +4595,11 @@ function playSadTrumpet() {
   } catch(e) {}
 }
 
-function announceSell(count, profit, sellPriceCents, totalReceived, category) {
+function announceSell(count, profit, sellPriceCents, totalReceived, category, ticker) {
   // Smart announcement: show price and profit per contract (more detailed)
   const profitPerContract = profit / count;
-  let detail = `you sold ${contractPhrase(count, category)}`;
+  let detail = `you sold ${contractPhrase(count, null)}`;
+  if (ticker) detail += ` of ${cryptoName(ticker)}`;
 
   if (count === 1 && sellPriceCents != null && profit != null) {
     // Single contract: detailed breakdown
@@ -4645,8 +4940,11 @@ async function loadCoach() {
     if (e.name === 'AbortError') return;
     // For other errors, show a clear message
     const msg = e.message || "Unknown error";
-    const ct = document.getElementById("coachTotals"); if (ct) ct.textContent = "Coach unavailable";
-    const cr = document.getElementById("coachRecs"); if (cr) cr.textContent = msg;
+    const ct = document.getElementById("coachTotals");
+    const cr = document.getElementById("coachRecs");
+    if (ct) ct.textContent = "Coach unavailable";
+    if (cr) cr.textContent = "Error: " + msg;
+    console.error("[Coach] Error:", e);
   }
 }
 
@@ -4893,9 +5191,10 @@ function controlBot(action) {
   const statusEl = document.getElementById("botStatus");
   if (!statusEl) return;
 
+  const mgrPort = (parseInt(location.port || "5003") + 100);
   const managerUrl = window.location.hostname === "localhost"
-    ? `http://localhost:5100/api/manager/${action}`
-    : `http://${window.location.hostname}:5100/api/manager/${action}`;
+    ? `http://localhost:${mgrPort}/api/manager/${action}`
+    : `http://${window.location.hostname}:${mgrPort}/api/manager/${action}`;
 
   statusEl.textContent = "Status: sending...";
 
@@ -4915,9 +5214,10 @@ function checkBotStatus() {
   const statusEl = document.getElementById("botStatus");
   if (!statusEl) return;
 
+  const mgrPort = (parseInt(location.port || "5003") + 100);
   const managerUrl = window.location.hostname === "localhost"
-    ? "http://localhost:5100/api/manager/status"
-    : `http://${window.location.hostname}:5100/api/manager/status`;
+    ? `http://localhost:${mgrPort}/api/manager/status`
+    : `http://${window.location.hostname}:${mgrPort}/api/manager/status`;
 
   fetch(managerUrl)
     .then(r => r.json())
@@ -4953,9 +5253,10 @@ function updateBotControlBar() {
   const centerStatus = document.getElementById("botStatusCenter");
   if (!btn || !status) return;
 
+  const mgrPort = (parseInt(location.port || "5003") + 100);
   const managerUrl = window.location.hostname === "localhost"
-    ? "http://localhost:5100/api/manager/status"
-    : `http://${window.location.hostname}:5100/api/manager/status`;
+    ? `http://localhost:${mgrPort}/api/manager/status`
+    : `http://${window.location.hostname}:${mgrPort}/api/manager/status`;
 
   fetch(managerUrl)
     .then(r => r.json())
@@ -5195,9 +5496,9 @@ async function loadVersion() {
 // ── Summary tab ───────────────────────────────────────────────────────────
 const SUMMARY_RANGES = [
   {label:"15m", mins:15}, {label:"30m", mins:30}, {label:"60m", mins:60},
-  {label:"1h", mins:60}, {label:"2h", mins:120}, {label:"4h", mins:240},
+  {label:"2h", mins:120}, {label:"4h", mins:240},
   {label:"6h", mins:360}, {label:"12h", mins:720}, {label:"24h", mins:1440},
-  {label:"1d", mins:1440}, {label:"2d", mins:2880}, {label:"3d", mins:4320},
+  {label:"2d", mins:2880}, {label:"3d", mins:4320},
   {label:"7d", mins:10080}, {label:"14d", mins:20160}, {label:"30d", mins:43200},
 ];
 let _summaryMins = parseInt(localStorage.getItem("summaryMins") || "15");
@@ -5205,9 +5506,11 @@ let _summaryMins = parseInt(localStorage.getItem("summaryMins") || "15");
 function renderSummaryRanges() {
   const el = document.getElementById("summaryRanges");
   if (!el) return;
-  // De-dup labels that map to same minutes (60m/1h, 24h/1d) — keep both as the user asked.
+  // De-dup labels that map to same minutes (60m/1h, 24h/1d) — only highlight first occurrence
+  const seen = new Set();
   el.innerHTML = SUMMARY_RANGES.map(r => {
-    const active = (r.mins === _summaryMins);
+    const active = (r.mins === _summaryMins && !seen.has(r.mins));
+    seen.add(r.mins);
     return `<button onclick="setSummaryRange(${r.mins})"
       style="padding:5px 11px;font-size:12px;font-weight:700;border-radius:6px;cursor:pointer;
              border:1px solid ${active ? 'var(--green)' : 'var(--border)'};
@@ -5219,6 +5522,12 @@ function setSummaryRange(mins) {
   _summaryMins = mins;
   localStorage.setItem("summaryMins", String(mins));
   renderSummaryRanges();
+  summaryPage = 0; // Reset to first page
+  loadSummary();
+}
+
+function setSummaryPage(page) {
+  summaryPage = page;
   loadSummary();
 }
 
@@ -5226,6 +5535,33 @@ function _rangeLabel(mins) {
   if (mins < 60) return `${mins} minutes`;
   if (mins < 1440) return `${mins/60} hour${mins===60?"":"s"}`;
   return `${mins/1440} day${mins===1440?"":"s"}`;
+}
+
+// ── Pagination helpers ───────────────────────────────────────────────────
+function paginate(items, pageSize, currentPage) {
+  const total = items.length;
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  const page = Math.min(currentPage, pages - 1);
+  const start = page * pageSize;
+  const end = Math.min(start + pageSize, total);
+  return {
+    items: items.slice(start, end),
+    page,
+    pages,
+    total,
+    start,
+    end
+  };
+}
+
+function paginationControls(currentPage, totalPages, setPageFn) {
+  if (totalPages <= 1) return "";
+  const buttons = [];
+  for (let i = 0; i < totalPages; i++) {
+    const active = i === currentPage;
+    buttons.push(`<button style="background:${active ? 'var(--green)' : '#444'};color:${active ? '#000' : '#fff'};border:none;border-radius:4px;padding:6px 12px;margin:0 3px;cursor:pointer;font-weight:${active ? '700' : '400'}" onclick="${setPageFn}(${i})">${i + 1}</button>`);
+  }
+  return `<div style="text-align:center;padding:12px 0;display:flex;justify-content:center;gap:4px">${buttons.join("")}</div>`;
 }
 
 async function loadSummary() {
@@ -5262,20 +5598,25 @@ async function loadSummary() {
       card("Sells", t.sells || 0) +
       card("Settled", t.settlements || 0) +
       card("Realized P&L", profitStr, profitCls) +
-      card("Spent (buys)", `$${(t.buy_spent||0).toFixed(2)}`) +
+      card("Total Cost", `$${(t.buy_spent||0).toFixed(2)}`) +
       card("Proceeds (sells)", `$${(t.sell_proceeds||0).toFixed(2)}`);
 
     // Per-trade list
-    const trades = (d.trades || []).filter(x => x.kind === "buy" || x.kind === "sell" || x.kind === "settlement");
+    const trades = (d.trades || []).filter(x => ["buy", "sell", "settlement", "resolution"].includes(x.kind));
     metaEl.textContent = `(${trades.length} in last ${_rangeLabel(_summaryMins)}, ${tzAbbr()})`;
     if (!trades.length) {
       tradesEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:10px 0">No buys, sells, or settlements in this window.</div>`;
     } else {
-      tradesEl.innerHTML = trades.map(x => {
+      const pageSize = 100;
+      const pag = paginate(trades, pageSize, summaryPage);
+      summaryPage = pag.page; // Ensure page is within bounds
+
+      const tradesHtml = pag.items.map(x => {
         const isBuy = x.kind === "buy";
         const isSettle = x.kind === "settlement";
+        const isResolution = x.kind === "resolution";
         const color = isBuy ? "var(--blue)" : isSettle ? (x.won ? "var(--green)" : "var(--red)") : "var(--green)";
-        const tag = isBuy ? "BUY" : isSettle ? "SETTLED" : "SELL";
+        const tag = isBuy ? "BUY" : isSettle ? "SETTLED" : isResolution ? "RESOLVED" : "SELL";
         const title = esc(x.title || x.ticker || "");
         const side = (x.side || "").toUpperCase();
         const price = x.price != null ? `${x.price}¢` : "";
@@ -5299,6 +5640,10 @@ async function loadSummary() {
           <span>${result}</span>
         </div>`;
       }).join("");
+
+      tradesEl.innerHTML = tradesHtml +
+        (pag.pages > 1 ? `<div style="font-size:11px;color:#888;margin-top:10px;margin-bottom:10px">Showing ${pag.start + 1}–${pag.end} of ${pag.total}</div>` : "") +
+        paginationControls(pag.page, pag.pages, "setSummaryPage");
     }
   } catch(e) {
     console.error("[loadSummary]", e);
@@ -5394,18 +5739,18 @@ function switchTab(name) {
     if (window._posSettle)     { clearInterval(window._posSettle); window._posSettle = null; }
   }
   if (name === "settlements") {
-    // Dedicated settlements tab — load now + refresh on its own interval.
     loadSettlements();
-    if (window._settleTabRefresh) clearInterval(window._settleTabRefresh);
-    if (!document.hidden) window._settleTabRefresh = setInterval(loadSettlements, 60000);
+    if (window._settleRefresh) clearInterval(window._settleRefresh);
+    if (!document.hidden) window._settleRefresh = setInterval(loadSettlements, 30000);
   } else {
-    if (window._settleTabRefresh) { clearInterval(window._settleTabRefresh); window._settleTabRefresh = null; }
+    if (window._settleRefresh) { clearInterval(window._settleRefresh); window._settleRefresh = null; }
   }
+
   if (name === "lotto") {
-    loadLottoSettings();   // pull the T2 buy profile into the form
-    loadLottoStrategy();   // pull the T2 sell strategy into the form
-    loadActiveProfile();   // refresh which bot is active (LED/pill)
-    seedLottoMemDefaults();// ensure M1 preset + memory slot highlights
+    loadLottoSettings();
+    loadLottoStrategy();
+    loadActiveProfile();
+    seedLottoMemDefaults();
   }
   if (name === "lottostats") {
     // Pull fresh positions + live prices + a wide 30-day settlement history, then render.
@@ -5564,6 +5909,34 @@ async function buildFullReport() {
     }
   } catch(e) { L.push(`  (activity unavailable: ${e.message})`); }
 
+  // Activity log diagnostics
+  try {
+    const r = await fetch("/api/diagnostic/activity");
+    if (r.ok) {
+      const d = await r.json();
+      L.push(``);
+      L.push(`ACTIVITY LOG DIAGNOSTICS:`);
+      L.push(`  Total: ${d.total_buys} buys | ${d.total_sells} sells | ${d.total_scans} scans`);
+      L.push(`  Last 1h: ${d.buys_last_hour} buys | ${d.sells_last_hour} sells`);
+      L.push(`  Last 24h: ${d.buys_last_24h} buys | ${d.sells_last_24h} sells | ${d.scans_last_24h} scans`);
+      L.push(`  Activity log file exists: ${d.activity_log_exists}`);
+    }
+  } catch(e) { L.push(`  (activity log diagnostics unavailable: ${e.message})`); }
+
+  // Position tracking diagnostics
+  try {
+    const r = await fetch("/api/diagnostic/tracked");
+    if (r.ok) {
+      const d = await r.json();
+      L.push(``);
+      L.push(`POSITION TRACKING DIAGNOSTICS:`);
+      L.push(`  In memory: ${d.in_memory_total} total | ${d.in_memory_open_count} open`);
+      L.push(`  Saved to disk: ${d.saved_total} total | ${d.saved_open_count} open`);
+      L.push(`  ⚠️ NOT SAVED: ${d.NOT_SAVED_count} positions (${d.NOT_SAVED_tickers.join(", ")})`);
+      if (d.in_memory_open_sample.length > 0) L.push(`  Sample open: ${d.in_memory_open_sample.slice(0, 5).join(", ")}`);
+    }
+  } catch(e) { L.push(`  (position diagnostics unavailable: ${e.message})`); }
+
   // Open positions detail
   L.push(``);
   L.push(`OPEN POSITIONS (${allPositions.length}):`);
@@ -5644,7 +6017,7 @@ async function loadStats() {
           <td class="${row.wins > 0 ? "pos" : "neu"}">${row.wins}</td>
           <td class="${row.losses > 0 ? "neg" : "neu"}">${row.losses}</td>
           <td style="color:#aaa">${row.win_rate != null ? row.win_rate + "%" : "—"}</td>
-          <td class="${row.total_pnl > 0 ? "pos" : row.total_pnl < 0 ? "neg" : "neu"}" style="font-weight:600">${row.total_pnl >= 0 ? "+" : ""}$${row.total_pnl.toFixed(2)}</td>
+          <td class="${(row.total_pnl ?? 0) > 0 ? "pos" : (row.total_pnl ?? 0) < 0 ? "neg" : "neu"}" style="font-weight:600">${(row.total_pnl ?? 0) >= 0 ? "+" : ""}$${(row.total_pnl ?? 0).toFixed(2)}</td>
         </tr>`).join("");
       el.innerHTML = `
         <div class="tbl-wrap"><table>
@@ -5869,6 +6242,8 @@ function pushLottoSettings() {
   const chk = id => { const el = document.getElementById(id); return el ? el.checked : false; };
   const num = (id,d) => { const el = document.getElementById(id); const v = parseFloat(el?.value); return isNaN(v)?d:v; };
   const optNum = id => { const el = document.getElementById(id); return el && el.value !== "" ? parseFloat(el.value) : null; };
+  const runModeRadio = document.querySelector('input[name="L_runMode"]:checked');
+  const runMode = runModeRadio ? runModeRadio.value : "forever";
   const payload = {
     profile: "T2",
     enable_buy_up:   chk("L_enableBuyUp"),
@@ -5889,6 +6264,9 @@ function pushLottoSettings() {
     show_economics:  chk("L_showEconomics"),
     good_liq:        chk("L_goodLiq"),
     hide_multi:      chk("L_hideMultiOutcome"),
+    run_mode:        runMode,
+    auto_mins:       runMode === "time" ? num("L_autoMins", 30) : null,
+    auto_buys_max:   runMode === "buys" ? num("L_autoBuysMax", 10) : null,
   };
   const st = document.getElementById("L_saveStatus");
   if (_pushLottoTimer) clearTimeout(_pushLottoTimer);
@@ -5913,6 +6291,11 @@ async function loadLottoSettings() {
     chk("L_showCrypto", s.show_crypto); chk("L_showCombo", s.show_combo); chk("L_showSports", s.show_sports);
     chk("L_showPolitics", s.show_politics); chk("L_showEconomics", s.show_economics);
     chk("L_goodLiq", s.good_liq); chk("L_hideMultiOutcome", s.hide_multi);
+    // Load AUTO MODE settings
+    if (s.run_mode) setLottoRunMode(s.run_mode);
+    if (s.auto_mins) set("L_autoMins", s.auto_mins);
+    if (s.auto_buys_max) set("L_autoBuysMax", s.auto_buys_max);
+    updateLottoMinsHint();
   } catch(e) {}
 }
 
@@ -6133,12 +6516,17 @@ function renderLottoStats() {
     return ` (${fmt(sorted[0])} – ${fmt(sorted[sorted.length-1])})`;
   })() : "";
 
+  // Paginate cent rows
+  const centPageSize = 25;
+  const centPag = paginate(centRows, centPageSize, lottoCentPage);
+  lottoCentPage = centPag.page;
+
   const centTable = centRows.length ? `
     <div style="font-weight:700;margin:18px 0 6px">📊 Win/Loss by 1¢ bet${dateRange}</div>
     <div style="overflow:auto;max-height:350px;border:1px solid #1e2530;border-radius:6px"><table class="flat-tbl" style="width:100%;font-size:12px;border-collapse:collapse">
       <thead style="position:sticky;top:0;background:#0d1117;z-index:10"><tr style="color:var(--muted);text-align:left">
         <th style="padding:6px 8px">Bet</th><th style="padding:6px 8px">Bets</th><th style="padding:6px 8px">Invested</th><th style="padding:6px 8px">Won</th><th style="padding:6px 8px">Win&nbsp;ratio</th><th style="padding:6px 8px">P&amp;L</th></tr></thead>
-      <tbody>${centRows.map((c,i) => { const b = buckets[c]; const ratio = Math.round(100*b.won/b.n);
+      <tbody>${centPag.items.map((c,i) => { const b = buckets[c]; const ratio = Math.round(100*b.won/b.n);
         const bg = i % 2 ? "#141414" : "transparent"; const pc = b.pnl>=0?"var(--green)":"var(--red)";
         return `<tr style="background:${bg}">
           <td style="padding:5px 8px;font-weight:800;color:#ff9416">${c}¢</td>
@@ -6147,7 +6535,8 @@ function renderLottoStats() {
           <td style="padding:5px 8px">${b.won}</td>
           <td style="padding:5px 8px;color:${ratio>0?'var(--green)':'#aaa'};font-weight:700">${ratio}%</td>
           <td style="padding:5px 8px;color:${pc};font-weight:800">${b.pnl>=0?'+':''}$${b.pnl.toFixed(2)}</td></tr>`; }).join("")}
-      </tbody></table></div>` : "";
+      </tbody></table></div>
+    ${centPag.pages > 1 ? `<div style="font-size:11px;color:#888;margin:8px 0">${paginationControls(centPag.page, centPag.pages, "setLottoCentPage")}</div>` : ""}` : "";
 
   // ── Full history ledger: every buy + sell, one line each, newest first, zebra ──
   const hist = [];
@@ -6168,13 +6557,19 @@ function renderLottoStats() {
       qty: abs, cents: p.buy_price || 0, pnl: null, cost: totalCost, resolved: null });
   });
   hist.sort((a,b) => (b.t||"").localeCompare(a.t||""));
+
+  // Paginate history
+  const histPageSize = 25;
+  const histPag = paginate(hist, histPageSize, lottoHistPage);
+  lottoHistPage = histPag.page;
+
   const fmtTs = iso => { try { const d=new Date(iso); return d.toLocaleString([], {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit",second:"2-digit"}); } catch(e){ return "—"; } };
   const histHtml = hist.length ? `
     <div style="font-weight:700;margin:18px 0 6px">🧾 History — every buy &amp; sell</div>
     <div style="overflow:auto;max-height:350px;border:1px solid #1e2530;border-radius:6px"><table class="flat-tbl" style="width:100%;font-size:11px;border-collapse:collapse">
       <thead style="position:sticky;top:0;background:#0d1117;z-index:10"><tr style="color:var(--muted);text-align:left">
         <th style="padding:6px 8px">Time</th><th style="padding:6px 8px">Type</th><th style="padding:6px 8px">Market</th><th style="padding:6px 8px">Position</th><th style="padding:6px 8px;text-align:right">Cost</th><th style="padding:6px 8px;text-align:right">Sold For</th><th style="padding:6px 8px;text-align:right">P&amp;L</th></tr></thead>
-      <tbody>${hist.map((h,i) => {
+      <tbody>${histPag.items.map((h,i) => {
         const bg = i % 2 ? "#141414" : "transparent";
         const costHtml = h.cost != null ? `$${h.cost.toFixed(2)}` : '—';
         const resolvedHtml = h.resolved != null ? `$${h.resolved.toFixed(2)}` : (h.kind === "BUY" ? '—' : '<span style="color:#888">—</span>');
@@ -6190,16 +6585,24 @@ function renderLottoStats() {
           <td style="padding:4px 8px;text-align:right;white-space:nowrap">${costHtml}</td>
           <td style="padding:4px 8px;text-align:right;white-space:nowrap">${resolvedHtml}</td>
           <td style="padding:4px 8px;text-align:right;white-space:nowrap">${pnl}</td></tr>`; }).join("")}
-      </tbody></table></div>` : "";
+      </tbody></table></div>
+    ${histPag.pages > 1 ? `<div style="font-size:11px;color:#888;margin:8px 0">${paginationControls(histPag.page, histPag.pages, "setLottoHistPage")}</div>` : ""}` : "";
 
   // ── Live Lotto bets: full economics + a Sell button on each open position ──
   const _lf = v => (v < 0 ? "-$" : "$") + Math.abs(v).toFixed(2);
+
+  // Paginate live bets
+  const livePageSize = 25;
+  const livePag = paginate(openT2, livePageSize, lottoLivePage);
+  lottoLivePage = livePag.page;
+
   const liveHtml = openT2.length ? `
     <div style="font-weight:700;margin:6px 0 6px">🎯 Live Lotto bets — sell anytime</div>
     <div style="overflow:auto;max-height:350px;border:1px solid #1e2530;border-radius:6px"><table class="flat-tbl" style="width:100%;font-size:12px;border-collapse:collapse">
       <thead style="position:sticky;top:0;background:#0d1117;z-index:10"><tr style="color:var(--muted);text-align:left">
         <th style="padding:6px 8px">Status</th><th style="padding:6px 8px">Market</th><th style="padding:6px 8px">Side</th><th style="padding:6px 8px">Qty</th><th style="padding:6px 8px">Cost/sh</th><th style="padding:6px 8px">Cost</th><th style="padding:6px 8px">Value&nbsp;now</th><th style="padding:6px 8px">Max</th><th style="padding:6px 8px">Closes</th><th style="padding:6px 8px">P&amp;L</th><th style="padding:6px 8px"></th></tr></thead>
-      <tbody>${openT2.map((p,i) => {
+      <tbody>${livePag.items.map((p,idx) => {
+        const i = livePag.start + idx;
         const side = (p.quantity>=0) ? "yes" : "no";
         const qty  = Math.abs(p.quantity||0);
         const bp   = p.buy_price;
@@ -6230,9 +6633,25 @@ function renderLottoStats() {
           <td style="padding:5px 8px">${pnlHtml}</td>
           <td style="padding:5px 8px"><button id="${id}" onclick="sellPos('${p.ticker}','${side}',${qty},'${id}').then(()=>setTimeout(renderLottoStats,900))" style="background:var(--red);color:#fff;border:none;border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">${sellLabel}</button></td></tr>`;
       }).join("")}
-      </tbody></table></div>${openT2.length > 25 ? `<div style="font-size:11px;color:#888;margin-top:6px">${openT2.length} live positions.</div>` : ""}` : "";
+      </tbody></table></div>
+    ${livePag.pages > 1 ? `<div style="font-size:11px;color:#888;margin:8px 0">${paginationControls(livePag.page, livePag.pages, "setLottoLivePage")}</div>` : ""}` : "";
 
   bodyEl.innerHTML = liveHtml + centTable + histHtml;
+}
+
+function setLottoLivePage(page) {
+  lottoLivePage = page;
+  renderLottoStats();
+}
+
+function setLottoCentPage(page) {
+  lottoCentPage = page;
+  renderLottoStats();
+}
+
+function setLottoHistPage(page) {
+  lottoHistPage = page;
+  renderLottoStats();
 }
 
 function loadSettings() {

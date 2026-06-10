@@ -63,7 +63,9 @@
       "mcp__Claude_in_Chrome__computer",
       "Bash(netstat -ano)",
       "Bash(tasklist)",
-      "Bash(python -c \"from zoneinfo import ZoneInfo; print\\('zoneinfo OK'\\)\")"
+      "Bash(python -c \"from zoneinfo import ZoneInfo; print\\('zoneinfo OK'\\)\")",
+      "Bash(cat)",
+      "Bash(chmod +x /home/user/kalshibot/.git/hooks/pre-commit)"
     ]
   },
   "hooks": {
