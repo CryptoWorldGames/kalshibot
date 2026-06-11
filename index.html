@@ -5390,14 +5390,16 @@ function saveTimezone() {
   }
 }
 function fmtTime(epochSecs, withDate) {
+  if (epochSecs == null || epochSecs === undefined) return "—";
   try {
     const d = new Date(epochSecs * 1000);
+    if (isNaN(d.getTime())) return "—";
     const opts = withDate
       ? {month:"short", day:"numeric", hour:"numeric", minute:"2-digit", second:"2-digit", hour12:true, timeZone:getTimezone()}
       : {hour:"numeric", minute:"2-digit", second:"2-digit", hour12:true, timeZone:getTimezone()};
     return new Intl.DateTimeFormat("en-US", opts).format(d);
   } catch(e) {
-    return new Date(epochSecs * 1000).toLocaleString();
+    return "—";
   }
 }
 function tzAbbr() {
