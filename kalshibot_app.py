@@ -3727,7 +3727,8 @@ def api_summary():
             return datetime.fromisoformat(str(v).replace("Z", "+00:00")).timestamp()
         except (ValueError, AttributeError):
             return 0.0
-    trades.sort(key=_ts_key, reverse=True)
+    trades.sort(key=_ts_key)  # ascending order, then reverse for display
+    trades.reverse()  # newest first for UI display
 
     return jsonify({
         "minutes": minutes,
