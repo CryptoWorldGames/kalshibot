@@ -3583,26 +3583,29 @@ def api_summary():
     have_profit = False
     trades = []  # buy/sell/settlement events for the expandable text list
 
-    for e in events:
-        kind = e.get("kind")
-        if kind == "scan":
-            scans += 1
-        elif kind == "buy":
-            buys += 1
-            buy_spent += float(e.get("spent") or 0)
-            trades.append(e)
-        elif kind == "sell":
-            sells += 1
-            pr = e.get("profit")
-            if pr is not None:
-                realized_profit += float(pr)
-                have_profit = True
-            sell_proceeds += float(e.get("count") or 0) * float(e.get("price") or 0) / 100
-            trades.append(e)
+    try:
+        for e in events:
+            kind = e.get("kind")
+            if kind == "scan":
+                scans += 1
+            elif kind == "buy":
+                buys += 1
+                buy_spent += float(e.get("spent") or 0)
+                trades.append(e)
+            elif kind == "sell":
+                sells += 1
+                pr = e.get("profit")
+                if pr is not None:
+                    realized_profit += float(pr)
+                    have_profit = True
+                sell_proceeds += float(e.get("count") or 0) * float(e.get("price") or 0) / 100
+                trades.append(e)
+    except Exception as e:
+        print(f"[summary] activity loop error: {e}")
 
     # Merge settlements from Kalshi's API (don't double-count sold_early entries from activity)
-    since_dt = datetime.fromtimestamp(since, tz=timezone.utc)
     try:
+        since_dt = datetime.fromtimestamp(since, tz=timezone.utc)
         all_settlements = _cached_settlements(hours=24)
         for s in all_settlements:
             # Skip sold_early (already counted as sells in activity log)
@@ -3645,6 +3648,8 @@ def api_summary():
             trades.append(trade)
     except Exception as e:
         print(f"[summary] settlements merge error: {e}")
+        import traceback
+        traceback.print_exc()
 
     # newest first for display — coerce ts to float so one bad row can't 500 the tab
     def _ts_key(x):

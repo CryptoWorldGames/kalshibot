@@ -179,12 +179,16 @@ def auto_update_monitor():
     restart Flask so it loads. This is FREE — just git running locally, no API/AI
     calls. Lets the user deploy from any device by pushing to GitHub; the desktop
     picks the update up on its own with zero clicks."""
+    first_pull = True
     while RUNNING:
-        # Wait first — we just (re)started, so don't pull the instant we boot.
-        for _ in range(AUTO_UPDATE_INTERVAL):
-            if not RUNNING:
-                return
-            time.sleep(1)
+        # On startup, pull immediately. After that, wait AUTO_UPDATE_INTERVAL between pulls.
+        if not first_pull:
+            for _ in range(AUTO_UPDATE_INTERVAL):
+                if not RUNNING:
+                    return
+                time.sleep(1)
+        first_pull = False
+
         try:
             out = subprocess.run(["git", "pull"], cwd=str(HERE),
                                  capture_output=True, text=True, timeout=90)
