@@ -760,6 +760,20 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   </div>
 </div>
 
+<!-- Spread Guard (15-min crypto markets only) -->
+<div class="card">
+  <div class="card-title">🛡️ Spread Guard <span style="color:var(--blue);text-transform:none;letter-spacing:0;font-weight:400;font-size:12px">— cushion-aware buying for crypto</span></div>
+  <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+    <label class="check-row" style="font-size:14px;font-weight:700">
+      <input type="checkbox" id="spreadGuardEnabled" onchange="toggleSpreadGuard()"> Enable Spread Guard
+    </label>
+    <span id="spreadGuardStatus" style="font-size:12px;color:#888;flex:1">Loading status...</span>
+  </div>
+  <div style="margin-top:12px;font-size:12px;color:#aaa;line-height:1.45">
+    When enabled: blocks cheap lotto buys (≤20¢) on 15-min crypto markets if the bid-ask spread is too wide. Prevents buying contracts when there's poor liquidity to exit. <a href="#" onclick="switchTab('audit');return false" style="color:var(--blue)">View live spread check →</a>
+  </div>
+</div>
+
 <!-- Scanner Settings (unified with Lotto) -->
 <div class="card">
   <!-- All 4 settings in one wrapping row -->
@@ -2196,6 +2210,7 @@ window.addEventListener("load", () => {
   loadBotStatus();
   loadCash();
   loadActiveProfile();   // light up the correct bot LED/pill from the start
+  loadSpreadGuardStatus();// load spread guard toggle state from backend
   loadLottoSettings();   // pre-fill the Lotto (T2) buy form so it's ready when opened
   loadLottoStrategy();   // pre-fill the Lotto (T2) sell strategy
   seedLottoMemDefaults();// preload M1 with the cheap long-shot preset (if empty)
@@ -5682,6 +5697,10 @@ function switchTab(name) {
     if (window._settleRefresh) { clearInterval(window._settleRefresh); window._settleRefresh = null; }
   }
 
+  if (name === "scanner") {
+    loadSpreadGuardStatus();
+    loadActiveProfile();
+  }
   if (name === "lotto") {
     loadLottoSettings();
     loadLottoStrategy();
@@ -6133,6 +6152,47 @@ async function setActiveProfile(p) {
     if (d.active) updateProfileUI(d.active);
     toast(`Bot ${p} ${turningOn ? "activated" : "deactivated"}`, "ok");
   } catch(e) { toast("Couldn't change bot — try again", "err"); loadActiveProfile(); }
+}
+
+// ── Spread Guard toggle (15-min crypto markets) ────────────────────────
+async function loadSpreadGuardStatus() {
+  try {
+    const r = await fetch("/api/spread-guard");
+    const d = await r.json();
+    const chk = document.getElementById("spreadGuardEnabled");
+    if (chk) chk.checked = d.enabled || false;
+    const status = document.getElementById("spreadGuardStatus");
+    if (status) {
+      const state = d.enabled ? "✓ ON" : "○ OFF";
+      const threshold = d.usd_threshold || 100;
+      const maxCents = d.cheap_max_cents || 20;
+      status.textContent = `${state} • blocks lotto ≤${maxCents}¢ when spread cushion < $${threshold}`;
+      status.style.color = d.enabled ? "var(--green)" : "#888";
+    }
+  } catch(e) {
+    console.error("Failed to load Spread Guard status:", e);
+    if (document.getElementById("spreadGuardStatus")) {
+      document.getElementById("spreadGuardStatus").textContent = "Status unknown";
+    }
+  }
+}
+
+async function toggleSpreadGuard() {
+  const chk = document.getElementById("spreadGuardEnabled");
+  if (!chk) return;
+  try {
+    const r = await fetch("/api/spread-guard", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({enabled: chk.checked})
+    });
+    const d = await r.json();
+    loadSpreadGuardStatus();
+    toast(`Spread Guard ${chk.checked ? "enabled" : "disabled"}`, "ok");
+  } catch(e) {
+    toast("Failed to update Spread Guard", "err");
+    loadSpreadGuardStatus();
+  }
 }
 
 // ── Lotto (T2) settings: independent form, posts to profile T2 ────────────
