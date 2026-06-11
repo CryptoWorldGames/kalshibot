@@ -35,43 +35,8 @@ from flask import Flask, jsonify, request, send_from_directory, make_response
 
 app = Flask(__name__)
 HERE = Path(__file__).resolve().parent
-
-# Load environment variables from .env
-env_file = HERE / ".env"
-if env_file.exists():
-    with open(env_file) as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith("#"):
-                key, value = line.split("=", 1)
-                os.environ[key.strip()] = value.strip()
-
 BASE_URL = "https://api.elections.kalshi.com"
 API_PREFIX = "/trade-api/v2"
-FLASK_PORT = int(os.getenv("KALSHI_BOT_PORT", "5003"))
-
-# Auth token for protecting money-moving endpoints (/api/buy, /api/sell, /api/bot/start, etc.)
-# Generate a token: python -c "import secrets; print(secrets.token_urlsafe(32))"
-# Set KALSHI_AUTH_TOKEN in .env or environment. If not set, auth is disabled (open access).
-AUTH_TOKEN = os.getenv("KALSHI_AUTH_TOKEN", None)
-AUTH_ENABLED = AUTH_TOKEN is not None
-
-def require_auth(f):
-    """Decorator: check Authorization: Bearer <token> header on protected endpoints."""
-    from functools import wraps
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not AUTH_ENABLED:
-            return f(*args, **kwargs)  # Auth disabled, allow all
-        auth_header = request.headers.get("Authorization", "")
-        if not auth_header.startswith("Bearer "):
-            return jsonify({"error": "Unauthorized: missing or invalid Authorization header"}), 401
-        token = auth_header[7:]  # Strip "Bearer "
-        if token != AUTH_TOKEN:
-            return jsonify({"error": "Unauthorized: invalid token"}), 403
-        return f(*args, **kwargs)
-    return decorated_function
-
 
 # Bot identity — shown in the terminal banner/title and the web UI header so you
 # always know which build is running. Bump BOT_VERSION when you ship changes.
@@ -102,16 +67,9 @@ def _record_activity(kind: str, **fields):
         with _activity_lock:
             with open(ACTIVITY_LOG, "a", encoding="utf-8") as f:
                 f.write(json.dumps(entry, default=str) + "\n")
-        if kind in ("buy", "sell"):
-            _log(f"[activity] ✓✓✓ RECORDED {kind.upper()}: {fields.get('ticker')}")
     except Exception as e:
-        # CRITICAL: Log to both stdout and _log so we see failures
-        msg = f"[activity] ✗✗✗ FAILED {kind.upper()}: {e}"
-        print(msg, flush=True)
-        try:
-            _log(msg)
-        except:
-            print(f"[activity] Even _log failed! {e}", flush=True)
+        # Never let logging break trading — just note it once.
+        print(f"[activity] write failed: {e}", flush=True)
 
 def _read_activity(since_ts: float):
     """Return all activity events with ts >= since_ts, oldest→newest."""
@@ -362,10 +320,8 @@ def _save_tracked():
     try:
         with _lock:
             TRACKED_FILE.write_text(json.dumps(tracked, default=str), encoding="utf-8")
-            _log(f"[tracked] Saved {len(tracked)} positions to disk")
     except Exception as e:
-        _log(f"[tracked] SAVE FAILED: {e}")
-        print(f"[tracked] SAVE FAILED: {e}", flush=True)
+        print(f"[tracked] save error: {e}")
 
 # { ticker: { side, count, buy_price, title, strategy, target_pct, bought_at, status } }
 tracked: dict = {}
@@ -487,7 +443,7 @@ _LOTTO_BUY_DEFAULTS = {
     "good_liq": False, "hide_multi": False,
     "min_age_mins": None, "max_age_mins": None, "no_buy_within_mins": None,
 }
-_LOTTO_SELL_DEFAULTS = {"mode": "resolution", "target_pct": 10.0}  # No stop-loss for Lotto (T2) — only wait for resolution
+_LOTTO_SELL_DEFAULTS = {"mode": "resolution", "target_pct": 10.0, "stop_loss_pct": 50.0}
 
 _profiles, _sell_profiles, active_profiles = _load_profiles()
 # Seed buy profiles. T1 inherits the existing live buy_settings (so the current bot
@@ -547,11 +503,7 @@ def _apply_buy_edits(target: dict, data: dict):
         if k in data:
             target[k] = _pct(data[k], target.get(k, 80.0))
     if "minutes" in data:
-        try:
-            mins = float(data["minutes"])
-            target["minutes"] = max(0.25, min(525600, mins))  # Allow 0.25 min (15s) to 365 days
-        except (TypeError, ValueError):
-            pass
+        target["minutes"] = _posint(data["minutes"], target.get("minutes", 15), lo=1)
     if "buy_amount" in data:
         try:    target["buy_amount"] = max(0.01, float(data["buy_amount"]))
         except (TypeError, ValueError): pass
@@ -906,15 +858,15 @@ def _is_economics_cached(market: dict) -> bool:
 # Background position monitor — auto-sell on profit target
 # ---------------------------------------------------------------------------
 
-def _dollars_to_cents(val) -> int | None:
-    """Convert a dollar string like '0.8500' to cents like 85"""
+def _dollars_to_cents(val) -> float | None:
+    """Convert a dollar string like '0.8500' to cents like 85.0"""
     try:
-        return int(round(float(val) * 100))
+        return round(float(val) * 100, 2)
     except (TypeError, ValueError):
         return None
 
 
-def _market_price(m: dict, side: str) -> int | None:
+def _market_price(m: dict, side: str) -> float | None:
     """Get ask price in cents for a side ('yes' or 'no'), trying all known field names."""
     # Try dollar string fields first (e.g. yes_ask_dollars = "0.8500" -> 85)
     v = _dollars_to_cents(m.get(f"{side}_ask_dollars"))
@@ -924,7 +876,7 @@ def _market_price(m: dict, side: str) -> int | None:
     v = m.get(f"{side}_ask")
     if v is not None:
         try:
-            return int(round(float(v)))
+            return round(float(v), 2)
         except (TypeError, ValueError):
             pass
     # Some API versions use 'price' on the yes side only
@@ -933,13 +885,13 @@ def _market_price(m: dict, side: str) -> int | None:
         if v is not None:
             try:
                 f = float(v)
-                return int(round(f * 100 if f <= 1 else f))
+                return round(f * 100 if f <= 1 else f, 2)
             except (TypeError, ValueError):
                 pass
     return None
 
 
-def _market_bid(m: dict, side: str) -> int | None:
+def _market_bid(m: dict, side: str) -> float | None:
     """Get bid price in cents for a side, trying all known field names."""
     v = _dollars_to_cents(m.get(f"{side}_bid_dollars"))
     if v is not None:
@@ -947,13 +899,13 @@ def _market_bid(m: dict, side: str) -> int | None:
     v = m.get(f"{side}_bid")
     if v is not None:
         try:
-            return int(round(float(v)))
+            return round(float(v), 2)
         except (TypeError, ValueError):
             pass
     return None
 
 
-def _mark_price_cents(m: dict, side: str) -> int | None:
+def _mark_price_cents(m: dict, side: str) -> float | None:
     """Best 'current' price (cents) for a held contract on `side`.
 
     Prefer the live bid (the real price you'd get selling). When the book has no
@@ -976,7 +928,7 @@ def _mark_price_cents(m: dict, side: str) -> int | None:
                 yc *= 100
             if yc >= 1:
                 yc = min(99.0, yc)
-                return int(round(yc if side == "yes" else 100 - yc))
+                return round(yc if side == "yes" else 100 - yc, 2)
     except (TypeError, ValueError):
         pass
 
@@ -1053,27 +1005,24 @@ def _monitor():
         with _lock:
             tickers = list(tracked.keys())
 
-        # Debug: log how many positions we're checking
-        if tickers:
-            _log(f"[monitor] Checking {len(tickers)} tracked positions for sell conditions")
-
         for ticker in tickers:
+            with _lock:
+                pos = tracked.get(ticker)
+                if not pos or pos.get("status") not in ("open", "selling"):
+                    continue
+                # Already past its close time — stop probing it every cycle. This was
+                # the source of endless "holding to resolution" log spam plus a wasted
+                # /markets call per cycle for every expired position (which, with a big
+                # tracked file, monopolised the rate-limited API and starved scan/buy).
+                if pos.get("expired"):
+                    continue
+                # Skip only if no profit target exists at all (per-position or global)
+                has_pct_target = pos.get("strategy") == "profit" or sell_strategy.get("mode") == "profit"
+                has_dol_target = pos.get("target_dollars") is not None or sell_strategy.get("target_dollars") is not None
+                if not has_pct_target and not has_dol_target:
+                    continue
+
             try:
-                with _lock:
-                    pos = tracked.get(ticker)
-                    if not pos or pos.get("status") not in ("open", "selling"):
-                        continue
-                    # Already past its close time — stop probing it every cycle. This was
-                    # the source of endless "holding to resolution" log spam plus a wasted
-                    # /markets call per cycle for every expired position (which, with a big
-                    # tracked file, monopolised the rate-limited API and starved scan/buy).
-                    if pos.get("expired"):
-                        continue
-                    # Skip only if no profit target exists at all (per-position or global)
-                    has_pct_target = pos.get("strategy") == "profit" or sell_strategy.get("mode") == "profit"
-                    has_dol_target = pos.get("target_dollars") is not None or sell_strategy.get("target_dollars") is not None
-                    if not has_pct_target and not has_dol_target:
-                        continue
                 data = _kalshi_get_with_timeout(f"/markets/{ticker}", timeout_secs=5.0)
                 if not isinstance(data, dict):
                     print(f"[monitor] Invalid market response for {ticker}: {type(data)}")
@@ -1133,13 +1082,11 @@ def _monitor():
                             print(f"[monitor] Error checking expiration time for {ticker}: {e}")
                             pass
 
-                # Use per-position target if set, otherwise fall back to the position's PROFILE strategy
-                # (not the global — each profile has its own sell strategy)
+                # Use per-position target if set, otherwise fall back to current global settings
                 profit_dollars = pos["count"] * (bid - pos["buy_price"]) / 100 if pos.get("buy_price") else None
-                prof_strat = _sell_profiles.get(pos.get("profile")) or {}
 
                 # ENFORCE SINGLE-MODE STRATEGY: only check conditions matching the current mode
-                strat_mode = prof_strat.get("mode", "resolution")
+                strat_mode = sell_strategy.get("mode", "resolution")
 
                 # Initialize all as False; only set based on active mode
                 hit_pct = False
@@ -1150,22 +1097,22 @@ def _monitor():
 
                 # Only check profit % if mode is "profit"
                 if strat_mode == "profit":
-                    target_pct = pos.get("target_pct") or prof_strat.get("target_pct")
+                    target_pct = pos.get("target_pct") or sell_strategy.get("target_pct")
                     hit_pct = target_pct is not None and profit_pct >= target_pct
 
                 # Only check profit $ if mode is "profit_dollars"
                 if strat_mode == "profit_dollars":
-                    target_dollars = pos.get("target_dollars") or prof_strat.get("target_dollars")
+                    target_dollars = pos.get("target_dollars") or sell_strategy.get("target_dollars")
                     hit_dol = target_dollars is not None and profit_dollars is not None and profit_dollars >= target_dollars
 
                 # Only check target price if mode is "target_price"
                 if strat_mode == "target_price":
-                    target_price_c = pos.get("target_price_cents") or prof_strat.get("target_price_cents")
+                    target_price_c = pos.get("target_price_cents") or sell_strategy.get("target_price_cents")
                     hit_price = target_price_c is not None and bid >= target_price_c
 
-                # Stop-loss applies to all modes (safety measure), but use the position's PROFILE strategy
-                stop_loss_pct = prof_strat.get("stop_loss_pct")
-                stop_loss_dol = prof_strat.get("stop_loss_dol")
+                # Stop-loss applies to all modes (safety measure)
+                stop_loss_pct = sell_strategy.get("stop_loss_pct")
+                stop_loss_dol = sell_strategy.get("stop_loss_dol")
                 hit_stop_pct = stop_loss_pct is not None and profit_pct <= -stop_loss_pct
                 hit_stop_dol = stop_loss_dol is not None and profit_dollars is not None and profit_dollars <= -stop_loss_dol
 
@@ -1234,7 +1181,7 @@ def _monitor():
                                          count=pos.get("count"), price=bid,
                                          profit=round(profit_dollars, 2), profit_pct=round(profit_pct, 1),
                                          sold_by="bot", reason=reason.lower(), title=title,
-                                         category=pos.get("category", ""), profile=pos.get("profile"))
+                                         category=pos.get("category", ""))
                     except Exception as e:
                         # If kalshi_post or result processing fails, revert selling status
                         with _lock:
@@ -1302,7 +1249,7 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
 
     up_min,   up_max   = float(bs.get("up_min", 80)),   float(bs.get("up_max", 96))
     down_min, down_max = float(bs.get("down_min", 80)), float(bs.get("down_max", 96))
-    minutes  = float(bs.get("minutes", 15))
+    minutes  = int(bs.get("minutes", 15))
     buy_amt  = float(bs.get("buy_amount", 0.50))
     max_scan = int(bs.get("max_per_scan", 3))
     max_conc = int(bs.get("max_concurrent", 999))
@@ -1335,30 +1282,16 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
                      "KXFED","KXCPI","KXPCE","KXUNEMP"]
     SPORTS_SERIES = ["NBAG","KXNBA","NBA","MLBG","KXMLB","MLB","NFLG","KXNFL","NFL",
                      "KXNHL","NHL","KXSOCCER"]
-    POLITICS_SERIES = ["US","USGA","2024","2026"]
-    COMBO_SERIES = ["COMBO"]
-
     series_list = []
     if bs.get("show_crypto", True):     series_list += CRYPTO_SERIES
     if bs.get("show_economics", False): series_list += ECON_SERIES
     if bs.get("show_sports", False):    series_list += SPORTS_SERIES
-    if bs.get("show_politics", False):  series_list += POLITICS_SERIES
-    if bs.get("show_combo", False):     series_list += COMBO_SERIES
-
-    if not series_list:
-        _log(f"[bot:{prof}] cycle: skipped — no categories enabled")
-        return 0
-
-    if prof == "T2":  # Debug: log T2's actual scan configuration
-        _log(f"[bot:T2] scanning: {len(series_list)} series (show_crypto={bs.get('show_crypto')}, show_econ={bs.get('show_economics')}, show_sports={bs.get('show_sports')}, show_politics={bs.get('show_politics')}, show_combo={bs.get('show_combo')})")
 
     with _lock:
         open_now = sum(1 for p in tracked.values() if p.get("status") == "open")
 
     candidates = []  # (ticker, side, price_cents, market)
     scan_errors = 0
-    t2_debug_counters = {"api_markets": 0, "filter_passed": 0, "price_filtered": 0} if prof == "T2" else None
-
     for st in series_list:
         if len(candidates) >= max_scan * 4:
             break
@@ -1367,11 +1300,7 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
         try:
             time.sleep(0.35)  # rate limit (shared limiter keeps us within policy)
             d = kalshi_get("/markets", {"series_ticker": st, "status": "open", "limit": 200})
-            markets_returned = d.get("markets", [])
-            if t2_debug_counters is not None:
-                t2_debug_counters["api_markets"] += len(markets_returned)
-
-            for m in markets_returned:
+            for m in d.get("markets", []):
                 hit = _apply_market_filters(
                     m, now_utc, cutoff, union_min, union_max,
                     no_crypto, no_combo, no_sports, no_politics, no_economics, good_liq, 10,
@@ -1379,9 +1308,6 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
                     no_buy_within_mins=no_buy_within, crypto_times=None, hide_multi=hide_multi)
                 if not hit:
                     continue
-                if t2_debug_counters is not None:
-                    t2_debug_counters["filter_passed"] += 1
-
                 ticker = m.get("ticker", "")
                 yes_p = _market_price(m, "yes")
                 no_p  = _market_price(m, "no")
@@ -1389,8 +1315,6 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
                     candidates.append((ticker, "yes", yes_p, m))
                 elif down_on and no_p is not None and down_min <= no_p < down_max:
                     candidates.append((ticker, "no", no_p, m))
-                elif t2_debug_counters is not None:
-                    t2_debug_counters["price_filtered"] += 1
         except Exception as e:
             # Was a silent `pass` — a persistent failure here (expired auth, sustained
             # 429s) would make the bot scan fruitlessly for HOURS with no log line.
@@ -1471,7 +1395,6 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
                         "count": contracts,
                         "spent": spent_dollars,
                         "category": m.get("category", ""),
-                        "profile": prof,  # T1 (Scanner) or T2 (Lotto)
                     })
                     _log(f"[bot:{prof}] Auto-bought {side.upper()} {ticker}: {contracts} @ {pc}¢")
                     _record_activity("buy", ticker=ticker, side=side, count=contracts,
@@ -1506,8 +1429,6 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
         why = "; ".join(reasons) or f"{len(candidates)} candidates but none bought"
         summary = f"bought 0 — {why}"
         _log(f"[bot:{prof}] cycle: {summary}")
-        if t2_debug_counters is not None:
-            _log(f"[bot:T2] debug: {t2_debug_counters['api_markets']} markets from API, {t2_debug_counters['filter_passed']} passed filters, {t2_debug_counters['price_filtered']} price-filtered out")
     # Record every scan cycle so the Summary tab can prove the bot is scanning even
     # when it buys nothing (the missing signal during the 9-hour gap).
     _record_activity("scan", profile=prof, candidates=len(candidates),
@@ -1673,13 +1594,11 @@ def serve_icons(filename):
 
 
 @app.route("/api/debug")
-@require_auth
 def debug():
     data = kalshi_get("/markets", {"status": "open", "limit": 3})
     return jsonify(data.get("markets", []))
 
 @app.route("/api/debug/balance")
-@require_auth
 def debug_balance():
     # Cached raw balance (shared cache; same shape the /mobile page expects).
     b = _get_balance()
@@ -1699,7 +1618,6 @@ def show_public_key():
 
 
 @app.route("/api/auth-test")
-@require_auth
 def auth_test():
     endpoint = "/portfolio/balance"
     full_path = API_PREFIX + endpoint
@@ -1898,70 +1816,68 @@ def portfolio():
             total_traded = _d2c(p.get("total_traded_dollars")) if "total_traded_dollars" in p else p.get("total_traded", 0)
             realized_pnl = _d2c(p.get("realized_pnl_dollars")) if "realized_pnl_dollars" in p else p.get("realized_pnl", 0)
 
-            # Calculate buy_price first (needed for fallback price logic below)
-            bot_info = tracked.get(ticker)
-            derived_buy_price = None
-            if not bot_info:
-                ttd = float(p.get("total_traded_dollars") or 0)
-                if ttd > 0 and abs(qty) > 0.001:
-                    raw = round(ttd / abs(qty) * 100)
-                    derived_buy_price = raw if raw <= 99 else None
-            buy_price = (bot_info["buy_price"] if bot_info else None) or derived_buy_price
-
             market_title = ticker
             event_ticker = ""
             category     = ""
             current_yes  = None
             current_no   = None
             close_time   = None
-            # Try cached market data first (scan loop populates this constantly).
-            # Only fetch fresh if cache is stale AND we have few positions (avoiding API storms).
-            mkt = None
-            _c = _market_cache.get(ticker)
-            if _c and (time.time() - _c["ts"]) < _MARKET_CACHE_TTL:
-                mkt = _c["data"]
-            elif enrich and len(raw_positions) < 100:
+            # When 1000+ positions + enrich=true, skip expensive market lookups (they race
+            # with the scan loop for rate-limit lock). Only use cached balance/positions.
+            # Frontend will request individual position enrichment on-demand.
+            if enrich and len(raw_positions) < 100:
                 time.sleep(0.01)
                 try:
-                    mkt = _get_market(ticker)
+                    mkt          = _get_market(ticker)
+                    event_ticker = mkt.get("event_ticker", "")
+                    market_title = _pretty_title(ticker, _event_title(event_ticker) or mkt.get("title", ticker))
+                    category     = mkt.get("category", "")
+                    current_yes  = _mark_price_cents(mkt, "yes")
+                    current_no   = _mark_price_cents(mkt, "no")
+                    close_time   = mkt.get("close_time") or mkt.get("expiration_time")
                 except Exception:
-                    mkt = {}
-
-            if mkt:
-                event_ticker = mkt.get("event_ticker", "")
-                market_title = _pretty_title(ticker, _event_title(event_ticker) or mkt.get("title", ticker))
-                category     = mkt.get("category", "")
-                current_yes  = _mark_price_cents(mkt, "yes")
-                current_no   = _mark_price_cents(mkt, "no")
-                close_time   = mkt.get("close_time") or mkt.get("expiration_time")
+                    pass
             else:
-                # Fallback: use title cache (persists across reloads), show no prices
-                event_ticker = ""
-                market_title = _title_cache.get(ticker) or _humanize_ticker(ticker)
-                category = ""
-                current_yes = None
-                current_no = None
-                close_time = None
-
-            # If market data didn't have live prices (common for illiquid markets),
-            # use buy_price as estimate so positions don't show as null in UI
-            if buy_price is not None:
-                if current_yes is None:
-                    current_yes = buy_price
-                if current_no is None:
-                    current_no = buy_price
+                # Fast mode: make NO new market call, but REUSE cached market data if
+                # the scan loop already fetched it (it scans these same crypto markets
+                # constantly). Instant live prices with zero extra API hits — so the
+                # CURRENT/PROFIT columns show numbers immediately instead of dashes.
+                _c = _market_cache.get(ticker)
+                if _c and (time.time() - _c["ts"]) < _MARKET_CACHE_TTL:
+                    _m = _c["data"]
+                    event_ticker = _m.get("event_ticker", "")
+                    market_title = _pretty_title(ticker, _event_title(event_ticker) or _m.get("title", ticker))
+                    category     = _m.get("category", "")
+                    current_yes  = _mark_price_cents(_m, "yes")
+                    current_no   = _mark_price_cents(_m, "no")
+                    close_time   = _m.get("close_time") or _m.get("expiration_time")
+                else:
+                    event_ticker = ""
+                    market_title = _title_cache.get(ticker) or _humanize_ticker(ticker)
+                    category = ""
+                    current_yes = None
+                    current_no = None
+                    close_time = None
 
             # Portfolio value = contracts * current bid price
             side = "yes" if qty > 0 else "no"
             bid  = current_yes if side == "yes" else current_no
-
-            # If current price is unavailable, use buy_price as fallback for display
-            # (this is a position mark estimate when the API doesn't return live prices)
-            if bid is None and buy_price is not None:
-                bid = buy_price
-
             if bid:
                 portfolio_value += abs(qty) * bid / 100
+
+            bot_info = tracked.get(ticker)
+
+            # Derive average buy price from total_traded_dollars for non-bot positions
+            # Cap at 99¢ — if derived price > 99 it means total_traded includes
+            # multiple round-trips and isn't a reliable cost basis (show — instead)
+            derived_buy_price = None
+            if not bot_info:
+                ttd = float(p.get("total_traded_dollars") or 0)
+                if ttd > 0 and abs(qty) > 0.001:
+                    raw = round(ttd / abs(qty) * 100)
+                    derived_buy_price = raw if raw <= 99 else None
+
+            buy_price = (bot_info["buy_price"] if bot_info else None) or derived_buy_price
 
             positions.append({
                 "ticker":         ticker,
@@ -2288,7 +2204,6 @@ def _recent_settlements(hours: int = 24) -> list:
 
 
 @app.route("/api/debug_positions")
-@require_auth
 def debug_positions():
     out = {}
     probes = [
@@ -2310,7 +2225,6 @@ def debug_positions():
 
 
 @app.route("/api/debug_events")
-@require_auth
 def debug_events():
     """Return first page of /events so we can see the structure and event_tickers."""
     try:
@@ -2335,7 +2249,6 @@ def debug_events():
 
 
 @app.route("/api/debug_series")
-@require_auth
 def debug_series():
     """List all series + test timestamp-filtered market query."""
     result = {}
@@ -2393,7 +2306,6 @@ def debug_series():
 
 
 @app.route("/api/debug_scan")
-@require_auth
 def debug_scan():
     """Combined debug: 60-min market window + series probe + timestamp filter test."""
     now    = datetime.now(timezone.utc)
@@ -2685,7 +2597,7 @@ def scan():
     try:
         min_thr        = float(request.args.get("min_thr", 85))
         max_thr        = float(request.args.get("max_thr", 96))
-        minutes        = float(request.args.get("minutes", 15))
+        minutes        = int(request.args.get("minutes", 15))
         show_crypto    = request.args.get("show_crypto", "false").lower() == "true"
         show_combo     = request.args.get("show_combo", "false").lower() == "true"
         show_sports    = request.args.get("show_sports", "false").lower() == "true"
@@ -2886,7 +2798,6 @@ def scan():
 
 
 @app.route("/api/buy", methods=["POST"])
-@require_auth
 def buy():
     data     = request.get_json(silent=True) or {}
     ticker   = data.get("ticker", "")
@@ -2997,12 +2908,6 @@ def buy():
     _save_tracked()
     _balance_cache["ts"] = 0  # cash changed — force a fresh balance on next read
 
-    # Record this manual buy in activity log
-    spent = round(contracts * price_c / 100, 2)
-    _record_activity("buy", ticker=ticker, side=side, count=contracts,
-                     price=price_c, spent=spent, profile="manual",
-                     title=title, category=category)
-
     return jsonify({
         "ok":        True,
         "order_id":  order.get("order_id"),
@@ -3010,17 +2915,15 @@ def buy():
         "contracts": contracts,
         "ticker":    ticker,
         "side":      side.upper(),
-        "spent":     spent,
+        "spent":     round(contracts * price_c / 100, 2),
     })
 
 
 @app.route("/api/sell", methods=["POST"])
-@require_auth
 def sell():
     data    = request.get_json(silent=True) or {}
     ticker  = data.get("ticker", "")
     side    = data.get("side", "")
-    order_type = data.get("order_type", "limit")  # "limit" or "market"
 
     # Safely convert count to float (supports fractional quantities like 0.08, 0.91)
     try:
@@ -3043,13 +2946,11 @@ def sell():
         else:
             bid_d = mkt_data.get("no_bid_dollars") or mkt_data.get("no_ask_dollars")
 
-        bid_cents_float = round(float(bid_d or 0) * 100, 2)  # Decimal value (99.5, 98.2, etc)
-        bid_cents = int(round(bid_cents_float))  # Convert to integer for Kalshi API (99, 98, etc)
-
+        bid_cents = round(float(bid_d or 0) * 100)
         if bid_cents < 1:
             return jsonify({"error": f"Cannot sell — current bid is 0¢ (market likely already resolved or no buyers). Check Kalshi directly."}), 400
 
-        # Kalshi API only accepts whole numbers for count - sell what we can, leave fractional for Kalshi
+        # Kalshi API only accepts whole numbers - sell what we can, leave fractional for Kalshi
         count_int = int(count)  # Floor: 1.53 → 1, 0.53 → 0
 
         if count_int < 1:
@@ -3057,63 +2958,32 @@ def sell():
             print(f"[sell] {ticker}: {count} contracts (fractional < 1, error)")
             return jsonify({"error": f"Can't sell {count} contracts — less than 1. Position will resolve at expiry."}), 400
 
-        # Build order payload — LIMIT or MARKET based on order_type
+        # LIMIT SELL at current bid price — locked in price, won't sell below.
+        # Safer than market orders which could fill at terrible prices if liquidity dries up.
         order_payload = {
             "ticker": ticker,
             "client_order_id": str(uuid.uuid4()),  # Required by Kalshi API
             "action": "sell",
             "side":   side,
-            "type":   order_type,  # "limit" (won't sell below bid) or "market" (best effort)
+            "type":   "limit",  # LIMIT: won't sell below this price
             "count":  count_int,
         }
+        price_key = "yes_price" if side == "yes" else "no_price"
+        order_payload[price_key] = bid_cents  # sell at this price or better
 
-        if order_type == "limit":
-            # LIMIT: locked in price, won't sell below (integer cents)
-            price_key = "yes_price" if side == "yes" else "no_price"
-            order_payload[price_key] = bid_cents
-            print(f"[sell] {ticker} {side} × {count_int} LIMIT @ {bid_cents}¢")
-        else:
-            # MARKET: no price constraint, executes immediately at best available
-            print(f"[sell] {ticker} {side} × {count_int} MARKET (best effort)")
+        print(f"[sell] {ticker} {side} × {count_int} LIMIT @ {bid_cents}¢")
         result = kalshi_post("/portfolio/orders", order_payload)
         order_status = result.get("order", {}).get("status", "")
 
         # "canceled" = limit order didn't fill (no buyers at that price).
-        # Check if we'd be profitable at market price before offering market order
+        # Return error and let frontend offer retry options (lower price, wait, etc).
         if order_status == "canceled":
             print(f"[sell] {ticker} LIMIT canceled — no buyers at {bid_cents}¢")
-
-            # Check profit at market (ask) price
-            buy_price = None
-            with _lock:
-                if ticker in tracked:
-                    buy_price = tracked[ticker].get("buy_price")
-
-            # Determine market (ask) price
-            if side == "yes":
-                market_price = mkt_data.get("yes_ask_dollars") or mkt_data.get("yes_bid_dollars") or 0
-            else:
-                market_price = mkt_data.get("no_ask_dollars") or mkt_data.get("no_bid_dollars") or 0
-
-            market_cents = int(round(float(market_price) * 100))  # Whole cents only
-
-            # Calculate profit/loss at market price (whole cent prices)
-            # Allow market order if loss is <= 10% (i.e., profit_pct >= -10.0)
-            acceptable_market = False
-            profit_pct = 0
-            if buy_price and market_cents > 0:
-                profit_pct = ((market_cents - buy_price) / buy_price) * 100
-                acceptable_market = profit_pct >= -10.0  # Don't lose more than 10%
-
             return jsonify({
                 "error": f"No buyers at {bid_cents}¢",
                 "reason": "limit_no_fill",
                 "tried_price": bid_cents,
-                "suggest_lower": max(1, bid_cents - 5),
-                "market_price": market_cents,
-                "buy_price": buy_price,
-                "acceptable_market": acceptable_market,  # True if loss <= 10% at market
-                "profit_pct": round(profit_pct, 1),
+                "suggest_lower": max(1, bid_cents - 5),  # suggest ±5¢ lower as fallback
             }), 400
     except req.HTTPError as e:
         err_text = e.response.text[:500]
@@ -3167,8 +3037,7 @@ def sell():
         _profit = round(count_int * (exec_c - _bp) / 100, 2) if _bp else None
         _record_activity("sell", ticker=ticker, side=side, count=count_int,
                          price=exec_c, profit=_profit, sold_by="human",
-                         title=_pos.get("title", ticker), category=_pos.get("category", ""),
-                         profile=_pos.get("profile"))
+                         title=_pos.get("title", ticker), category=_pos.get("category", ""))
 
     return jsonify({
         "ok": True,
@@ -3250,7 +3119,7 @@ def pnl_history():
                 cnt = yes_cnt if yes_cnt > 0.001 else no_cnt
                 fee = round(cnt * 0.01, 4) if rev > 0.001 else 0
                 pnl = rev - cost - fee
-                settle_by_time[ts_float] = settle_by_time.get(ts_float, 0) + pnl
+                settle_by_time[ts_float] = pnl
             cursor = data.get("cursor")
             if not cursor: break
             pages += 1
@@ -3316,11 +3185,8 @@ def set_strategy():
             return jsonify({"error": "target_price_cents must be 1-99"}), 400
         if bip is not None and (bip < 1 or bip > 99):
             return jsonify({"error": "buy_in_price_cents must be 1-99"}), 400
-        # stop_loss_pct: 0 or None clears it; 1-99 enables it
-        if slp is not None and slp != 0 and (slp < 1 or slp > 99):
-            return jsonify({"error": "stop_loss_pct must be 0 (off) or 1-99 (%)"}), 400
-        if slp == 0:
-            slp = None  # treat 0 as "clear stop loss"
+        if slp is not None and (slp < 1 or slp > 99):
+            return jsonify({"error": "stop_loss_pct must be 1-99"}), 400
     except (ValueError, TypeError):
         return jsonify({"error": "Invalid numeric values"}), 400
 
@@ -3481,10 +3347,11 @@ def api_summary():
 
     events = _read_activity(since)
 
-    scans = buys = sells = 0
+    scans = buys = sells = settlements = 0
     buy_spent = 0.0
     sell_proceeds = 0.0
     realized_profit = 0.0
+    settlement_pnl = 0.0
     have_profit = False
     trades = []  # buy/sell/settlement events for the expandable text list
 
@@ -3505,51 +3372,51 @@ def api_summary():
             sell_proceeds += float(e.get("count") or 0) * float(e.get("price") or 0) / 100
             trades.append(e)
 
-    # Merge Kalshi's authoritative settlements into the list. In "resolution" mode
-    # (the default) positions close by SETTLING, not selling — without these rows the
-    # Summary only ever shows buys and the user can't see how positions closed.
-    settlements = 0
-    settlement_pnl = 0.0
-    have_settle_pnl = False
+    # Merge settlements from Kalshi's API (don't double-count sold_early entries from activity)
+    since_dt = datetime.fromtimestamp(since, tz=timezone.utc)
     try:
-        hours = max(1, int(minutes / 60) + 1)
-        for s in _cached_settlements(hours=hours):
+        all_settlements = _cached_settlements(hours=24)
+        for s in all_settlements:
+            # Skip sold_early (already counted as sells in activity log)
             if s.get("result") == "sold_early":
-                continue  # bot-sold positions are already in the activity log as "sell"
+                continue
+
+            # Only include settlements within the time window
             ts_str = s.get("settled_time", "")
-            try:
-                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")).timestamp()
-            except (ValueError, TypeError):
-                continue
-            if ts < since:
-                continue
+            if ts_str:
+                try:
+                    ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+                    if ts < since_dt:
+                        continue
+                except (ValueError, AttributeError):
+                    pass
+
             settlements += 1
-            pnl = s.get("pnl")
-            if pnl is not None:
-                settlement_pnl += float(pnl)
-                have_settle_pnl = True
-            cnt = float(s.get("count") or 0)
-            rev = float(s.get("revenue") or 0)
-            trades.append({
-                "kind":    "settlement",
-                "ts":      ts,
-                "ticker":  s.get("ticker", ""),
-                "title":   s.get("title", ""),
-                "side":    s.get("side", ""),
-                "count":   cnt,
-                "price":   round(rev / cnt * 100) if cnt > 0.001 and rev > 0 else 0,
-                "profit":  pnl,
-                "result":  s.get("result", ""),
-                "won":     s.get("won", False),
+            pnl = float(s.get("pnl") or 0)
+            if pnl != 0:
+                settlement_pnl += pnl
+
+            # Convert settlement to trade format for display
+            trade = {
+                "kind": "settlement",
+                "ts": s.get("settled_time", ""),
+                "ticker": s.get("ticker", ""),
+                "title": s.get("title", ""),
+                "side": s.get("side", ""),
+                "count": s.get("count", 0),
+                "price": round(float(s.get("revenue") or 0) / (float(s.get("count") or 1) or 1) * 100, 0) if float(s.get("count") or 0) > 0 else 0,
+                "profit": pnl,
+                "result": s.get("result", ""),
+                "won": s.get("won", False),
                 "profile": s.get("profile"),
-            })
+            }
+            trades.append(trade)
     except Exception as e:
         print(f"[summary] settlements merge error: {e}")
 
     # newest first for display
     trades.sort(key=lambda x: x.get("ts", 0), reverse=True)
 
-    total_realized = (realized_profit if have_profit else 0.0) + (settlement_pnl if have_settle_pnl else 0.0)
     return jsonify({
         "minutes": minutes,
         "since": since,
@@ -3561,68 +3428,10 @@ def api_summary():
             "settlements": settlements,
             "buy_spent": round(buy_spent, 2),
             "sell_proceeds": round(sell_proceeds, 2),
-            "settlement_pnl": round(settlement_pnl, 2) if have_settle_pnl else None,
-            "realized_profit": round(total_realized, 2) if (have_profit or have_settle_pnl) else None,
+            "realized_profit": round(realized_profit, 2) if have_profit else None,
+            "settlement_pnl": round(settlement_pnl, 2) if settlement_pnl != 0 else None,
         },
         "trades": trades[:500],  # cap payload
-    })
-
-
-@app.route("/api/diagnostic/tracked")
-def api_diagnostic_tracked():
-    """Return current in-memory tracked positions vs saved on disk (for debugging)."""
-    # Compare in-memory vs saved on disk
-    saved_positions = {}
-    try:
-        if TRACKED_FILE.exists():
-            saved_positions = json.loads(TRACKED_FILE.read_text(encoding="utf-8"))
-    except Exception as e:
-        pass
-
-    in_memory_open = [t for t, p in tracked.items() if p.get("status") == "open"]
-    saved_open = [t for t, p in saved_positions.items() if p.get("status") == "open"]
-    mismatch = list(set(in_memory_open) - set(saved_open))
-
-    return jsonify({
-        "in_memory_total": len(tracked),
-        "in_memory_open_count": len(in_memory_open),
-        "in_memory_open_sample": in_memory_open[:10],
-        "saved_total": len(saved_positions),
-        "saved_open_count": len(saved_open),
-        "NOT_SAVED_count": len(mismatch),
-        "NOT_SAVED_tickers": mismatch[:10],
-        "sample_inmemory": next(((t, p) for t, p in tracked.items() if p.get("status") == "open"), None),
-    })
-
-
-@app.route("/api/diagnostic/activity")
-def api_diagnostic_activity():
-    """Return activity log statistics (buys, sells, scans)."""
-    # Read all activity from log
-    events = _read_activity(0)  # all events since epoch
-
-    buys = [e for e in events if e.get("kind") == "buy"]
-    sells = [e for e in events if e.get("kind") == "sell"]
-    scans = [e for e in events if e.get("kind") == "scan"]
-
-    # Count by time window
-    now = time.time()
-    last_hour = [e for e in events if e.get("ts", 0) >= now - 3600]
-    last_day = [e for e in events if e.get("ts", 0) >= now - 86400]
-
-    return jsonify({
-        "total_buys": len(buys),
-        "total_sells": len(sells),
-        "total_scans": len(scans),
-        "buys_last_hour": len([e for e in buys if e.get("ts", 0) >= now - 3600]),
-        "sells_last_hour": len([e for e in sells if e.get("ts", 0) >= now - 3600]),
-        "buys_last_24h": len([e for e in buys if e.get("ts", 0) >= now - 86400]),
-        "sells_last_24h": len([e for e in sells if e.get("ts", 0) >= now - 86400]),
-        "scans_last_24h": len([e for e in scans if e.get("ts", 0) >= now - 86400]),
-        "activity_log_file": str(ACTIVITY_LOG),
-        "activity_log_exists": ACTIVITY_LOG.exists(),
-        "sample_buy": buys[-1] if buys else None,
-        "sample_sell": sells[-1] if sells else None,
     })
 
 
@@ -4185,7 +3994,6 @@ def coach():
 # ---------------------------------------------------------------------------
 
 @app.route("/api/bot/start", methods=["POST"])
-@require_auth
 def bot_start():
     """Start the headless auto-trading loop."""
     global _bot_running, _bot_start_time
@@ -4200,7 +4008,6 @@ def bot_start():
 
 
 @app.route("/api/bot/stop", methods=["POST"])
-@require_auth
 def bot_stop():
     """Stop the headless auto-trading loop gracefully."""
     global _bot_running
@@ -4211,125 +4018,6 @@ def bot_stop():
     _save_bot_config(False)  # Persist so it doesn't restart if home PC reboots
     print("[bot] Trading loop stopped")
     return jsonify({"ok": True, "status": "stopped"})
-
-
-def _trigger_bot_restart(bot_name):
-    """Trigger any bot restart by updating VERSION.txt and pushing to git."""
-    import subprocess
-    from datetime import datetime
-
-    bot_dir = Path(HERE.parent) / bot_name.lower()
-    if not bot_dir.exists():
-        return {"error": f"{bot_name} directory not found at {bot_dir}"}, 404
-
-    try:
-        # Step 1: git pull origin main
-        result = subprocess.run(
-            ["git", "pull", "origin", "main"],
-            cwd=str(bot_dir),
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        if result.returncode != 0:
-            return {"error": f"git pull failed: {result.stderr}"}, 500
-
-        # Step 2: Create/update VERSION.txt with timestamp
-        version_file = bot_dir / "VERSION.txt"
-        timestamp = datetime.now().isoformat()
-        version_file.write_text(timestamp)
-
-        # Step 3: git add VERSION.txt
-        result = subprocess.run(
-            ["git", "add", "VERSION.txt"],
-            cwd=str(bot_dir),
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        if result.returncode != 0:
-            return {"error": f"git add failed: {result.stderr}"}, 500
-
-        # Step 4: git commit
-        result = subprocess.run(
-            ["git", "commit", "-m", f"Auto-restart trigger via {bot_name}"],
-            cwd=str(bot_dir),
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        if result.returncode != 0 and "nothing to commit" not in result.stderr.lower():
-            return {"error": f"git commit failed: {result.stderr}"}, 500
-
-        # Step 5: git push origin main
-        result = subprocess.run(
-            ["git", "push", "origin", "main"],
-            cwd=str(bot_dir),
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        if result.returncode != 0:
-            return {"error": f"git push failed: {result.stderr}"}, 500
-
-        _log(f"[api] {bot_name} restart triggered via git (VERSION: {timestamp})")
-        return {"ok": True, "bot": bot_name, "message": f"{bot_name} auto-restart triggered (VERSION: {timestamp})"}, 200
-    except subprocess.TimeoutExpired:
-        return {"error": "Git command timed out"}, 500
-    except Exception as e:
-        _log(f"[api] {bot_name} restart failed: {e}")
-        return {"error": str(e)}, 500
-
-
-@app.route("/api/restart", methods=["POST"])
-def restart_bot():
-    """Restart any bot (kalshibot or polybot) via git VERSION.txt trigger."""
-    bot = request.args.get("bot", "polybot").lower()
-
-    if bot not in ["kalshibot", "polybot"]:
-        return jsonify({"error": f"Unknown bot: {bot}. Use 'kalshibot' or 'polybot'"}), 400
-
-    data, status = _trigger_bot_restart(bot)
-    return jsonify(data), status
-
-
-def _self_restart():
-    """Spawn a fresh copy of this app (running the just-pulled code), then exit.
-    Runs on a short delay from a background thread so the HTTP response that
-    triggered the restart gets flushed to the browser first. Uses Popen+exit
-    instead of os.execv because execv on Windows mangles paths with spaces
-    (e.g. OneDrive folders)."""
-    time.sleep(1.5)
-    try:
-        _save_tracked()
-    except Exception:
-        pass
-    print("[update] restarting on new code…")
-    import subprocess
-    script = os.path.abspath(sys.argv[0])
-    subprocess.Popen([sys.executable, script] + sys.argv[1:], cwd=str(HERE))
-    os._exit(0)
-
-
-@app.route("/api/self-update", methods=["POST"])
-@require_auth
-def self_update():
-    """Fallback updater for when kalshi-manager.py isn't running: git-pull THIS
-    repo, then restart this process on the new code. The Update button tries the
-    manager first and falls back here, so updating works with app.py alone."""
-    import subprocess
-    try:
-        result = subprocess.run(
-            ["git", "pull", "origin", "main"],
-            cwd=str(HERE), capture_output=True, text=True, timeout=60,
-        )
-        git_ok = result.returncode == 0
-        git_out = (result.stdout + "\n" + result.stderr).strip()
-    except Exception as e:
-        return jsonify({"ok": False, "git_ok": False, "git_error": str(e)}), 500
-
-    threading.Thread(target=_self_restart, daemon=True).start()
-    return jsonify({"ok": True, "git_ok": git_ok, "git": git_out, "restarting": True})
 
 
 @app.route("/api/apilog", methods=["GET"])
@@ -4416,18 +4104,18 @@ def _print_banner():
 
 if __name__ == "__main__":
     _print_banner()
-    if _already_running(FLASK_PORT):
+    if _already_running(5003):
         print("=" * 60)
-        print(f"{BOT_NAME} is ALREADY RUNNING (port {FLASK_PORT} is in use).")
+        print(f"{BOT_NAME} is ALREADY RUNNING (port 5003 is in use).")
         print("This window will close — use the one that's already open,")
-        print(f"or open http://localhost:{FLASK_PORT} in your browser.")
+        print("or open http://localhost:5003 in your browser.")
         print("=" * 60)
         try:
             input("Press Enter to close...")
         except EOFError:
             pass
         sys.exit(0)
-    print(f"Open http://localhost:{FLASK_PORT}")
+    print("Open http://localhost:5003")
 
     # Health check: attempt Kalshi API connection, but don't block startup if it fails
     try:
@@ -4440,29 +4128,13 @@ if __name__ == "__main__":
         print(f"\n⚠️  WARNING: Cannot reach Kalshi API: {e}")
         print("Bot will start, but will be unable to trade until the connection is restored.\n")
 
-    # Start PolyBot in background if available
-    polybot_dir = Path(HERE.parent) / "polybot"
-    if polybot_dir.exists() and (polybot_dir / "app.py").exists():
-        try:
-            import subprocess
-            subprocess.Popen(
-                [sys.executable, "app.py"],
-                cwd=str(polybot_dir),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0
-            )
-            print("✓ PolyBot started in background")
-        except Exception as e:
-            print(f"⚠️  Could not start PolyBot: {e}")
-
     # threaded=True is critical: the scan loop and slow Kalshi API calls can each
     # tie up a worker for seconds at a time. Single-threaded (the Werkzeug default)
     # means a phone/laptop page-load (GET /) queues behind that work and times out,
     # so the browser falls back to its cached "offline copy" snapshot — even though
     # the bot is running fine. Multi-threaded lets navigation + API + scan run at
     # once so the UI is always reachable.
-    app.run(debug=False, host="0.0.0.0", port=FLASK_PORT, threaded=True)
+    app.run(debug=False, host="0.0.0.0", port=5003, threaded=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
