@@ -55,7 +55,12 @@ def _log(msg: str):
 # Powers the Summary tab ("activity in the past X minutes") so you can confirm at
 # a glance that the bot is alive and trading — the whole point being to NEVER again
 # have a silent multi-hour gap. Kept lightweight: one JSON object per line.
-ACTIVITY_LOG = HERE / "activity_log.jsonl"
+# Separate logs per machine to avoid conflicts when syncing via git.
+_MACHINE_NAME = os.getenv("KALSHIBOT_MACHINE", "").lower().strip()
+if not _MACHINE_NAME:
+    hostname = socket.gethostname().lower()
+    _MACHINE_NAME = "home" if "oiokum" in hostname else "laptop"
+ACTIVITY_LOG = HERE / f"activity_{_MACHINE_NAME}.log"
 _activity_lock = threading.Lock()
 _ACTIVITY_MAX_LINES = 50000  # trim oldest when we exceed this, so the file can't grow forever
 
@@ -72,41 +77,59 @@ def _record_activity(kind: str, **fields):
         print(f"[activity] write failed: {e}", flush=True)
 
 def _read_activity(since_ts: float):
-    """Return all activity events with ts >= since_ts, oldest→newest."""
+    """Read and merge activity logs from both machines, deduplicate, return oldest→newest."""
+    import shutil
     out = []
-    try:
-        if not ACTIVITY_LOG.exists():
-            return out
-        with _activity_lock:
-            lines = ACTIVITY_LOG.read_text(encoding="utf-8").splitlines()
-        # Trim the file if it has grown too large (keep the newest tail).
-        if len(lines) > _ACTIVITY_MAX_LINES:
-            try:
-                tail = lines[-_ACTIVITY_MAX_LINES:]
-                with _activity_lock:
-                    # Create backup before trimming (in case something goes wrong)
-                    import shutil
-                    backup = ACTIVITY_LOG.parent / (ACTIVITY_LOG.name + ".bak")
-                    shutil.copy2(ACTIVITY_LOG, backup)
-                    # Atomic write: write to temp file first, then rename
-                    temp = ACTIVITY_LOG.parent / (ACTIVITY_LOG.name + ".tmp")
-                    temp.write_text("\n".join(tail) + "\n", encoding="utf-8")
-                    temp.replace(ACTIVITY_LOG)
-                lines = tail
-            except Exception as e:
-                print(f"[activity] trim failed: {e}", flush=True)
-                pass
-        for ln in lines:
-            if not ln.strip():
-                continue
-            try:
-                e = json.loads(ln)
-            except Exception:
-                continue
-            if e.get("ts", 0) >= since_ts:
-                out.append(e)
-    except Exception as e:
-        print(f"[activity] read failed: {e}", flush=True)
+    seen = set()  # deduplicate by (ts_bucket, kind, ticker, side)
+
+    # Read from both machine logs
+    for machine in ["home", "laptop"]:
+        log_path = HERE / f"activity_{machine}.log"
+        if not log_path.exists():
+            continue
+        try:
+            with _activity_lock:
+                lines = log_path.read_text(encoding="utf-8").splitlines()
+
+            # Auto-trim if needed
+            if len(lines) > _ACTIVITY_MAX_LINES:
+                try:
+                    tail = lines[-_ACTIVITY_MAX_LINES:]
+                    with _activity_lock:
+                        backup = log_path.parent / (log_path.name + ".bak")
+                        shutil.copy2(log_path, backup)
+                        temp = log_path.parent / (log_path.name + ".tmp")
+                        temp.write_text("\n".join(tail) + "\n", encoding="utf-8")
+                        temp.replace(log_path)
+                    lines = tail
+                except Exception as e:
+                    print(f"[activity] trim {machine} failed: {e}", flush=True)
+
+            for ln in lines:
+                if not ln.strip():
+                    continue
+                try:
+                    e = json.loads(ln)
+                    ts = e.get("ts", 0)
+                    if ts < since_ts:
+                        continue
+                    # Deduplicate: use (rounded_ts, kind, ticker) as unique key
+                    # Round to nearest second to catch duplicates within 1s window
+                    ts_bucket = int(ts)
+                    kind = e.get("kind", "")
+                    ticker = e.get("ticker", "")
+                    side = e.get("side", "")
+                    key = (ts_bucket, kind, ticker, side)
+                    if key not in seen:
+                        seen.add(key)
+                        out.append(e)
+                except Exception:
+                    continue
+        except Exception as e:
+            print(f"[activity] read {machine} failed: {e}", flush=True)
+
+    # Sort by timestamp, oldest first
+    out.sort(key=lambda x: x.get("ts", 0))
     return out
 
 # Category detection cache — avoid re-detecting same market
@@ -727,10 +750,54 @@ def _spot_price(symbol: str):
             pass
     return None, "no_source"
 
+# ── Smart Strategy — master switch for auto Scanner/Lotto based on spread ────
+SMART_STRATEGY_FILE = HERE / "smart_strategy.json"
+smart_strategy = {
+    "enabled": False,
+    "mode": None,  # "scanner", "lotto", or None (auto-selecting)
+    "spread_threshold": 100.0,  # $100 or more = use Scanner, less = use Lotto
+}
+def _load_smart_strategy():
+    global smart_strategy
+    try:
+        if SMART_STRATEGY_FILE.exists():
+            d = json.loads(SMART_STRATEGY_FILE.read_text(encoding="utf-8"))
+            if isinstance(d, dict):
+                smart_strategy.update(d)
+    except Exception as e:
+        print(f"[smart-strategy] load failed: {e}")
+def _save_smart_strategy():
+    try:
+        SMART_STRATEGY_FILE.write_text(json.dumps(smart_strategy, indent=2), encoding="utf-8")
+    except Exception as e:
+        print(f"[smart-strategy] save failed: {e}")
+_load_smart_strategy()
+
 _CRYPTO_15M_PREFIXES = ("KXBTC15M", "KXETH15M", "KXSOL15M", "KXHYPE15M",
                         "KXDOGE15M", "KXBNB15M", "KXXRP15M",
                         "KXBTC30M", "KXETH30M", "KXSOL30M",
                         "KXBTC1H", "KXETH1H", "KXSOL1H")
+
+def _average_crypto_spread() -> float:
+    """Calculate average spread cushion across all open 15-min crypto markets.
+    Returns the average cushion in dollars, or 0 if no data."""
+    try:
+        cushions = []
+        for prefix in _CRYPTO_15M_PREFIXES[:7]:  # Check main 7 crypto pairs
+            try:
+                d = kalshi_get("/markets", {"series_ticker": prefix, "status": "open", "limit": 5})
+                for m in d.get("markets", []):
+                    dec = _spread_guard_decision(m.get("ticker", ""), m)
+                    if dec.get("cushion") is not None:
+                        cushions.append(float(dec["cushion"]))
+            except Exception:
+                pass
+        if cushions:
+            return sum(cushions) / len(cushions)
+        return 0.0
+    except Exception as e:
+        print(f"[smart-strategy] spread calc failed: {e}")
+        return 0.0
 
 def _ticker_symbol(ticker: str):
     """KXETH15M-26JUN102330-30 → ETH"""
@@ -3734,6 +3801,49 @@ def api_spread_check():
                            "CF Benchmarks RTI prices over the final minute before close.",
         "spot_sources": "coinbase (primary), kraken (fallback) — both RTI constituent exchanges",
         "markets": rows,
+    })
+
+
+@app.route("/api/smart-strategy", methods=["GET", "POST"])
+def api_smart_strategy():
+    """Master switch for auto Scanner/Lotto mode based on live crypto spread.
+    GET: return current setting + live spread analysis.
+    POST: set enabled state."""
+    if request.method == "GET":
+        # Calculate live average spread
+        avg_spread = _average_crypto_spread()
+        recommended = "scanner" if avg_spread >= smart_strategy["spread_threshold"] else "lotto"
+        return jsonify({
+            "enabled": smart_strategy["enabled"],
+            "spread_threshold": smart_strategy["spread_threshold"],
+            "current_spread": round(avg_spread, 2),
+            "recommended_mode": recommended,
+            "active_mode": recommended if smart_strategy["enabled"] else None,
+        })
+
+    # POST: update setting
+    data = request.get_json(silent=True) or {}
+    if "enabled" in data:
+        smart_strategy["enabled"] = bool(data["enabled"])
+    if "spread_threshold" in data:
+        try:
+            thr = float(data["spread_threshold"])
+            if 10 <= thr <= 1000:  # reasonable range
+                smart_strategy["spread_threshold"] = thr
+        except (TypeError, ValueError):
+            pass
+    _save_smart_strategy()
+    _log(f"[smart-strategy] updated: enabled={smart_strategy['enabled']}, threshold=${smart_strategy['spread_threshold']}")
+
+    # Return the same GET response
+    avg_spread = _average_crypto_spread()
+    recommended = "scanner" if avg_spread >= smart_strategy["spread_threshold"] else "lotto"
+    return jsonify({
+        "enabled": smart_strategy["enabled"],
+        "spread_threshold": smart_strategy["spread_threshold"],
+        "current_spread": round(avg_spread, 2),
+        "recommended_mode": recommended,
+        "active_mode": recommended if smart_strategy["enabled"] else None,
     })
 
 
