@@ -84,9 +84,17 @@ def _read_activity(since_ts: float):
             try:
                 tail = lines[-_ACTIVITY_MAX_LINES:]
                 with _activity_lock:
-                    ACTIVITY_LOG.write_text("\n".join(tail) + "\n", encoding="utf-8")
+                    # Create backup before trimming (in case something goes wrong)
+                    import shutil
+                    backup = ACTIVITY_LOG.parent / (ACTIVITY_LOG.name + ".bak")
+                    shutil.copy2(ACTIVITY_LOG, backup)
+                    # Atomic write: write to temp file first, then rename
+                    temp = ACTIVITY_LOG.parent / (ACTIVITY_LOG.name + ".tmp")
+                    temp.write_text("\n".join(tail) + "\n", encoding="utf-8")
+                    temp.replace(ACTIVITY_LOG)
                 lines = tail
-            except Exception:
+            except Exception as e:
+                print(f"[activity] trim failed: {e}", flush=True)
                 pass
         for ln in lines:
             if not ln.strip():
