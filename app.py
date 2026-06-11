@@ -55,7 +55,12 @@ def _log(msg: str):
 # Powers the Summary tab ("activity in the past X minutes") so you can confirm at
 # a glance that the bot is alive and trading — the whole point being to NEVER again
 # have a silent multi-hour gap. Kept lightweight: one JSON object per line.
-ACTIVITY_LOG = HERE / "activity_log.jsonl"
+# Separate logs per machine to avoid conflicts when syncing via git.
+_MACHINE_NAME = os.getenv("KALSHIBOT_MACHINE", "").lower().strip()
+if not _MACHINE_NAME:
+    hostname = socket.gethostname().lower()
+    _MACHINE_NAME = "home" if "oiokum" in hostname else "laptop"
+ACTIVITY_LOG = HERE / f"activity_{_MACHINE_NAME}.log"
 _activity_lock = threading.Lock()
 _ACTIVITY_MAX_LINES = 50000  # trim oldest when we exceed this, so the file can't grow forever
 
@@ -72,41 +77,59 @@ def _record_activity(kind: str, **fields):
         print(f"[activity] write failed: {e}", flush=True)
 
 def _read_activity(since_ts: float):
-    """Return all activity events with ts >= since_ts, oldest→newest."""
+    """Read and merge activity logs from both machines, deduplicate, return oldest→newest."""
+    import shutil
     out = []
-    try:
-        if not ACTIVITY_LOG.exists():
-            return out
-        with _activity_lock:
-            lines = ACTIVITY_LOG.read_text(encoding="utf-8").splitlines()
-        # Trim the file if it has grown too large (keep the newest tail).
-        if len(lines) > _ACTIVITY_MAX_LINES:
-            try:
-                tail = lines[-_ACTIVITY_MAX_LINES:]
-                with _activity_lock:
-                    # Create backup before trimming (in case something goes wrong)
-                    import shutil
-                    backup = ACTIVITY_LOG.parent / (ACTIVITY_LOG.name + ".bak")
-                    shutil.copy2(ACTIVITY_LOG, backup)
-                    # Atomic write: write to temp file first, then rename
-                    temp = ACTIVITY_LOG.parent / (ACTIVITY_LOG.name + ".tmp")
-                    temp.write_text("\n".join(tail) + "\n", encoding="utf-8")
-                    temp.replace(ACTIVITY_LOG)
-                lines = tail
-            except Exception as e:
-                print(f"[activity] trim failed: {e}", flush=True)
-                pass
-        for ln in lines:
-            if not ln.strip():
-                continue
-            try:
-                e = json.loads(ln)
-            except Exception:
-                continue
-            if e.get("ts", 0) >= since_ts:
-                out.append(e)
-    except Exception as e:
-        print(f"[activity] read failed: {e}", flush=True)
+    seen = set()  # deduplicate by (ts_bucket, kind, ticker, side)
+
+    # Read from both machine logs
+    for machine in ["home", "laptop"]:
+        log_path = HERE / f"activity_{machine}.log"
+        if not log_path.exists():
+            continue
+        try:
+            with _activity_lock:
+                lines = log_path.read_text(encoding="utf-8").splitlines()
+
+            # Auto-trim if needed
+            if len(lines) > _ACTIVITY_MAX_LINES:
+                try:
+                    tail = lines[-_ACTIVITY_MAX_LINES:]
+                    with _activity_lock:
+                        backup = log_path.parent / (log_path.name + ".bak")
+                        shutil.copy2(log_path, backup)
+                        temp = log_path.parent / (log_path.name + ".tmp")
+                        temp.write_text("\n".join(tail) + "\n", encoding="utf-8")
+                        temp.replace(log_path)
+                    lines = tail
+                except Exception as e:
+                    print(f"[activity] trim {machine} failed: {e}", flush=True)
+
+            for ln in lines:
+                if not ln.strip():
+                    continue
+                try:
+                    e = json.loads(ln)
+                    ts = e.get("ts", 0)
+                    if ts < since_ts:
+                        continue
+                    # Deduplicate: use (rounded_ts, kind, ticker) as unique key
+                    # Round to nearest second to catch duplicates within 1s window
+                    ts_bucket = int(ts)
+                    kind = e.get("kind", "")
+                    ticker = e.get("ticker", "")
+                    side = e.get("side", "")
+                    key = (ts_bucket, kind, ticker, side)
+                    if key not in seen:
+                        seen.add(key)
+                        out.append(e)
+                except Exception:
+                    continue
+        except Exception as e:
+            print(f"[activity] read {machine} failed: {e}", flush=True)
+
+    # Sort by timestamp, oldest first
+    out.sort(key=lambda x: x.get("ts", 0))
     return out
 
 # Category detection cache — avoid re-detecting same market
