@@ -3808,11 +3808,14 @@ def api_spread_check():
 def api_smart_strategy():
     """Master switch for auto Scanner/Lotto mode based on live crypto spread.
     GET: return current setting + live spread analysis.
-    POST: set enabled state."""
+    POST: set enabled state and auto-toggle bots if enabled."""
+    global active_profiles
+
+    # Calculate live average spread
+    avg_spread = _average_crypto_spread()
+    recommended = "scanner" if avg_spread >= smart_strategy["spread_threshold"] else "lotto"
+
     if request.method == "GET":
-        # Calculate live average spread
-        avg_spread = _average_crypto_spread()
-        recommended = "scanner" if avg_spread >= smart_strategy["spread_threshold"] else "lotto"
         return jsonify({
             "enabled": smart_strategy["enabled"],
             "spread_threshold": smart_strategy["spread_threshold"],
@@ -3821,10 +3824,25 @@ def api_smart_strategy():
             "active_mode": recommended if smart_strategy["enabled"] else None,
         })
 
-    # POST: update setting
+    # POST: update setting and auto-toggle bots if enabled
     data = request.get_json(silent=True) or {}
     if "enabled" in data:
         smart_strategy["enabled"] = bool(data["enabled"])
+        # Auto-toggle bots based on spread if enabling strategy
+        if smart_strategy["enabled"]:
+            if avg_spread >= smart_strategy["spread_threshold"]:
+                # Spread >= $100: use Scanner only
+                active_profiles = ["T1"]
+                _log(f"[smart-strategy] spread ${avg_spread} >= ${smart_strategy['spread_threshold']} → SCANNER mode")
+            else:
+                # Spread < $100: use Lotto only (both sides = insurance)
+                active_profiles = ["T2"]
+                _log(f"[smart-strategy] spread ${avg_spread} < ${smart_strategy['spread_threshold']} → LOTTO mode (insurance hedge)")
+            _save_profiles()
+        else:
+            # Strategy disabled: allow manual control (don't change active_profiles)
+            _log("[smart-strategy] disabled → manual mode")
+
     if "spread_threshold" in data:
         try:
             thr = float(data["spread_threshold"])
@@ -3832,18 +3850,18 @@ def api_smart_strategy():
                 smart_strategy["spread_threshold"] = thr
         except (TypeError, ValueError):
             pass
+
     _save_smart_strategy()
     _log(f"[smart-strategy] updated: enabled={smart_strategy['enabled']}, threshold=${smart_strategy['spread_threshold']}")
 
-    # Return the same GET response
-    avg_spread = _average_crypto_spread()
-    recommended = "scanner" if avg_spread >= smart_strategy["spread_threshold"] else "lotto"
+    # Return updated state
     return jsonify({
         "enabled": smart_strategy["enabled"],
         "spread_threshold": smart_strategy["spread_threshold"],
         "current_spread": round(avg_spread, 2),
         "recommended_mode": recommended,
         "active_mode": recommended if smart_strategy["enabled"] else None,
+        "active_profiles": active_profiles,
     })
 
 
