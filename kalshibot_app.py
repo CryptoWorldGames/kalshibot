@@ -750,10 +750,54 @@ def _spot_price(symbol: str):
             pass
     return None, "no_source"
 
+# ── Smart Strategy — master switch for auto Scanner/Lotto based on spread ────
+SMART_STRATEGY_FILE = HERE / "smart_strategy.json"
+smart_strategy = {
+    "enabled": False,
+    "mode": None,  # "scanner", "lotto", or None (auto-selecting)
+    "spread_threshold": 100.0,  # $100 or more = use Scanner, less = use Lotto
+}
+def _load_smart_strategy():
+    global smart_strategy
+    try:
+        if SMART_STRATEGY_FILE.exists():
+            d = json.loads(SMART_STRATEGY_FILE.read_text(encoding="utf-8"))
+            if isinstance(d, dict):
+                smart_strategy.update(d)
+    except Exception as e:
+        print(f"[smart-strategy] load failed: {e}")
+def _save_smart_strategy():
+    try:
+        SMART_STRATEGY_FILE.write_text(json.dumps(smart_strategy, indent=2), encoding="utf-8")
+    except Exception as e:
+        print(f"[smart-strategy] save failed: {e}")
+_load_smart_strategy()
+
 _CRYPTO_15M_PREFIXES = ("KXBTC15M", "KXETH15M", "KXSOL15M", "KXHYPE15M",
                         "KXDOGE15M", "KXBNB15M", "KXXRP15M",
                         "KXBTC30M", "KXETH30M", "KXSOL30M",
                         "KXBTC1H", "KXETH1H", "KXSOL1H")
+
+def _average_crypto_spread() -> float:
+    """Calculate average spread cushion across all open 15-min crypto markets.
+    Returns the average cushion in dollars, or 0 if no data."""
+    try:
+        cushions = []
+        for prefix in _CRYPTO_15M_PREFIXES[:7]:  # Check main 7 crypto pairs
+            try:
+                d = kalshi_get("/markets", {"series_ticker": prefix, "status": "open", "limit": 5})
+                for m in d.get("markets", []):
+                    dec = _spread_guard_decision(m.get("ticker", ""), m)
+                    if dec.get("cushion") is not None:
+                        cushions.append(float(dec["cushion"]))
+            except Exception:
+                pass
+        if cushions:
+            return sum(cushions) / len(cushions)
+        return 0.0
+    except Exception as e:
+        print(f"[smart-strategy] spread calc failed: {e}")
+        return 0.0
 
 def _ticker_symbol(ticker: str):
     """KXETH15M-26JUN102330-30 → ETH"""
@@ -3757,6 +3801,49 @@ def api_spread_check():
                            "CF Benchmarks RTI prices over the final minute before close.",
         "spot_sources": "coinbase (primary), kraken (fallback) — both RTI constituent exchanges",
         "markets": rows,
+    })
+
+
+@app.route("/api/smart-strategy", methods=["GET", "POST"])
+def api_smart_strategy():
+    """Master switch for auto Scanner/Lotto mode based on live crypto spread.
+    GET: return current setting + live spread analysis.
+    POST: set enabled state."""
+    if request.method == "GET":
+        # Calculate live average spread
+        avg_spread = _average_crypto_spread()
+        recommended = "scanner" if avg_spread >= smart_strategy["spread_threshold"] else "lotto"
+        return jsonify({
+            "enabled": smart_strategy["enabled"],
+            "spread_threshold": smart_strategy["spread_threshold"],
+            "current_spread": round(avg_spread, 2),
+            "recommended_mode": recommended,
+            "active_mode": recommended if smart_strategy["enabled"] else None,
+        })
+
+    # POST: update setting
+    data = request.get_json(silent=True) or {}
+    if "enabled" in data:
+        smart_strategy["enabled"] = bool(data["enabled"])
+    if "spread_threshold" in data:
+        try:
+            thr = float(data["spread_threshold"])
+            if 10 <= thr <= 1000:  # reasonable range
+                smart_strategy["spread_threshold"] = thr
+        except (TypeError, ValueError):
+            pass
+    _save_smart_strategy()
+    _log(f"[smart-strategy] updated: enabled={smart_strategy['enabled']}, threshold=${smart_strategy['spread_threshold']}")
+
+    # Return the same GET response
+    avg_spread = _average_crypto_spread()
+    recommended = "scanner" if avg_spread >= smart_strategy["spread_threshold"] else "lotto"
+    return jsonify({
+        "enabled": smart_strategy["enabled"],
+        "spread_threshold": smart_strategy["spread_threshold"],
+        "current_spread": round(avg_spread, 2),
+        "recommended_mode": recommended,
+        "active_mode": recommended if smart_strategy["enabled"] else None,
     })
 
 
