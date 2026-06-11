@@ -618,6 +618,183 @@ def _cached_settlements(hours: int = 24) -> list:
     _settlements_cache[hours] = {"data": data, "ts": now}
     return data
 
+_settle_refresh_inflight: set = set()
+def _cached_settlements_nonblocking(hours: int = 24) -> list:
+    """NEVER blocks: returns whatever is cached (even stale, even empty) and
+    refreshes in a background thread. The settlements fetch can take 30-60s
+    through the rate limiter — that wait was leaving the Summary tab blank."""
+    now = time.time()
+    cached = _settlements_cache.get(hours)
+    fresh = cached and (now - cached["ts"]) < _SETTLEMENTS_CACHE_TTL
+    if not fresh and hours not in _settle_refresh_inflight:
+        _settle_refresh_inflight.add(hours)
+        def _refresh():
+            try:
+                data = _recent_settlements(hours=hours)
+                _settlements_cache[hours] = {"data": data, "ts": time.time()}
+            except Exception as e:
+                print(f"[settlements] background refresh failed: {e}")
+            finally:
+                _settle_refresh_inflight.discard(hours)
+        threading.Thread(target=_refresh, daemon=True).start()
+    return cached["data"] if cached else []
+
+# ── Kalshi trading fee (real formula, replaces the old flat 1¢ guess) ────────
+# Kalshi taker fee = ceil_to_cent(0.07 × contracts × P × (1−P)) where P = price
+# in dollars. Source: kalshi.com/fee-schedule. A 50¢ contract costs 1.75¢/contract;
+# a 3¢ lotto contract costs ~0.2¢ → rounds up to 1¢; an 80¢ contract costs 1.12¢ → 2¢.
+def _kalshi_fee(count: float, price_cents: float) -> float:
+    try:
+        p = max(0.0, min(1.0, float(price_cents) / 100.0))
+        raw = 0.07 * float(count) * p * (1.0 - p)
+        return math.ceil(raw * 100) / 100.0  # Kalshi rounds UP to the next cent
+    except Exception:
+        return 0.0
+
+# ── Spread Guard — cushion-aware buying for 15-min crypto markets ────────────
+# Settlement fact (verified): Kalshi crypto markets settle on CF Benchmarks
+# Real-Time Indexes (BRTI for BTC) — the final value is the AVERAGE of 60
+# once-per-second RTI prices over the LAST MINUTE before close. So a market
+# whose spot sits $40 from the strike with 2 min left genuinely can flip; one
+# sitting $400 away almost never does. The guard measures that cushion live.
+SPREAD_GUARD_FILE = HERE / "spread_guard.json"
+spread_guard = {
+    "enabled": False,
+    "usd_threshold": 100.0,   # BTC: cushion in $ that counts as "wide"
+    "pct_threshold": 0.10,    # everything else: cushion as % of spot price
+    "cheap_max_cents": 20,    # buys at/below this price are "lotto" buys the guard blocks when wide
+}
+def _load_spread_guard():
+    global spread_guard
+    try:
+        if SPREAD_GUARD_FILE.exists():
+            d = json.loads(SPREAD_GUARD_FILE.read_text(encoding="utf-8"))
+            if isinstance(d, dict):
+                spread_guard.update(d)
+    except Exception as e:
+        print(f"[spread-guard] load failed: {e}")
+def _save_spread_guard():
+    try:
+        SPREAD_GUARD_FILE.write_text(json.dumps(spread_guard, indent=2), encoding="utf-8")
+    except Exception as e:
+        print(f"[spread-guard] save failed: {e}")
+_load_spread_guard()
+
+# Live spot prices — Coinbase first, Kraken fallback. These are constituent
+# exchanges of the CF Benchmarks RTI that Kalshi settles on, so they're an
+# honest proxy for the settlement index. 10s cache keeps API traffic tiny.
+_spot_cache: dict = {}  # symbol → {"price": float, "ts": float, "source": str}
+_SPOT_CACHE_TTL = 10.0
+_KRAKEN_PAIRS = {"BTC": "XBTUSD", "ETH": "ETHUSD", "SOL": "SOLUSD",
+                 "DOGE": "DOGEUSD", "XRP": "XRPUSD", "BNB": None}
+
+def _spot_price(symbol: str):
+    """Return (price, source) for a crypto symbol, or (None, reason)."""
+    now = time.time()
+    c = _spot_cache.get(symbol)
+    if c and (now - c["ts"]) < _SPOT_CACHE_TTL:
+        return c["price"], c["source"]
+    # 1) Coinbase spot (RTI constituent exchange)
+    try:
+        r = req.get(f"https://api.coinbase.com/v2/prices/{symbol}-USD/spot", timeout=4)
+        if r.ok:
+            px = float(r.json()["data"]["amount"])
+            _spot_cache[symbol] = {"price": px, "ts": now, "source": "coinbase"}
+            return px, "coinbase"
+    except Exception:
+        pass
+    # 2) Kraken (also an RTI constituent)
+    pair = _KRAKEN_PAIRS.get(symbol)
+    if pair:
+        try:
+            r = req.get(f"https://api.kraken.com/0/public/Ticker?pair={pair}", timeout=4)
+            if r.ok:
+                res = r.json().get("result", {})
+                first = next(iter(res.values()), None)
+                if first:
+                    px = float(first["c"][0])
+                    _spot_cache[symbol] = {"price": px, "ts": now, "source": "kraken"}
+                    return px, "kraken"
+        except Exception:
+            pass
+    return None, "no_source"
+
+_CRYPTO_15M_PREFIXES = ("KXBTC15M", "KXETH15M", "KXSOL15M", "KXHYPE15M",
+                        "KXDOGE15M", "KXBNB15M", "KXXRP15M",
+                        "KXBTC30M", "KXETH30M", "KXSOL30M",
+                        "KXBTC1H", "KXETH1H", "KXSOL1H")
+
+def _ticker_symbol(ticker: str):
+    """KXETH15M-26JUN102330-30 → ETH"""
+    for pfx in _CRYPTO_15M_PREFIXES:
+        if ticker.startswith(pfx):
+            sym = pfx[2:]  # strip KX
+            for tail in ("15M", "30M", "1H"):
+                if sym.endswith(tail):
+                    return sym[:-len(tail)]
+    return None
+
+def _strike_from_market(m: dict):
+    """Pull the strike from a Kalshi market object. Tries the structured fields
+    first, then falls back to parsing the dollar amount out of the subtitle."""
+    for f in ("floor_strike", "cap_strike", "strike"):
+        v = m.get(f)
+        if v not in (None, "", 0):
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                pass
+    import re as _re
+    for f in ("yes_sub_title", "subtitle", "title"):
+        txt = m.get(f) or ""
+        hit = _re.search(r"\$?([\d,]+(?:\.\d+)?)", txt.replace(",", ""))
+        if hit:
+            try:
+                v = float(hit.group(1))
+                if v > 0.0001:
+                    return v
+            except ValueError:
+                pass
+    return None
+
+def _spread_guard_decision(ticker: str, m: dict) -> dict:
+    """Live cushion check for one crypto market. Returns a dict with every raw
+    number used, so /api/spread-check can prove the data is real (no hardcoding)."""
+    out = {"ticker": ticker, "applies": False, "wide": None, "symbol": None,
+           "strike": None, "spot": None, "spot_source": None,
+           "cushion_usd": None, "cushion_pct": None, "secs_to_close": None}
+    sym = _ticker_symbol(ticker)
+    if not sym:
+        return out
+    out["symbol"] = sym
+    strike = _strike_from_market(m)
+    if strike is None:
+        out["reason"] = "no_strike_found"
+        return out
+    spot, src = _spot_price(sym)
+    if spot is None:
+        out["reason"] = "no_spot_source"
+        return out
+    out.update(strike=strike, spot=spot, spot_source=src, applies=True)
+    cushion = abs(spot - strike)
+    out["cushion_usd"] = round(cushion, 4)
+    out["cushion_pct"] = round(cushion / spot * 100, 4) if spot else None
+    try:
+        ct = m.get("close_time") or m.get("expiration_time")
+        if ct:
+            cdt = datetime.fromisoformat(str(ct).replace("Z", "+00:00"))
+            out["secs_to_close"] = int((cdt - datetime.now(timezone.utc)).total_seconds())
+    except Exception:
+        pass
+    if sym == "BTC":
+        out["wide"] = cushion >= float(spread_guard.get("usd_threshold", 100.0))
+        out["rule"] = f"BTC cushion ${cushion:,.0f} vs ${float(spread_guard.get('usd_threshold', 100.0)):,.0f} threshold"
+    else:
+        thr = float(spread_guard.get("pct_threshold", 0.10))
+        out["wide"] = (out["cushion_pct"] or 0) >= thr
+        out["rule"] = f"{sym} cushion {out['cushion_pct']}% vs {thr}% threshold"
+    return out
+
 # Market data cache — avoid hitting /markets/{ticker} more than once per 60s
 _market_cache: dict = {}   # ticker → {"data": {...}, "ts": float}
 _MARKET_CACHE_TTL = 60.0   # seconds
@@ -1085,8 +1262,12 @@ def _monitor():
                 # Use per-position target if set, otherwise fall back to current global settings
                 profit_dollars = pos["count"] * (bid - pos["buy_price"]) / 100 if pos.get("buy_price") else None
 
-                # ENFORCE SINGLE-MODE STRATEGY: only check conditions matching the current mode
-                strat_mode = sell_strategy.get("mode", "resolution")
+                # ENFORCE SINGLE-MODE STRATEGY: only check conditions matching the mode.
+                # Use the strategy STAMPED ON THE POSITION at buy time (per-profile),
+                # falling back to the global. Before this fix the global T1 mode was
+                # applied to every position — so T2 lotto positions meant to ride to
+                # resolution were being sold by T1's profit target.
+                strat_mode = pos.get("strategy") or sell_strategy.get("mode", "resolution")
 
                 # Initialize all as False; only set based on active mode
                 hit_pct = False
@@ -1163,11 +1344,32 @@ def _monitor():
                                     tracked[ticker]["status"] = "open"  # revert selling status
                             continue
 
+                        # Use the ACTUAL fill price from the order response, not the
+                        # decision-time bid. The old code recorded `bid` as the sell
+                        # price — when the book moved between the profit check and the
+                        # fill, the UI showed a "profit target" sell that actually
+                        # filled lower (the mystery "sold at 84¢, lost 4¢" trades).
+                        fill_price = bid
+                        try:
+                            _ord = result.get("order", {})
+                            _fc  = float(_ord.get("taker_fill_count") or 0)
+                            _fcost = float(_ord.get("taker_fill_cost") or 0)
+                            if _fc > 0 and _fcost > 0:
+                                fill_price = round(_fcost / _fc)  # avg fill in cents
+                        except Exception:
+                            pass
+                        # Net P&L after BOTH taker fees (buy + sell) — the gross
+                        # number hid that tiny targets often net out negative.
+                        cnt_f   = float(pos.get("count") or 0)
+                        bp_f    = float(pos.get("buy_price") or 0)
+                        gross   = cnt_f * (fill_price - bp_f) / 100
+                        fees    = _kalshi_fee(cnt_f, bp_f) + _kalshi_fee(cnt_f, fill_price)
+                        net     = round(gross - fees, 2)
                         with _lock:
                             if ticker in tracked:
                                 tracked[ticker]["status"]     = "sold"
                                 tracked[ticker]["sold_at"]    = datetime.now(timezone.utc).isoformat()
-                                tracked[ticker]["sell_price"] = bid
+                                tracked[ticker]["sell_price"] = fill_price
                                 # Mark whether this was a profit target or stop-loss
                                 if hit_stop_pct or hit_stop_dol:
                                     tracked[ticker]["sold_by"] = "bot_stop_loss"
@@ -1176,10 +1378,14 @@ def _monitor():
                         _save_tracked()
                         title = pos.get("title", ticker)
                         reason = "STOP-LOSS" if (hit_stop_pct or hit_stop_dol) else "PROFIT TARGET"
-                        _log(f"[monitor] Auto-sold ({reason}): {title} | bid={bid}¢ profit={profit_pct:.1f}% / ${profit_dollars:.2f}")
+                        if fill_price != bid:
+                            _log(f"[monitor] SLIPPAGE on {ticker}: decision bid {bid}¢ → actual fill {fill_price}¢")
+                        _log(f"[monitor] Auto-sold ({reason}): {title} | fill={fill_price}¢ gross=${gross:.2f} fees=${fees:.2f} net=${net:.2f}")
                         _record_activity("sell", ticker=ticker, side=pos.get("side"),
-                                         count=pos.get("count"), price=bid,
-                                         profit=round(profit_dollars, 2), profit_pct=round(profit_pct, 1),
+                                         count=pos.get("count"), price=fill_price,
+                                         profit=net, profit_gross=round(gross, 2),
+                                         fees=round(fees, 2),
+                                         profit_pct=round(profit_pct, 1),
                                          sold_by="bot", reason=reason.lower(), title=title,
                                          category=pos.get("category", ""))
                     except Exception as e:
@@ -1344,6 +1550,16 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
             pc = int(math.ceil(price_c))
             if pc <= 0 or pc > 99:
                 continue
+            # ── Spread Guard ── when enabled: cheap longshot buys (≤ cheap_max_cents)
+            # are only allowed when spot is CLOSE to the strike (a flip is plausible).
+            # Wide cushion → the longshot is near-certain dead money, skip it.
+            # Higher-priced (scanner-band) buys always pass.
+            if spread_guard.get("enabled") and pc <= int(spread_guard.get("cheap_max_cents", 20)):
+                _sg = _spread_guard_decision(ticker, m)
+                if _sg.get("applies") and _sg.get("wide"):
+                    _log(f"[spread-guard:{prof}] SKIP cheap {pc}¢ {ticker} — {_sg.get('rule')} "
+                         f"(spot {_sg.get('spot')} via {_sg.get('spot_source')}, strike {_sg.get('strike')})")
+                    continue
             contracts = math.floor(buy_amt / (pc / 100))
             if contracts < 1:
                 # buy_amount too small for this price (e.g. $0.50 budget at 60¢ → 0
@@ -2115,9 +2331,6 @@ def _recent_settlements(hours: int = 24) -> list:
                 no_cost  = float(s.get("no_total_cost_dollars")  or 0)
                 revenue  = float(s.get("revenue") or 0) / 100   # cents → dollars
                 result   = s.get("market_result", "")
-                count    = yes_cnt if yes_cnt > 0.001 else no_cnt
-                # Calculate fee ourselves: $0.01/contract only on winning settlements
-                fee = round(count * 0.01, 4) if revenue > 0.001 else 0
 
                 # Skip entries with no actual position (combo placeholders, settled-zero rows)
                 if yes_cnt < 0.001 and no_cnt < 0.001 and yes_cost < 0.001 and no_cost < 0.001:
@@ -2133,6 +2346,12 @@ def _recent_settlements(hours: int = 24) -> list:
                     side, count, cost = "yes", yes_cnt, yes_cost
                 else:
                     side, count, cost = "no", no_cnt, no_cost
+
+                # Real Kalshi fee: ceil(0.07 × C × P × (1−P)) charged at the BUY,
+                # win or lose — the old flat "1¢/contract on wins only" both
+                # undercounted losses and overcounted big wins.
+                avg_price_cents = (cost / count * 100) if count > 0.001 else 0
+                fee = _kalshi_fee(count, avg_price_cents)
 
                 pnl = round(revenue - cost - fee, 4)
 
@@ -2177,7 +2396,8 @@ def _recent_settlements(hours: int = 24) -> list:
         count = pos.get("count", 0) or 0
         cost  = round(count * bp / 100, 4)
         revenue = round(count * sp / 100, 4) if sp else 0
-        fee   = round(count * 0.01, 4) if revenue > 0 else 0
+        # Sold early = TWO taker fees (one on buy, one on sell)
+        fee   = _kalshi_fee(count, bp) + (_kalshi_fee(count, sp) if sp else 0)
         pnl   = round(revenue - cost - fee, 4)
         evt   = tkr.rsplit("-", 1)[0] if "-" in tkr else ""
         out.append({
@@ -3117,7 +3337,7 @@ def pnl_history():
                 rev = float(s.get("revenue") or 0) / 100
                 cost = yes_cost if yes_cnt > 0.001 else no_cost
                 cnt = yes_cnt if yes_cnt > 0.001 else no_cnt
-                fee = round(cnt * 0.01, 4) if rev > 0.001 else 0
+                fee = _kalshi_fee(cnt, (cost / cnt * 100) if cnt > 0.001 else 0)
                 pnl = rev - cost - fee
                 settle_by_time[ts_float] = pnl
             cursor = data.get("cursor")
@@ -3381,12 +3601,16 @@ def api_summary():
             if s.get("result") == "sold_early":
                 continue
 
-            # Only include settlements within the time window
+            # Only include settlements within the time window. Convert the ISO
+            # timestamp to an epoch float — the activity log uses epoch floats,
+            # and mixing str/float in trades.sort() was the cause of the 500.
+            ts_epoch = 0.0
             ts_str = s.get("settled_time", "")
             if ts_str:
                 try:
-                    ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-                    if ts < since_dt:
+                    ts_dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+                    ts_epoch = ts_dt.timestamp()
+                    if ts_dt < since_dt:
                         continue
                 except (ValueError, AttributeError):
                     pass
@@ -3399,7 +3623,7 @@ def api_summary():
             # Convert settlement to trade format for display
             trade = {
                 "kind": "settlement",
-                "ts": s.get("settled_time", ""),
+                "ts": ts_epoch,
                 "ticker": s.get("ticker", ""),
                 "title": s.get("title", ""),
                 "side": s.get("side", ""),
@@ -3414,8 +3638,16 @@ def api_summary():
     except Exception as e:
         print(f"[summary] settlements merge error: {e}")
 
-    # newest first for display
-    trades.sort(key=lambda x: x.get("ts", 0), reverse=True)
+    # newest first for display — coerce ts to float so one bad row can't 500 the tab
+    def _ts_key(x):
+        v = x.get("ts", 0)
+        if isinstance(v, (int, float)):
+            return float(v)
+        try:
+            return datetime.fromisoformat(str(v).replace("Z", "+00:00")).timestamp()
+        except (ValueError, AttributeError):
+            return 0.0
+    trades.sort(key=_ts_key, reverse=True)
 
     return jsonify({
         "minutes": minutes,
@@ -3433,6 +3665,169 @@ def api_summary():
         },
         "trades": trades[:500],  # cap payload
     })
+
+
+# ── Spread Guard endpoints ───────────────────────────────────────────────────
+@app.route("/api/spread-guard", methods=["GET", "POST"])
+def api_spread_guard():
+    """Read or update the Spread Guard settings (cushion-aware lotto gating)."""
+    if request.method == "GET":
+        return jsonify(spread_guard)
+    data = request.get_json(silent=True) or {}
+    if "enabled" in data:
+        spread_guard["enabled"] = bool(data["enabled"])
+    for k, lo, hi in (("usd_threshold", 1, 100000),
+                      ("pct_threshold", 0.001, 50),
+                      ("cheap_max_cents", 1, 99)):
+        if data.get(k) is not None:
+            try:
+                v = float(data[k])
+                if lo <= v <= hi:
+                    spread_guard[k] = v
+            except (TypeError, ValueError):
+                pass
+    _save_spread_guard()
+    _log(f"[spread-guard] settings updated: {spread_guard}")
+    return jsonify(spread_guard)
+
+
+@app.route("/api/spread-check")
+def api_spread_check():
+    """LIVE diagnostic: for every open crypto short-horizon market, show the strike
+    (from Kalshi), live spot (Coinbase/Kraken — CF Benchmarks RTI constituents),
+    the cushion, and what the guard would decide RIGHT NOW. Every number comes
+    from a live API call made at request time — nothing is hardcoded."""
+    series = request.args.get("series", "KXBTC15M,KXETH15M,KXSOL15M,KXDOGE15M,KXXRP15M,KXBNB15M")
+    rows = []
+    for st in [s.strip() for s in series.split(",") if s.strip()]:
+        try:
+            d = kalshi_get("/markets", {"series_ticker": st, "status": "open", "limit": 10})
+            for m in d.get("markets", []):
+                ticker = m.get("ticker", "")
+                dec = _spread_guard_decision(ticker, m)
+                dec["yes_bid"] = m.get("yes_bid")
+                dec["yes_ask"] = m.get("yes_ask")
+                dec["title"] = m.get("title", "")
+                dec["decision"] = ("WIDE → scanner only (lotto blocked)" if dec.get("wide")
+                                   else "TIGHT → scanner + lotto allowed" if dec.get("wide") is not None
+                                   else "n/a")
+                rows.append(dec)
+        except Exception as e:
+            rows.append({"series": st, "error": f"{type(e).__name__}: {e}"})
+    return jsonify({
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+        "settings": spread_guard,
+        "settlement_note": "Kalshi crypto settles on the average of 60 once-per-second "
+                           "CF Benchmarks RTI prices over the final minute before close.",
+        "spot_sources": "coinbase (primary), kraken (fallback) — both RTI constituent exchanges",
+        "markets": rows,
+    })
+
+
+@app.route("/api/audit")
+def api_audit():
+    """Full trading audit over the past N days: where the money actually went.
+    Combines the activity log (buys/sells) with Kalshi settlements (authoritative
+    closes) using the REAL fee formula. Answers 'why is my 30-day P&L -$X?'."""
+    try:
+        days = min(30, max(1, int(request.args.get("days", 30))))
+    except (TypeError, ValueError):
+        days = 30
+    since = time.time() - days * 86400
+
+    buys = sells = 0
+    buy_spent = sell_gross = sell_fees = 0.0
+    for e in _read_activity(since):
+        k = e.get("kind")
+        if k == "buy":
+            buys += 1
+            buy_spent += float(e.get("spent") or 0)
+        elif k == "sell":
+            sells += 1
+            cnt = float(e.get("count") or 0)
+            px  = float(e.get("price") or 0)
+            sell_gross += cnt * px / 100
+            sell_fees  += _kalshi_fee(cnt, px)
+
+    wins = losses = 0
+    win_dollars = loss_dollars = settle_fees = 0.0
+    worst = []
+    try:
+        for s in _cached_settlements(hours=days * 24):
+            pnl = float(s.get("pnl") or 0)
+            cnt = float(s.get("count") or 0)
+            cost = float(s.get("cost") or 0)
+            settle_fees += _kalshi_fee(cnt, (cost / cnt * 100) if cnt > 0.001 else 0)
+            if pnl > 0.001:
+                wins += 1
+                win_dollars += pnl
+            elif pnl < -0.001:
+                losses += 1
+                loss_dollars += abs(pnl)
+            worst.append({"ticker": s.get("ticker"), "title": s.get("title"),
+                          "pnl": round(pnl, 2), "cost": round(cost, 2),
+                          "result": s.get("result"), "settled_time": s.get("settled_time")})
+    except Exception as e:
+        print(f"[audit] settlements error: {e}")
+    worst.sort(key=lambda x: x["pnl"])
+
+    total = wins + losses
+    net = round(win_dollars - loss_dollars, 2)
+    return jsonify({
+        "days": days,
+        "activity": {
+            "buys": buys, "buy_spent": round(buy_spent, 2),
+            "sells": sells, "sell_gross": round(sell_gross, 2),
+            "avg_buy_size": round(buy_spent / buys, 2) if buys else 0,
+        },
+        "settlements": {
+            "count": total, "wins": wins, "losses": losses,
+            "win_rate_pct": round(wins / total * 100, 1) if total else None,
+            "won_dollars": round(win_dollars, 2),
+            "lost_dollars": round(loss_dollars, 2),
+            "profit_factor": round(win_dollars / loss_dollars, 2) if loss_dollars > 0.01 else None,
+            "net_pnl": net,
+        },
+        "fees_estimated": round(sell_fees + settle_fees, 2),
+        "worst_10_trades": worst[:10],
+        "best_10_trades": sorted(worst, key=lambda x: -x["pnl"])[:10],
+        "note": "settlement P&L uses real Kalshi fee formula ceil(0.07*C*P*(1-P)); "
+                "a profit_factor below 1.0 means the strategy is losing money",
+    })
+
+
+@app.route("/api/export/trades.csv")
+def api_export_trades():
+    """CSV export of buys, sells, and settlements for spreadsheet audit."""
+    try:
+        days = min(90, max(1, int(request.args.get("days", 30))))
+    except (TypeError, ValueError):
+        days = 30
+    since = time.time() - days * 86400
+    lines = ["type,time_utc,ticker,title,side,count,price_cents,dollars,pnl,result,profile"]
+    def _csv(v):
+        s = str(v if v is not None else "")
+        return '"' + s.replace('"', '""') + '"' if ("," in s or '"' in s) else s
+    for e in _read_activity(since):
+        k = e.get("kind")
+        if k not in ("buy", "sell"):
+            continue
+        t = datetime.fromtimestamp(float(e.get("ts") or 0), tz=timezone.utc).isoformat()
+        amt = e.get("spent") if k == "buy" else round(float(e.get("count") or 0) * float(e.get("price") or 0) / 100, 2)
+        lines.append(",".join(_csv(x) for x in [
+            k, t, e.get("ticker"), e.get("title"), e.get("side"), e.get("count"),
+            e.get("price"), amt, e.get("profit"), e.get("reason"), e.get("profile")]))
+    try:
+        for s in _cached_settlements(hours=days * 24):
+            lines.append(",".join(_csv(x) for x in [
+                "settlement", s.get("settled_time"), s.get("ticker"), s.get("title"),
+                s.get("side"), s.get("count"), "", s.get("revenue"), s.get("pnl"),
+                s.get("result"), s.get("profile")]))
+    except Exception:
+        pass
+    from flask import Response
+    return Response("\n".join(lines), mimetype="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename=kalshibot_trades_{days}d.csv"})
 
 
 @app.route("/api/enrich-positions", methods=["GET"])
@@ -3536,7 +3931,7 @@ def stats():
                 rev      = float(s.get("revenue")  or 0) / 100
                 cost     = yes_cost if yes_cnt > 0.001 else no_cost
                 cnt      = yes_cnt if yes_cnt > 0.001 else no_cnt
-                fee      = round(cnt * 0.01, 4) if rev > 0.001 else 0
+                fee      = _kalshi_fee(cnt, (cost / cnt * 100) if cnt > 0.001 else 0)
                 settle_pnl[s.get("ticker", "")] = rev - cost - fee
             if stop: break
             cursor = data.get("cursor")
@@ -3658,7 +4053,7 @@ def coach():
                 rev  = float(s.get("revenue") or 0) / 100
                 cost = yes_cost if yes_cnt > 0.001 else no_cost
                 cnt  = yes_cnt if yes_cnt > 0.001 else no_cnt
-                fee  = round(cnt * 0.01, 4) if rev > 0.001 else 0
+                fee  = _kalshi_fee(cnt, (cost / cnt * 100) if cnt > 0.001 else 0)
                 settle_pnl[s.get("ticker","")] = rev - cost - fee
             if stop: break
             cursor = data.get("cursor")
