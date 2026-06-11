@@ -7,6 +7,7 @@ REM  git-pull + restart from your phone/laptop).
 REM  %~dp0 = this file's own folder, so it works no matter where
 REM  the bot folder lives. Double-click this, or run it from CMD.
 REM ============================================================
+title KalshiBot Manager v1.3.0
 cd /d "%~dp0"
 echo Starting KalshiBot (manager on 5103 + bot on 5003)...
 git pull origin main
