@@ -294,6 +294,16 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   td:nth-child(1),td:nth-child(2),td:nth-child(n+14){display:table-cell}
   table{font-size:12px;margin:unset}
   thead th{display:table-cell;padding:8px 6px;font-size:11px}
+
+  /* Desktop: restore horizontal layout for Summary trade rows */
+  .summary-trade-row{flex-direction:row !important;align-items:center !important;gap:10px !important;padding:7px 12px !important}
+  .summary-trade-row > div{display:contents}
+  .summary-trade-row span[data-part="timestamp"]{color:#777 !important;min-width:120px !important;font-variant-numeric:tabular-nums;font-size:13px !important;order:1}
+  .summary-trade-row span[data-part="tag"]{min-width:62px !important;font-size:13px !important;order:2}
+  .summary-trade-row span[data-part="profile"]{font-size:11px !important;order:3}
+  .summary-trade-row span[data-part="title"]{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;font-size:13px !important;order:4}
+  .summary-trade-row span[data-part="details"]{flex:0 0 auto;white-space:nowrap;font-size:12px !important;order:5}
+  .summary-trade-row span[data-part="result"]{margin-left:auto;flex:0 0 auto !important;font-size:13px !important;order:6}
 }
 
 /* ── MOBILE OPTIMIZATIONS (375px-480px) ── */
@@ -397,6 +407,22 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   td:nth-child(12) button span{font-size:10px !important}
   /* Hide everything else (shares, cost/share, current¢, max, captured, time, dup checkbox) */
   td:nth-child(3),td:nth-child(4),td:nth-child(5),td:nth-child(9),td:nth-child(10),td:nth-child(11),td:nth-child(13),td:nth-child(14){display:none !important}
+
+  /* ─── Summary tab trade rows (mobile optimized) ─────────────────────────────────
+     Line 1: timestamp (left) + profit/loss (right), always visible across full width
+     Line 2: tag + profile + title + details (compact wrapping, all readable)
+     No horizontal scroll needed; key P&L data is always in view. */
+  .summary-trade-row{display:flex !important;flex-direction:column;gap:6px !important;padding:8px 10px !important;margin-bottom:6px !important;width:100% !important;box-sizing:border-box !important;border-radius:4px !important}
+  .summary-trade-row > div{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+  /* Line 1: timestamp + profit row */
+  .summary-trade-row > div:first-child{justify-content:space-between;gap:6px}
+  .summary-trade-row > div:first-child span{white-space:nowrap}
+  /* Line 2: tag + details (all stay visible, wrap if needed) */
+  .summary-trade-row > div:last-child{gap:4px;font-size:11px !important}
+  .summary-trade-row span[data-part="tag"]{font-weight:700 !important}
+  .summary-trade-row span[data-part="profile"]{padding:1px 4px !important;background:#1a1a1a;border-radius:2px;font-size:10px !important}
+  .summary-trade-row span[data-part="details"]{color:#888 !important}
+  .summary-trade-row span[data-part="result"]{font-weight:700 !important}
 
   /* Each total = fixed readable width (no squish). They sit in a row that swipes,
      so 10 boxes never overlap — you scroll to see the P&L ones. */
@@ -5602,12 +5628,19 @@ async function loadSummary() {
         } else if (isBuy && x.spent != null) {
           result = ` · <span style="color:#aaa">-$${Number(x.spent).toFixed(2)}</span>`;
         }
-        return `<div style="display:flex;align-items:center;gap:10px;padding:7px 12px;background:#0c0c0e;border-left:3px solid ${color};border-radius:4px;margin-bottom:5px;font-size:13px">
-          <span style="color:#777;min-width:120px;font-variant-numeric:tabular-nums">${fmtTime(x.ts, true)}</span>
-          <span style="color:${color};font-weight:800;min-width:62px">${tag}</span>
-          ${x.profile ? `<span style="color:#888;font-size:11px;padding:2px 6px;background:#1a1a1a;border-radius:3px;font-weight:600">${x.profile}</span>` : ""}
-          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${title} <span style="color:#888">${side} ${cnt} @ ${price}</span></span>
-          <span>${result}</span>
+        // Mobile: First line = timestamp (left) + profit/loss (right), both always visible
+        // Second line = tag + profile + title with details
+        return `<div class="summary-trade-row" style="border-left:3px solid ${color};background:#0c0c0e;border-radius:4px;font-size:13px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+            <span data-part="timestamp" style="color:#777;min-width:max-content;font-variant-numeric:tabular-nums;font-size:12px">${fmtTime(x.ts, true)}</span>
+            <span data-part="result" style="font-size:12px;font-weight:700;white-space:nowrap">${result || "—"}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <span data-part="tag" style="color:${color};font-weight:800;font-size:12px">${tag}</span>
+            ${x.profile ? `<span data-part="profile" style="color:#888;font-size:10px;padding:1px 4px;background:#1a1a1a;border-radius:2px;font-weight:600">${x.profile}</span>` : ""}
+            <span data-part="title" style="color:#fff;font-size:12px">${title}</span>
+            <span data-part="details" style="color:#888;font-size:11px">${side} ${cnt}${price ? ` @ ${price}` : ""}</span>
+          </div>
         </div>`;
       }).join("");
 
