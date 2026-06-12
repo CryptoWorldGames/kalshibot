@@ -77,7 +77,8 @@ def _record_activity(kind: str, **fields):
         print(f"[activity] write failed: {e}", flush=True)
 
 def _read_activity(since_ts: float):
-    """Read and merge activity logs from both machines, deduplicate, return oldest→newest."""
+    """Read and merge activity logs from both machines, deduplicate, return oldest→newest.
+    Falls back to old activity_log.jsonl for backward compatibility if per-machine logs don't exist."""
     import shutil
     out = []
     seen = set()  # deduplicate by (ts_bucket, kind, ticker, side)
@@ -127,6 +128,27 @@ def _read_activity(since_ts: float):
                     continue
         except Exception as e:
             print(f"[activity] read {machine} failed: {e}", flush=True)
+
+    # Fallback: if no per-machine logs found, try old activity_log.jsonl (backward compat)
+    if not out:
+        old_log = HERE / "activity_log.jsonl"
+        if old_log.exists():
+            try:
+                with _activity_lock:
+                    lines = old_log.read_text(encoding="utf-8").splitlines()
+                for ln in lines:
+                    if not ln.strip():
+                        continue
+                    try:
+                        e = json.loads(ln)
+                        ts = e.get("ts", 0)
+                        if ts < since_ts:
+                            continue
+                        out.append(e)
+                    except Exception:
+                        continue
+            except Exception as e:
+                print(f"[activity] read old activity_log.jsonl failed: {e}", flush=True)
 
     # Sort by timestamp, oldest first
     out.sort(key=lambda x: x.get("ts", 0))
