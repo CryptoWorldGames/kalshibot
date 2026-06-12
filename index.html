@@ -4343,22 +4343,19 @@ function chaChing() {
 // Remote deploy: tell the manager (Flask port + 100) to `git pull` + restart Flask.
 // Lets you ship new code from phone/laptop with zero desktop access.
 async function updateAndRestart() {
-  if (!confirm("Pull the latest code from GitHub and restart the bot?\n\nThe bot will be down for a few seconds, then come back on the new code.")) return;
+  if (!confirm("Restart the bot on the latest code from GitHub?\n\nThe bot exits, run_bot.bat pulls the newest code and relaunches it. Page reloads in ~15s.")) return;
   const btn = document.getElementById("updateBtn");
-  const mgrPort = (parseInt(location.port || "5003") + 100);
-  const mgrUrl = `${location.protocol}//${location.hostname}:${mgrPort}/api/manager/update`;
   if (btn) { btn.disabled = true; btn.textContent = "⟳ Updating…"; }
   try {
-    const r = await fetch(mgrUrl, { method: "POST" });
-    const d = await r.json().catch(() => ({}));
-    const gitMsg = (d.git || d.git_error || "").split("\n").slice(-4).join("\n");
-    alert((d.git_ok === false ? "⚠️ git pull had issues:\n\n" : "✅ Updated & restarting:\n\n") +
-          (gitMsg || "(no git output)") + "\n\nReloading in 4s…");
-    setTimeout(() => location.reload(true), 4000);
+    await fetch("/api/restart", { method: "POST" });
+    let secs = 15;
+    const tick = setInterval(() => {
+      secs--;
+      if (btn) btn.textContent = `⟳ Back in ${secs}s…`;
+      if (secs <= 0) { clearInterval(tick); location.reload(true); }
+    }, 1000);
   } catch(e) {
-    alert("Couldn't reach the manager on port " + mgrPort + ".\n\n" +
-          "Make sure kalshi-manager.py is running (not just app.py), and that port " +
-          mgrPort + " is open in the firewall.\n\nError: " + e.message);
+    alert("Couldn't reach the bot to restart it.\n\nIf it's already down, run_bot.bat will bring it back by itself — just reload this page in ~20s.\n\nError: " + e.message);
     if (btn) { btn.disabled = false; btn.textContent = "⟳ Update"; }
   }
 }

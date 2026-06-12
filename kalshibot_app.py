@@ -3636,7 +3636,11 @@ def api_summary():
     # Merge settlements from Kalshi's API (don't double-count sold_early entries from activity)
     try:
         since_dt = datetime.fromtimestamp(since, tz=timezone.utc)
-        all_settlements = _cached_settlements(hours=24)  # Use blocking fetch to ensure fresh data in Summary
+        # NONBLOCKING: the blocking fetch takes 30-60s through the rate limiter and the
+        # request never completes → the Summary tab renders NOTHING (not even the buys
+        # already sitting in the activity log). Serve cached settlements instantly and
+        # refresh in the background — the tab auto-refreshes every 15s and fills them in.
+        all_settlements = _cached_settlements_nonblocking(hours=24)
         for s in all_settlements:
             # Skip sold_early (already counted as sells in activity log)
             if s.get("result") == "sold_early":
@@ -3709,6 +3713,20 @@ def api_summary():
         },
         "trades": trades[:500],  # cap payload
     })
+
+
+# ── Restart (works with run_bot.bat — no manager needed) ────────────────────
+@app.route("/api/restart", methods=["POST"])
+def api_restart():
+    """Exit the process on purpose. run_bot.bat's loop then does `git pull` and
+    relaunches on the new code — so the ⟳ Update button works from any device
+    with ZERO terminal access: push to GitHub → click Update → bot is current."""
+    _log("[restart] requested from web UI — exiting so run_bot.bat can pull + relaunch")
+    def _die():
+        time.sleep(0.8)   # let the HTTP response flush first
+        os._exit(0)
+    threading.Thread(target=_die, daemon=True).start()
+    return jsonify({"ok": True, "msg": "Restarting — run_bot.bat will git pull and relaunch (~15s)"})
 
 
 # ── Smart Strategy endpoint ──────────────────────────────────────────────────
