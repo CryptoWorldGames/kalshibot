@@ -5630,8 +5630,30 @@ async function loadSummary() {
         } else if (isBuy && x.spent != null) {
           result = ` · <span style="color:#aaa">-$${Number(x.spent).toFixed(2)}</span>`;
         }
+
+        // For SELL/SETTLEMENT: show detailed P&L breakdown
+        let detailLine = "";
+        if ((isSell || isSettled) && x.count != null && x.price != null) {
+          const qty = Number(x.count);
+          const sellEach = Number(x.price);
+          const totalSell = (qty * sellEach / 100).toFixed(2);
+          // Attempt to derive cost-each from the activity log (if available)
+          const profit = Number(x.profit || 0);
+          const costEach = totalSell > 0 ? ((Number(totalSell) - profit) / qty).toFixed(2) : "—";
+          const totalCost = (Number(costEach) * qty).toFixed(2);
+          detailLine = `<div style="font-size:11px;color:#aaa;margin-top:6px;padding-top:6px;border-top:1px solid #333;display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px">
+            <div><span style="color:#666">Qty:</span> ${qty}</div>
+            <div><span style="color:#666">Cost each:</span> $${costEach}</div>
+            <div><span style="color:#666">Total cost:</span> $${totalCost === "NaN" ? "—" : totalCost}</div>
+            <div><span style="color:#666">Sell each:</span> $${(sellEach / 100).toFixed(2)}</div>
+            <div><span style="color:#666">Total sell:</span> $${totalSell}</div>
+            <div style="font-weight:700;color:${profit >= 0 ? "var(--green)" : "var(--red)"}"><span style="color:#666">Profit:</span> ${profit >= 0 ? "+" : ""}$${profit.toFixed(2)}</div>
+          </div>`;
+        }
+
         // Mobile: First line = timestamp (left) + profit/loss (right), both always visible
         // Second line = tag + profile + title with details
+        // Third line (SELL/SETTLEMENT only) = detailed P&L breakdown
         return `<div class="summary-trade-row" style="border-left:3px solid ${color};background:#0c0c0e;border-radius:4px;font-size:13px">
           <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
             <span data-part="timestamp" style="color:#777;min-width:max-content;font-variant-numeric:tabular-nums;font-size:12px">${fmtTime(x.ts, true)}</span>
@@ -5643,6 +5665,7 @@ async function loadSummary() {
             <span data-part="title" style="color:#fff;font-size:12px">${title}</span>
             <span data-part="details" style="color:#888;font-size:11px">${side} ${cnt}${price ? ` @ ${price}` : ""}</span>
           </div>
+          ${detailLine}
         </div>`;
       }).join("");
 
