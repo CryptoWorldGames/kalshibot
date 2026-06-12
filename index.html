@@ -2251,6 +2251,8 @@ window.addEventListener("load", () => {
   loadCash();
   loadActiveProfile();   // light up the correct bot LED/pill from the start
   loadSmartStrategyStatus();// load smart strategy state from backend
+  loadScannerSettings(); // pre-fill the Scanner (T1) buy form from backend
+  loadScannerStrategy(); // pre-fill the Scanner (T1) sell strategy
   loadLottoSettings();   // pre-fill the Lotto (T2) buy form so it's ready when opened
   loadLottoStrategy();   // pre-fill the Lotto (T2) sell strategy
   seedLottoMemDefaults();// preload M1 with the cheap long-shot preset (if empty)
@@ -6314,6 +6316,26 @@ function pushLottoSettings() {
   }, 100);
 }
 
+async function loadScannerSettings() {
+  try {
+    const r = await fetch("/api/buy-settings?profile=T1", {cache:"no-store"});
+    const s = await r.json();
+    const set = (id,v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+    const chk = (id,v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
+    chk("enableBuyUp", s.enable_buy_up);   set("minProb", s.up_min);   set("maxProb", s.up_max);
+    chk("enableBuyDown", s.enable_buy_down); set("minProbDown", s.down_min); set("maxProbDown", s.down_max);
+    set("minutes", s.minutes); set("buyAmount", s.buy_amount);
+    set("autoMaxPerScan", s.max_per_scan); set("autoMaxConcurrent", s.max_concurrent); set("maxBuysPerMarket", s.max_per_market);
+    chk("showCrypto", s.show_crypto); chk("showCombo", s.show_combo); chk("showSports", s.show_sports);
+    chk("showPolitics", s.show_politics); chk("showEconomics", s.show_economics);
+    chk("goodLiq", s.good_liq); chk("hideMultiOutcome", s.hide_multi);
+    // Load AUTO MODE settings
+    if (s.run_mode) setRunMode(s.run_mode);
+    if (s.auto_mins) set("autoMins", s.auto_mins);
+    if (s.auto_buys_max) set("autoBuysMax", s.auto_buys_max);
+  } catch(e) {}
+}
+
 async function loadLottoSettings() {
   try {
     const r = await fetch("/api/buy-settings?profile=T2", {cache:"no-store"});
@@ -6366,6 +6388,26 @@ function pushLottoStrategy() {
       .then(() => { if (st) st.textContent = "✓"; setTimeout(()=>{ if(st) st.textContent=""; }, 600); })
       .catch(() => { if (st) st.textContent = "Failed"; });
   }, 100);
+}
+
+async function loadScannerStrategy() {
+  try {
+    const r = await fetch("/api/strategy?profile=T1", {cache:"no-store"});
+    const s = await r.json();
+    const set = (id,v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+    const chk = (id,v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
+    // Select the matching radio dot (values always stay visible/editable).
+    const radio = document.querySelector(`input[name="strat"][value="${s.mode||'resolution'}"]`);
+    if (radio) radio.checked = true;
+    set("profitCustom", s.target_pct);
+    set("profitDolCustom", s.target_dollars);
+    set("targetPriceCustom", s.target_price_cents);
+    const slc = document.getElementById("stopLossChk");
+    if (slc) slc.checked = (s.stop_loss_pct != null);
+    set("stopLossPct", s.stop_loss_pct);
+    chk("skipAutoSellNearResolution", s.skip_auto_sell_near_resolution !== false);
+    set("skipAutoSellMinutes", s.skip_auto_sell_minutes);
+  } catch(e) {}
 }
 
 async function loadLottoStrategy() {
