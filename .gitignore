@@ -51,3 +51,5 @@ test2.txt
 # Virtual environment & logs
 venv/
 *.log
+smart_strategy.json
+spread_guard.json

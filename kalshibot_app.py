@@ -463,6 +463,13 @@ def _load_profiles():
     try:
         if PROFILES_FILE.exists():
             d = json.loads(PROFILES_FILE.read_text(encoding="utf-8"))
+            # Tolerate a legacy/corrupt file that's just a bare list of active
+            # profile IDs (e.g. ["T1","T2"]) — treat it as active_profiles.
+            if isinstance(d, list):
+                act = [p for p in d if p in PROFILE_IDS] or ["T1"]
+                return {}, {}, act
+            if not isinstance(d, dict):
+                return {}, {}, ["T1"]
             prof = d.get("profiles") or {}
             sell = d.get("sell") or {}
             # Multiple profiles can be active at once. Accept the new "active_profiles"
@@ -3702,7 +3709,8 @@ def api_summary():
     })
 
 
-# ── Spread Guard endpoints ───────────────────────────────────────────────────@app.route("/api/smart-strategy", methods=["GET", "POST"])
+# ── Smart Strategy endpoint ──────────────────────────────────────────────────
+@app.route("/api/smart-strategy", methods=["GET", "POST"])
 def api_smart_strategy():
     """Master switch for auto Scanner/Lotto mode based on live crypto spread.
     GET: return current setting + live spread analysis.
