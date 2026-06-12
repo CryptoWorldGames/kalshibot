@@ -3849,6 +3849,21 @@ def api_summary():
         import traceback
         traceback.print_exc()
 
+    # Filter out stale BUY entries: if a BUY is 20+ minutes old and doesn't have a
+    # corresponding SETTLED entry, it's probably an expired market waiting for Kalshi's
+    # settlement API to catch up. Hide it so the Summary doesn't fill with zombie BUYs.
+    now_epoch = time.time()
+    settled_tickers = {(s.get("ticker"), s.get("kind")) for s in trades if s.get("kind") == "settlement"}
+    trades = [t for t in trades if not (
+        t.get("kind") == "buy" and
+        (now_epoch - float(t.get("ts", 0))) > 20 * 60 and  # older than 20 min
+        (t.get("ticker"), "settlement") not in settled_tickers  # no corresponding settlement
+    )]
+    # Recount after filtering
+    buys = sum(1 for t in trades if t.get("kind") == "buy")
+    sells = sum(1 for t in trades if t.get("kind") == "sell")
+    settlements = sum(1 for t in trades if t.get("kind") == "settlement")
+
     # newest first for display — coerce ts to float so one bad row can't 500 the tab
     def _ts_key(x):
         v = x.get("ts", 0)
