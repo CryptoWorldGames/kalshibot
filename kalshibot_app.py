@@ -3631,6 +3631,7 @@ def api_summary():
                 trades.append(e)
     except Exception as e:
         print(f"[summary] activity loop error: {e}")
+    _log(f"[summary] counted: {scans} scans, {buys} buys, {sells} sells — {len(trades)} trades for display")
 
     # Merge settlements from Kalshi's API (don't double-count sold_early entries from activity)
     try:
