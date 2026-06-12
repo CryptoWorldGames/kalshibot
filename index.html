@@ -630,10 +630,10 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
       <div style="font-size:12px;color:#aaa;margin-top:4px">Auto-select Scanner or Lotto based on live crypto spread</div>
     </div>
     <label class="check-row" style="margin:0">
-      <input type="checkbox" id="smartStrategyEnabled" onchange="toggleSmartStrategy()"> Enable
+      <input type="checkbox" class="smartStrategyEnabled" onchange="toggleSmartStrategy(this)"> Enable
     </label>
   </div>
-  <div id="smartStrategyStatus" style="font-size:12px;color:#888;margin-top:8px">Loading...</div>
+  <div class="smartStrategyStatus" style="font-size:12px;color:#888;margin-top:8px">Loading...</div>
 </div>
 
 <!-- Filters -->
@@ -980,10 +980,10 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
         <div style="font-size:12px;color:#aaa;margin-top:4px">Auto-select Scanner or Lotto based on live crypto spread</div>
       </div>
       <label class="check-row" style="margin:0">
-        <input type="checkbox" id="smartStrategyEnabled" onchange="toggleSmartStrategy()"> Enable
+        <input type="checkbox" class="smartStrategyEnabled" onchange="toggleSmartStrategy(this)"> Enable
       </label>
     </div>
-    <div id="smartStrategyStatus" style="font-size:12px;color:#888;margin-top:8px">Loading...</div>
+    <div class="smartStrategyStatus" style="font-size:12px;color:#888;margin-top:8px">Loading...</div>
   </div>
 
   <!-- M1–M5 memory slots (Lotto page ONLY) — like a calculator's memory buttons -->
@@ -6167,46 +6167,42 @@ async function setActiveProfile(p) {
 }
 
 // ── Smart Strategy (master switch for auto Scanner/Lotto) ──────────────────
+// The card exists on BOTH the Scanner and Lotto tabs — same class, so one
+// fetch updates every copy (duplicate IDs only ever updated the first card,
+// which left the Lotto one stuck on "Loading...").
 async function loadSmartStrategyStatus() {
   try {
     const r = await fetch("/api/smart-strategy");
     const d = await r.json();
-    const chk = document.getElementById("smartStrategyEnabled");
-    if (chk) chk.checked = d.enabled || false;
-    const status = document.getElementById("smartStrategyStatus");
-    if (status) {
-      const state = d.enabled ? "✓ ON" : "○ OFF";
-      const mode = d.active_mode || "manual";
-      const spread = d.current_spread || 0;
-      const threshold = d.spread_threshold || 100;
-      const modeText = mode === "manual" ? "off (manual)" : mode.toUpperCase();
-      status.textContent = `${state} • mode: ${modeText} • spread: $${spread} (threshold: $${threshold})`;
-      status.style.color = d.enabled ? "var(--green)" : "#888";
-    }
+    document.querySelectorAll(".smartStrategyEnabled").forEach(chk => { chk.checked = d.enabled || false; });
+    const state = d.enabled ? "✓ ON" : "○ OFF";
+    const mode = d.active_mode || "manual";
+    const modeText = mode === "manual" ? "off (manual)" : mode.toUpperCase();
+    const txt = `${state} • mode: ${modeText} • BTC is $${d.current_spread || 0} from strike (switch at $${d.spread_threshold || 100})`;
+    document.querySelectorAll(".smartStrategyStatus").forEach(s => {
+      s.textContent = txt;
+      s.style.color = d.enabled ? "var(--green)" : "#888";
+    });
   } catch(e) {
     console.error("Failed to load Smart Strategy status:", e);
-    if (document.getElementById("smartStrategyStatus")) {
-      document.getElementById("smartStrategyStatus").textContent = "Status unknown";
-    }
+    document.querySelectorAll(".smartStrategyStatus").forEach(s => { s.textContent = "Status unknown"; });
   }
 }
 
-async function toggleSmartStrategy() {
-  const chk = document.getElementById("smartStrategyEnabled");
-  if (!chk) return;
+async function toggleSmartStrategy(src) {
+  const enabled = !!(src && src.checked);
   try {
-    const r = await fetch("/api/smart-strategy", {
+    await fetch("/api/smart-strategy", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({enabled: chk.checked})
+      body: JSON.stringify({enabled})
     });
-    const d = await r.json();
-    loadSmartStrategyStatus();
-    toast(`Smart Strategy ${chk.checked ? "enabled" : "disabled"}`, "ok");
+    toast(`Smart Strategy ${enabled ? "enabled" : "disabled"}`, "ok");
   } catch(e) {
     toast("Failed to update Smart Strategy", "err");
-    loadSmartStrategyStatus();
   }
+  loadSmartStrategyStatus();
+  loadActiveProfile();   // mode switch changes the T1/T2 LEDs — refresh them now
 }
 
 // ── Lotto (T2) settings: independent form, posts to profile T2 ────────────

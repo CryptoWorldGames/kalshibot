@@ -828,29 +828,56 @@ _CRYPTO_15M_PREFIXES = ("KXBTC15M", "KXETH15M", "KXSOL15M", "KXHYPE15M",
                         "KXBTC30M", "KXETH30M", "KXSOL30M",
                         "KXBTC1H", "KXETH1H", "KXSOL1H")
 
+_btc_cushion_cache = {"val": 0.0, "ts": 0.0}
 def _average_crypto_spread() -> float:
-    """Calculate average bid-ask spread across open 15-min crypto markets.
-    Returns the average cushion (strike distance) in dollars, or 0 if no data."""
+    """The Smart Strategy 'spread' = how far BTC's LIVE price sits from the
+    strikes of the open BTC 15-min markets, in DOLLARS (avg |spot − strike|).
+    BTC is the single regime reference — the $100 threshold is a BTC-dollar
+    distance, and alts follow BTC's regime. One number, one mode decision:
+      ≥ threshold → price far from strike, flips unlikely → SCANNER
+      < threshold → price hugging the strike, flips easy   → LOTTO
+    Cached 30s so the status card loads instantly."""
+    now = time.time()
+    if (now - _btc_cushion_cache["ts"]) < 30:
+        return _btc_cushion_cache["val"]
     try:
-        cushions = []
-        for prefix in _CRYPTO_15M_PREFIXES[:7]:  # Check main 7 crypto pairs (BTC, ETH, SOL, etc)
-            try:
-                d = kalshi_get("/markets", {"series_ticker": prefix, "status": "open", "limit": 5})
-                for m in d.get("markets", []):
-                    yes_bid = m.get("yes_bid")
-                    yes_ask = m.get("yes_ask")
-                    if yes_bid is not None and yes_ask is not None:
-                        # Spread = distance between bid and ask
-                        spread = abs(float(yes_ask) - float(yes_bid))
-                        cushions.append(spread)
-            except Exception:
-                pass
-        if cushions:
-            return sum(cushions) / len(cushions)
-        return 0.0
+        spot, _src = _spot_price("BTC")
+        if spot:
+            cushions = []
+            d = kalshi_get("/markets", {"series_ticker": "KXBTC15M", "status": "open", "limit": 5})
+            for m in d.get("markets", []):
+                strike = _strike_from_market(m)
+                if strike:
+                    cushions.append(abs(spot - strike))
+            if cushions:
+                _btc_cushion_cache["val"] = round(sum(cushions) / len(cushions), 2)
+                _btc_cushion_cache["ts"] = now
     except Exception as e:
         print(f"[smart-strategy] spread calc failed: {e}")
-        return 0.0
+    return _btc_cushion_cache["val"]
+
+_smart_apply_ts = {"t": 0.0}
+def _apply_smart_strategy():
+    """Re-evaluate every ~60s while enabled so the mode FOLLOWS the market —
+    not just at the moment you click Enable. Switches active_profiles for
+    real (wide → T1 Scanner only, tight → T2 Lotto only); the tab LEDs pick
+    it up on their next status poll."""
+    global active_profiles
+    if not smart_strategy.get("enabled"):
+        return
+    now = time.time()
+    if (now - _smart_apply_ts["t"]) < 60:
+        return
+    _smart_apply_ts["t"] = now
+    spread = _average_crypto_spread()
+    if spread <= 0:
+        return  # no live data — don't flip modes blind
+    want = ["T1"] if spread >= smart_strategy["spread_threshold"] else ["T2"]
+    if want != active_profiles:
+        active_profiles = want
+        _save_profiles()
+        _log(f"[smart-strategy] BTC ${spread:,.2f} from strike vs ${smart_strategy['spread_threshold']:,.0f} "
+             f"→ switched to {'SCANNER (T1)' if want == ['T1'] else 'LOTTO (T2)'}")
 
 def _ticker_symbol(ticker: str):
     """KXETH15M-26JUN102330-30 → ETH"""
@@ -1769,6 +1796,9 @@ def _bot_thread():
 
         try:
             cycle_start = time.time()
+            # Smart Strategy: keep the active mode in sync with the live market
+            # (no-op unless enabled; throttled to one check per minute).
+            _apply_smart_strategy()
             # Run a scan+buy pass for EACH active profile (multiple bots can run at
             # once — e.g. the regular bot + the Lotto bot). Each uses its own settings.
             profs = list(active_profiles)
