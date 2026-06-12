@@ -2265,16 +2265,16 @@ def portfolio():
                 age_mins = (datetime.now(timezone.utc) - bought_dt).total_seconds() / 60
                 if age_mins > 30:
                     # Market should have settled by now. If it's not in live Kalshi data,
-                    # mark it sold and skip it. Record settlement in activity log so
-                    # Summary shows it as SETTLED, not lingering as BUY.
+                    # mark it sold and skip it. Clear settlements cache so next Summary
+                    # fetch pulls fresh data from Kalshi.
                     with _lock:
                         if ticker in tracked and tracked[ticker].get("status") in ("open", "selling"):
                             tracked[ticker]["status"] = "sold"
                             tracked[ticker].setdefault("sold_by", "expired")
                             tracked[ticker].setdefault("sold_at", datetime.now(timezone.utc).isoformat())
-                    # Record settlement in activity log (won=None means final settlement unknown)
-                    _record_activity("settlement", ticker=ticker, side=info.get("side"),
-                                     count=info.get("count"), won=None, title=info.get("title", ""))
+                    # Invalidate settlements cache so Summary pulls fresh data from Kalshi
+                    global _settlements_cache
+                    _settlements_cache.clear()
                     _save_tracked()
                     continue
             except Exception:
