@@ -2253,6 +2253,29 @@ def portfolio():
         # Also skip anything just sold via the UI (status may not have flushed yet)
         if _is_recently_sold(ticker, info.get("side", "yes")):
             continue
+
+        # Skip if the market has expired (close_time is in the past)
+        # This prevents stale fallback positions from appearing hours after expiry
+        bought_at = info.get("bought_at")
+        if bought_at:
+            try:
+                bought_dt = datetime.fromisoformat(bought_at.replace("Z", "+00:00"))
+                # If bought 30+ minutes ago and we still don't have live Kalshi data,
+                # it's probably expired — don't serve it as fallback
+                age_mins = (datetime.now(timezone.utc) - bought_dt).total_seconds() / 60
+                if age_mins > 30:
+                    # Market should have settled by now. If it's not in live Kalshi data,
+                    # mark it sold and skip it.
+                    with _lock:
+                        if ticker in tracked and tracked[ticker].get("status") in ("open", "selling"):
+                            tracked[ticker]["status"] = "sold"
+                            tracked[ticker].setdefault("sold_by", "expired")
+                            tracked[ticker].setdefault("sold_at", datetime.now(timezone.utc).isoformat())
+                    _save_tracked()
+                    continue
+            except Exception:
+                pass
+
         # Ghost reconciliation: if the live positions fetch SUCCEEDED AND returned a
         # real (non-empty) position list, but this tracked-"open" position isn't in
         # it, it's been sold/closed externally — mark it sold so it stops reappearing
