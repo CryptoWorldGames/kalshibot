@@ -2617,6 +2617,8 @@ async function pushStrategy() {
 
     const respData = await resp.json();
     console.log(`[pushStrategy] Success! Server saved:`, respData.strategy);
+    // Broadcast strategy change to other tabs
+    if (_syncChannel) _syncChannel.postMessage({ type: "strategy_changed" });
     return respData;
   } catch(e) {
     // AbortError is expected (tab switch, navigation, timeout) — suppress it
@@ -5311,6 +5313,16 @@ async function saveBtnClick(btn) {
   if (ok) {
     btn.style.background = "var(--green)";
     setLabel("✓ Saved!", "✓");
+    // Broadcast settings change to other tabs on same device
+    if (_syncChannel) {
+      _syncChannel.postMessage({ type: "settings_changed" });
+      _syncChannel.postMessage({ type: "strategy_changed" });
+    }
+    // Update hash for cross-device detection
+    _lastSettingsHash = JSON.stringify({
+      s1: await fetch("/api/buy-settings?profile=T1", {cache:"no-store"}).then(r=>r.json()).catch(()=>{}),
+      st1: await fetch("/api/strategy?profile=T1", {cache:"no-store"}).then(r=>r.json()).catch(()=>{})
+    });
   } else {
     // Buy filters + everything still saved on-device and pushed; only the strategy
     // round-trip didn't confirm (server busy). Tell the truth, don't fail silently.
@@ -6104,6 +6116,60 @@ const SETTINGS_INPUTS = ["buyAmount","maxBuysPerMarket","autoMaxPerScan","autoMa
   "L_minProb","L_maxProb","L_minProbDown","L_maxProbDown","L_minutes","L_stopLossPct",
   "L_targetPct","L_targetDol","L_targetPrice"];
 
+// ── Cross-tab & cross-device settings sync ──────────────────────────────────
+// Broadcast channel for instant sync across tabs on the same device
+let _syncChannel = null;
+try {
+  _syncChannel = new BroadcastChannel("kalshibot_settings");
+  _syncChannel.onmessage = (event) => {
+    if (event.data.type === "settings_changed") {
+      loadSettings();  // reload settings from localStorage
+      toast("✓ Settings synced from another tab", "ok");
+    } else if (event.data.type === "strategy_changed") {
+      loadScannerStrategy();
+      loadLottoStrategy();
+      toast("✓ Strategy synced from another tab", "ok");
+    }
+  };
+} catch(e) {}
+
+// Poll backend for settings changes from other devices every 60 seconds
+let _lastSettingsHash = null;
+function _computeSettingsHash() {
+  const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+  return JSON.stringify(s);
+}
+async function _checkForRemoteSettingsChanges() {
+  try {
+    const r1 = await fetch("/api/buy-settings?profile=T1", {cache:"no-store"});
+    const s1 = await r1.json();
+    const r2 = await fetch("/api/strategy?profile=T1", {cache:"no-store"});
+    const st1 = await r2.json();
+    const r3 = await fetch("/api/buy-settings?profile=T2", {cache:"no-store"});
+    const s2 = await r3.json();
+    const r4 = await fetch("/api/strategy?profile=T2", {cache:"no-store"});
+    const st2 = await r4.json();
+
+    // Check if any settings changed on the backend
+    const remoteHash = JSON.stringify({s1, st1, s2, st2});
+    if (_lastSettingsHash && _lastSettingsHash !== remoteHash) {
+      // Settings changed on another device — reload from backend
+      loadScannerSettings();
+      loadScannerStrategy();
+      loadLottoSettings();
+      loadLottoStrategy();
+      toast("✓ Settings synced from another device", "ok");
+    }
+    _lastSettingsHash = remoteHash;
+  } catch(e) {}
+}
+
+// Start checking for remote changes every 60 seconds
+setTimeout(() => {
+  _checkForRemoteSettingsChanges();
+  setInterval(_checkForRemoteSettingsChanges, 60000);
+}, 5000);
+
 function saveSettings() {
   // Validation: Must have at least one buy direction enabled
   const buyUp = document.getElementById("enableBuyUp")?.checked;
@@ -6311,7 +6377,12 @@ function pushLottoSettings() {
   _pushLottoTimer = setTimeout(() => {
     if (st) st.textContent = "Saving…";
     fetch("/api/buy-settings", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload)})
-      .then(() => { if (st) st.textContent = "✓"; setTimeout(()=>{ if(st) st.textContent=""; }, 600); })
+      .then(() => {
+        if (st) st.textContent = "✓";
+        // Broadcast Lotto settings change to other tabs
+        if (_syncChannel) _syncChannel.postMessage({ type: "settings_changed" });
+        setTimeout(()=>{ if(st) st.textContent=""; }, 600);
+      })
       .catch(() => { if (st) st.textContent = "Failed"; });
   }, 100);
 }
@@ -6385,7 +6456,12 @@ function pushLottoStrategy() {
   _pushLottoStratTimer = setTimeout(() => {
     if (st) st.textContent = "Saving…";
     fetch("/api/strategy", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload)})
-      .then(() => { if (st) st.textContent = "✓"; setTimeout(()=>{ if(st) st.textContent=""; }, 600); })
+      .then(() => {
+        if (st) st.textContent = "✓";
+        // Broadcast Lotto strategy change to other tabs
+        if (_syncChannel) _syncChannel.postMessage({ type: "strategy_changed" });
+        setTimeout(()=>{ if(st) st.textContent=""; }, 600);
+      })
       .catch(() => { if (st) st.textContent = "Failed"; });
   }, 100);
 }
