@@ -710,29 +710,6 @@ def _kalshi_fee(count: float, price_cents: float) -> float:
 # once-per-second RTI prices over the LAST MINUTE before close. So a market
 # whose spot sits $40 from the strike with 2 min left genuinely can flip; one
 # sitting $400 away almost never does. The guard measures that cushion live.
-SPREAD_GUARD_FILE = HERE / "spread_guard.json"
-spread_guard = {
-    "enabled": False,
-    "usd_threshold": 100.0,   # BTC: cushion in $ that counts as "wide"
-    "pct_threshold": 0.10,    # everything else: cushion as % of spot price
-    "cheap_max_cents": 20,    # buys at/below this price are "lotto" buys the guard blocks when wide
-}
-def _load_spread_guard():
-    global spread_guard
-    try:
-        if SPREAD_GUARD_FILE.exists():
-            d = json.loads(SPREAD_GUARD_FILE.read_text(encoding="utf-8"))
-            if isinstance(d, dict):
-                spread_guard.update(d)
-    except Exception as e:
-        print(f"[spread-guard] load failed: {e}")
-def _save_spread_guard():
-    try:
-        SPREAD_GUARD_FILE.write_text(json.dumps(spread_guard, indent=2), encoding="utf-8")
-    except Exception as e:
-        print(f"[spread-guard] save failed: {e}")
-_load_spread_guard()
-
 # Live spot prices — Coinbase first, Kraken fallback. These are constituent
 # exchanges of the CF Benchmarks RTI that Kalshi settles on, so they're an
 # honest proxy for the settlement index. 10s cache keeps API traffic tiny.
@@ -801,17 +778,20 @@ _CRYPTO_15M_PREFIXES = ("KXBTC15M", "KXETH15M", "KXSOL15M", "KXHYPE15M",
                         "KXBTC1H", "KXETH1H", "KXSOL1H")
 
 def _average_crypto_spread() -> float:
-    """Calculate average spread cushion across all open 15-min crypto markets.
-    Returns the average cushion in dollars, or 0 if no data."""
+    """Calculate average bid-ask spread across open 15-min crypto markets.
+    Returns the average cushion (strike distance) in dollars, or 0 if no data."""
     try:
         cushions = []
-        for prefix in _CRYPTO_15M_PREFIXES[:7]:  # Check main 7 crypto pairs
+        for prefix in _CRYPTO_15M_PREFIXES[:7]:  # Check main 7 crypto pairs (BTC, ETH, SOL, etc)
             try:
                 d = kalshi_get("/markets", {"series_ticker": prefix, "status": "open", "limit": 5})
                 for m in d.get("markets", []):
-                    dec = _spread_guard_decision(m.get("ticker", ""), m)
-                    if dec.get("cushion") is not None:
-                        cushions.append(float(dec["cushion"]))
+                    yes_bid = m.get("yes_bid")
+                    yes_ask = m.get("yes_ask")
+                    if yes_bid is not None and yes_ask is not None:
+                        # Spread = distance between bid and ask
+                        spread = abs(float(yes_ask) - float(yes_bid))
+                        cushions.append(spread)
             except Exception:
                 pass
         if cushions:
@@ -853,44 +833,6 @@ def _strike_from_market(m: dict):
             except ValueError:
                 pass
     return None
-
-def _spread_guard_decision(ticker: str, m: dict) -> dict:
-    """Live cushion check for one crypto market. Returns a dict with every raw
-    number used, so /api/spread-check can prove the data is real (no hardcoding)."""
-    out = {"ticker": ticker, "applies": False, "wide": None, "symbol": None,
-           "strike": None, "spot": None, "spot_source": None,
-           "cushion_usd": None, "cushion_pct": None, "secs_to_close": None}
-    sym = _ticker_symbol(ticker)
-    if not sym:
-        return out
-    out["symbol"] = sym
-    strike = _strike_from_market(m)
-    if strike is None:
-        out["reason"] = "no_strike_found"
-        return out
-    spot, src = _spot_price(sym)
-    if spot is None:
-        out["reason"] = "no_spot_source"
-        return out
-    out.update(strike=strike, spot=spot, spot_source=src, applies=True)
-    cushion = abs(spot - strike)
-    out["cushion_usd"] = round(cushion, 4)
-    out["cushion_pct"] = round(cushion / spot * 100, 4) if spot else None
-    try:
-        ct = m.get("close_time") or m.get("expiration_time")
-        if ct:
-            cdt = datetime.fromisoformat(str(ct).replace("Z", "+00:00"))
-            out["secs_to_close"] = int((cdt - datetime.now(timezone.utc)).total_seconds())
-    except Exception:
-        pass
-    if sym == "BTC":
-        out["wide"] = cushion >= float(spread_guard.get("usd_threshold", 100.0))
-        out["rule"] = f"BTC cushion ${cushion:,.0f} vs ${float(spread_guard.get('usd_threshold', 100.0)):,.0f} threshold"
-    else:
-        thr = float(spread_guard.get("pct_threshold", 0.10))
-        out["wide"] = (out["cushion_pct"] or 0) >= thr
-        out["rule"] = f"{sym} cushion {out['cushion_pct']}% vs {thr}% threshold"
-    return out
 
 # Market data cache — avoid hitting /markets/{ticker} more than once per 60s
 _market_cache: dict = {}   # ticker → {"data": {...}, "ts": float}
@@ -1647,16 +1589,6 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
             pc = int(math.ceil(price_c))
             if pc <= 0 or pc > 99:
                 continue
-            # ── Spread Guard ── when enabled: cheap longshot buys (≤ cheap_max_cents)
-            # are only allowed when spot is CLOSE to the strike (a flip is plausible).
-            # Wide cushion → the longshot is near-certain dead money, skip it.
-            # Higher-priced (scanner-band) buys always pass.
-            if spread_guard.get("enabled") and pc <= int(spread_guard.get("cheap_max_cents", 20)):
-                _sg = _spread_guard_decision(ticker, m)
-                if _sg.get("applies") and _sg.get("wide"):
-                    _log(f"[spread-guard:{prof}] SKIP cheap {pc}¢ {ticker} — {_sg.get('rule')} "
-                         f"(spot {_sg.get('spot')} via {_sg.get('spot_source')}, strike {_sg.get('strike')})")
-                    continue
             contracts = math.floor(buy_amt / (pc / 100))
             if contracts < 1:
                 # buy_amount too small for this price (e.g. $0.50 budget at 60¢ → 0
@@ -3770,64 +3702,7 @@ def api_summary():
     })
 
 
-# ── Spread Guard endpoints ───────────────────────────────────────────────────
-@app.route("/api/spread-guard", methods=["GET", "POST"])
-def api_spread_guard():
-    """Read or update the Spread Guard settings (cushion-aware lotto gating)."""
-    if request.method == "GET":
-        return jsonify(spread_guard)
-    data = request.get_json(silent=True) or {}
-    if "enabled" in data:
-        spread_guard["enabled"] = bool(data["enabled"])
-    for k, lo, hi in (("usd_threshold", 1, 100000),
-                      ("pct_threshold", 0.001, 50),
-                      ("cheap_max_cents", 1, 99)):
-        if data.get(k) is not None:
-            try:
-                v = float(data[k])
-                if lo <= v <= hi:
-                    spread_guard[k] = v
-            except (TypeError, ValueError):
-                pass
-    _save_spread_guard()
-    _log(f"[spread-guard] settings updated: {spread_guard}")
-    return jsonify(spread_guard)
-
-
-@app.route("/api/spread-check")
-def api_spread_check():
-    """LIVE diagnostic: for every open crypto short-horizon market, show the strike
-    (from Kalshi), live spot (Coinbase/Kraken — CF Benchmarks RTI constituents),
-    the cushion, and what the guard would decide RIGHT NOW. Every number comes
-    from a live API call made at request time — nothing is hardcoded."""
-    series = request.args.get("series", "KXBTC15M,KXETH15M,KXSOL15M,KXDOGE15M,KXXRP15M,KXBNB15M")
-    rows = []
-    for st in [s.strip() for s in series.split(",") if s.strip()]:
-        try:
-            d = kalshi_get("/markets", {"series_ticker": st, "status": "open", "limit": 10})
-            for m in d.get("markets", []):
-                ticker = m.get("ticker", "")
-                dec = _spread_guard_decision(ticker, m)
-                dec["yes_bid"] = m.get("yes_bid")
-                dec["yes_ask"] = m.get("yes_ask")
-                dec["title"] = m.get("title", "")
-                dec["decision"] = ("WIDE → scanner only (lotto blocked)" if dec.get("wide")
-                                   else "TIGHT → scanner + lotto allowed" if dec.get("wide") is not None
-                                   else "n/a")
-                rows.append(dec)
-        except Exception as e:
-            rows.append({"series": st, "error": f"{type(e).__name__}: {e}"})
-    return jsonify({
-        "checked_at": datetime.now(timezone.utc).isoformat(),
-        "settings": spread_guard,
-        "settlement_note": "Kalshi crypto settles on the average of 60 once-per-second "
-                           "CF Benchmarks RTI prices over the final minute before close.",
-        "spot_sources": "coinbase (primary), kraken (fallback) — both RTI constituent exchanges",
-        "markets": rows,
-    })
-
-
-@app.route("/api/smart-strategy", methods=["GET", "POST"])
+# ── Spread Guard endpoints ───────────────────────────────────────────────────@app.route("/api/smart-strategy", methods=["GET", "POST"])
 def api_smart_strategy():
     """Master switch for auto Scanner/Lotto mode based on live crypto spread.
     GET: return current setting + live spread analysis.
