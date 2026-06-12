@@ -3602,6 +3602,7 @@ def api_summary():
     since = time.time() - minutes * 60
 
     events = _read_activity(since)
+    _log(f"[summary] _read_activity returned {len(events)} events for time window {minutes}m (since {since})")
 
     scans = buys = sells = settlements = 0
     buy_spent = 0.0
