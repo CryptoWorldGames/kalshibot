@@ -3673,7 +3673,7 @@ def api_summary():
     # Merge settlements from Kalshi's API (don't double-count sold_early entries from activity)
     try:
         since_dt = datetime.fromtimestamp(since, tz=timezone.utc)
-        all_settlements = _cached_settlements_nonblocking(hours=24)  # Non-blocking: return cache, refresh in background
+        all_settlements = _cached_settlements(hours=24)  # Use blocking fetch to ensure fresh data in Summary
         for s in all_settlements:
             # Skip sold_early (already counted as sells in activity log)
             if s.get("result") == "sold_early":
