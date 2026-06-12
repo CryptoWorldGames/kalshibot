@@ -699,6 +699,50 @@ def _cached_settlements_nonblocking(hours: int = 24) -> list:
         threading.Thread(target=_refresh, daemon=True).start()
     return cached["data"] if cached else []
 
+# ── Order fills — Kalshi's authoritative trade history ──────────────────────
+# /portfolio/fills is the record of EVERY buy and sell on the account, kept by
+# Kalshi — complete no matter which machine made the trade or whether the bot
+# was running. This is what lets the Summary show real history from any device.
+_fills_cache: dict = {"data": [], "ts": 0.0}
+_FILLS_CACHE_TTL = 120.0
+_fills_refresh_inflight = threading.Event()
+
+def _recent_fills(hours: int = 24 * 30) -> list:
+    """Fetch all fills in the window, paginated (200/page, capped at 25 pages)."""
+    out = []
+    min_ts = int(time.time() - hours * 3600)
+    cursor = None
+    for _ in range(25):
+        params = {"limit": 200, "min_ts": min_ts}
+        if cursor:
+            params["cursor"] = cursor
+        d = kalshi_get("/portfolio/fills", params)
+        fills = d.get("fills", [])
+        out.extend(fills)
+        cursor = d.get("cursor")
+        if not cursor or not fills:
+            break
+    return out
+
+def _cached_fills_nonblocking() -> list:
+    """NEVER blocks: serve the cached fills and refresh in a background thread
+    (same pattern as settlements — a blocking fetch would hang the Summary)."""
+    now = time.time()
+    fresh = (now - _fills_cache["ts"]) < _FILLS_CACHE_TTL
+    if not fresh and not _fills_refresh_inflight.is_set():
+        _fills_refresh_inflight.set()
+        def _refresh():
+            try:
+                data = _recent_fills(hours=24 * 30)
+                _fills_cache["data"] = data
+                _fills_cache["ts"] = time.time()
+            except Exception as e:
+                print(f"[fills] background refresh failed: {e}")
+            finally:
+                _fills_refresh_inflight.clear()
+        threading.Thread(target=_refresh, daemon=True).start()
+    return _fills_cache["data"]
+
 # ── Kalshi trading fee (real formula, replaces the old flat 1¢ guess) ────────
 # Kalshi taker fee = ceil_to_cent(0.07 × contracts × P × (1−P)) where P = price
 # in dollars. Source: kalshi.com/fee-schedule. A 50¢ contract costs 1.75¢/contract;
@@ -3612,26 +3656,76 @@ def api_summary():
     have_profit = False
     trades = []  # buy/sell/settlement events for the expandable text list
 
+    scans = sum(1 for e in events if e.get("kind") == "scan")
+    act_trades = [e for e in events if e.get("kind") in ("buy", "sell")]
+
+    # PRIMARY SOURCE: Kalshi's own fills history (/portfolio/fills) — complete for
+    # the whole account, no matter which machine traded or when the bot was off.
+    # The local activity log is the fallback (cold cache / API down) and is used
+    # to tag each fill with the bot profile (T1/T2) and a nicer title.
+    fills = []
     try:
-        for e in events:
-            kind = e.get("kind")
-            if kind == "scan":
-                scans += 1
-            elif kind == "buy":
-                buys += 1
-                buy_spent += float(e.get("spent") or 0)
-                trades.append(e)
-            elif kind == "sell":
-                sells += 1
-                pr = e.get("profit")
-                if pr is not None:
-                    realized_profit += float(pr)
-                    have_profit = True
-                sell_proceeds += float(e.get("count") or 0) * float(e.get("price") or 0) / 100
+        fills = _cached_fills_nonblocking()
+    except Exception as e:
+        print(f"[summary] fills error: {e}")
+
+    try:
+        if fills:
+            idx = {}
+            for e in act_trades:
+                idx.setdefault((e.get("ticker"), e.get("side"), e.get("kind")), []).append(e)
+            for f in fills:
+                try:
+                    ts_epoch = datetime.fromisoformat(str(f.get("created_time", "")).replace("Z", "+00:00")).timestamp()
+                except (ValueError, AttributeError):
+                    continue
+                if ts_epoch < since:
+                    continue
+                kind = "buy" if str(f.get("action", "")).lower() == "buy" else "sell"
+                side = str(f.get("side", "")).lower()
+                cnt = float(f.get("count") or 0)
+                price = float((f.get("yes_price") if side == "yes" else f.get("no_price")) or 0)
+                t = {"kind": kind, "ts": ts_epoch, "ticker": f.get("ticker", ""),
+                     "side": side, "count": cnt, "price": price}
+                # Attach profile/title/profit from the matching activity-log entry
+                for e in idx.get((t["ticker"], side, kind), []):
+                    if abs(float(e.get("ts") or 0) - ts_epoch) < 30:
+                        t["profile"] = e.get("profile")
+                        t["title"] = e.get("title") or t["ticker"]
+                        if kind == "sell" and e.get("profit") is not None:
+                            t["profit"] = e.get("profit")
+                        break
+                t.setdefault("title", _pretty_title(t["ticker"], ""))
+                if kind == "buy":
+                    buys += 1
+                    spent = cnt * price / 100
+                    t["spent"] = round(spent, 2)
+                    buy_spent += spent
+                else:
+                    sells += 1
+                    sell_proceeds += cnt * price / 100
+                    if t.get("profit") is not None:
+                        realized_profit += float(t["profit"])
+                        have_profit = True
+                trades.append(t)
+        else:
+            # Fills cache still cold — show the local activity log so the tab is
+            # never empty; the 15s auto-refresh upgrades to full Kalshi history.
+            for e in act_trades:
+                if e.get("kind") == "buy":
+                    buys += 1
+                    buy_spent += float(e.get("spent") or 0)
+                else:
+                    sells += 1
+                    pr = e.get("profit")
+                    if pr is not None:
+                        realized_profit += float(pr)
+                        have_profit = True
+                    sell_proceeds += float(e.get("count") or 0) * float(e.get("price") or 0) / 100
                 trades.append(e)
     except Exception as e:
-        print(f"[summary] activity loop error: {e}")
-    _log(f"[summary] counted: {scans} scans, {buys} buys, {sells} sells — {len(trades)} trades for display")
+        print(f"[summary] trade merge error: {e}")
+    _log(f"[summary] {scans} scans · {buys} buys · {sells} sells ({'kalshi fills' if fills else 'activity log'}) — {len(trades)} trades")
 
     # Merge settlements from Kalshi's API (don't double-count sold_early entries from activity)
     try:
@@ -3711,7 +3805,7 @@ def api_summary():
             "realized_profit": round(realized_profit, 2) if have_profit else None,
             "settlement_pnl": round(settlement_pnl, 2) if settlement_pnl != 0 else None,
         },
-        "trades": trades[:500],  # cap payload
+        "trades": trades[:2000],  # cap payload (full history can be 800+ fills)
     })
 
 
