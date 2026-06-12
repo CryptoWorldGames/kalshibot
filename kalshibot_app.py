@@ -828,18 +828,10 @@ _CRYPTO_15M_PREFIXES = ("KXBTC15M", "KXETH15M", "KXSOL15M", "KXHYPE15M",
                         "KXBTC30M", "KXETH30M", "KXSOL30M",
                         "KXBTC1H", "KXETH1H", "KXSOL1H")
 
-_btc_cushion_cache = {"val": 0.0, "ts": 0.0}
-def _average_crypto_spread() -> float:
-    """The Smart Strategy 'spread' = how far BTC's LIVE price sits from the
-    strikes of the open BTC 15-min markets, in DOLLARS (avg |spot − strike|).
-    BTC is the single regime reference — the $100 threshold is a BTC-dollar
-    distance, and alts follow BTC's regime. One number, one mode decision:
-      ≥ threshold → price far from strike, flips unlikely → SCANNER
-      < threshold → price hugging the strike, flips easy   → LOTTO
-    Cached 30s so the status card loads instantly."""
-    now = time.time()
-    if (now - _btc_cushion_cache["ts"]) < 30:
-        return _btc_cushion_cache["val"]
+_btc_cushion_cache = {"val": 0.0, "ts": 0.0, "refreshing": False}
+
+def _refresh_crypto_spread_bg():
+    """Background thread: fetch BTC distance-from-strike and update cache."""
     try:
         spot, _src = _spot_price("BTC")
         if spot:
@@ -851,9 +843,19 @@ def _average_crypto_spread() -> float:
                     cushions.append(abs(spot - strike))
             if cushions:
                 _btc_cushion_cache["val"] = round(sum(cushions) / len(cushions), 2)
-                _btc_cushion_cache["ts"] = now
+                _btc_cushion_cache["ts"] = time.time()
     except Exception as e:
         print(f"[smart-strategy] spread calc failed: {e}")
+    finally:
+        _btc_cushion_cache["refreshing"] = False
+
+def _average_crypto_spread() -> float:
+    """Return cached BTC distance-from-strike immediately; kick a background
+    refresh if cache is stale (>30s). Never blocks the caller."""
+    now = time.time()
+    if (now - _btc_cushion_cache["ts"]) >= 30 and not _btc_cushion_cache["refreshing"]:
+        _btc_cushion_cache["refreshing"] = True
+        threading.Thread(target=_refresh_crypto_spread_bg, daemon=True).start()
     return _btc_cushion_cache["val"]
 
 _smart_apply_ts = {"t": 0.0}
