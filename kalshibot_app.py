@@ -3765,6 +3765,19 @@ def api_summary():
                         if kind == "sell" and e.get("profit") is not None:
                             t["profit"] = e.get("profit")
                         break
+
+                # Fallback: if SELL without profit, try to calculate from matching BUY
+                if kind == "sell" and t.get("profit") is None:
+                    buy_entries = idx.get((t["ticker"], side, "buy"), [])
+                    if buy_entries:
+                        # Find the buy that's closest in time (market opened at this buy)
+                        best_buy = min(buy_entries, key=lambda b: abs(float(b.get("ts") or 0) - ts_epoch))
+                        buy_price = float(best_buy.get("price") or 0)
+                        if buy_price > 0:
+                            # Profit = (sell_price - buy_price) × count / 100
+                            profit = round((price - buy_price) * cnt / 100, 2)
+                            t["profit"] = profit
+
                 t.setdefault("title", _pretty_title(t["ticker"], ""))
                 if kind == "buy":
                     buys += 1
