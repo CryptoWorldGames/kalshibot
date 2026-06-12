@@ -1408,9 +1408,14 @@ def _monitor():
                     target_price_c = pos.get("target_price_cents") or sell_strategy.get("target_price_cents")
                     hit_price = target_price_c is not None and bid >= target_price_c
 
-                # Stop-loss applies to all modes (safety measure)
-                stop_loss_pct = sell_strategy.get("stop_loss_pct")
-                stop_loss_dol = sell_strategy.get("stop_loss_dol")
+                # Stop-loss applies to all modes — but ONLY if the profile that
+                # bought this position has one set RIGHT NOW. Before this fix the
+                # global T1 stop-loss was applied to every position, so trades
+                # from a profile with stop-loss OFF (unchecked in the UI) were
+                # still being stop-lossed by another profile's setting.
+                _sl_strat = _sell_profiles.get(pos.get("profile") or "T1") or sell_strategy
+                stop_loss_pct = _sl_strat.get("stop_loss_pct")
+                stop_loss_dol = _sl_strat.get("stop_loss_dol")
                 hit_stop_pct = stop_loss_pct is not None and profit_pct <= -stop_loss_pct
                 hit_stop_dol = stop_loss_dol is not None and profit_dollars is not None and profit_dollars <= -stop_loss_dol
 
@@ -1494,7 +1499,10 @@ def _monitor():
                                     tracked[ticker]["sold_by"] = "bot_auto"  # auto-sell by strategy
                         _save_tracked()
                         title = pos.get("title", ticker)
-                        reason = "STOP-LOSS" if (hit_stop_pct or hit_stop_dol) else "PROFIT TARGET"
+                        if hit_stop_pct or hit_stop_dol:
+                            reason = f"STOP-LOSS ({pos.get('profile') or 'T1'} -{stop_loss_pct}%)"
+                        else:
+                            reason = "PROFIT TARGET"
                         if fill_price != bid:
                             _log(f"[monitor] SLIPPAGE on {ticker}: decision bid {bid}¢ → actual fill {fill_price}¢")
                         _log(f"[monitor] Auto-sold ({reason}): {title} | fill={fill_price}¢ gross=${gross:.2f} fees=${fees:.2f} net=${net:.2f}")
