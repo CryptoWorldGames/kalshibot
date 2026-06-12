@@ -2303,6 +2303,7 @@ def portfolio():
         category     = ""
         current_yes  = None
         current_no   = None
+        close_time   = None
 
         # Reuse cached market prices (from the scan loop) with no new API call, so
         # tracked positions also show live numbers instantly instead of dashes.
@@ -2314,6 +2315,7 @@ def portfolio():
             category     = _mf.get("category", "")
             current_yes  = _mark_price_cents(_mf, "yes")
             current_no   = _mark_price_cents(_mf, "no")
+            close_time   = _mf.get("close_time") or _mf.get("expiration_time")
 
         # Only make NEW market calls if enriching AND < 100 total positions
         # (to avoid rate-limit starvation during heavy portfolios)
@@ -2355,6 +2357,7 @@ def portfolio():
             "resting_orders": 0,
             "current_yes":    current_yes,
             "current_no":     current_no,
+            "close_time":     close_time,
             "bot_bought":     True,
             "buy_price":      info.get("buy_price"),
             "strategy":       info.get("strategy"),
