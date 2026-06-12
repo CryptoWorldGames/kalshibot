@@ -4035,6 +4035,7 @@ function renderPositionsTable(positions) {
         </td>
         <td style="font-size:13px;font-weight:600;text-align:center" data-label="Shares">${abs}</td>
         <td style="font-size:13px;font-weight:600;text-align:right" data-label="Cost/Share">${p.buy_price != null ? p.buy_price + "¢" : "—"}</td>
+        <td style="font-size:12px;color:#888;white-space:nowrap;text-align:center" data-label="Bought At">${p.bought_at ? fmtTime(new Date(p.bought_at).getTime() / 1000, true) : '—'}</td>
         <td style="font-size:13px;font-weight:600;text-align:right;color:${cur == null ? '#888' : cur > (p.buy_price || 0) ? 'var(--green)' : cur < (p.buy_price || 0) ? 'var(--red)' : '#fff'};opacity:${cur == null ? '0.6' : '1'}" data-label="Current">${(cur != null ? cur : p.buy_price) + "¢"}</td>
         <td style="font-size:13px;font-weight:600;text-align:right" data-label="Total Invested">${spent != null ? "$" + spent.toFixed(2) : "—"}</td>
         <td style="font-size:13px;font-weight:700;color:${valNow == null ? '#888' : spent == null ? '#fff' : valNow > spent + 0.001 ? 'var(--green)' : valNow < spent - 0.001 ? 'var(--red)' : '#fff'};text-align:right;opacity:${valNow == null ? '0.6' : '1'}" data-label="Current Value">${(valNow != null ? valNow : (spent != null ? spent : 0)).toFixed(2)}</td>
@@ -4071,6 +4072,7 @@ function renderPositionsTable(positions) {
         <th>Market</th>
         <th>Qty</th>
         <th onclick="setSortAndFilter('boughtat_desc')" style="cursor:pointer" title="Click to sort">Bought@ ↕</th>
+        <th>Bought At</th>
         <th>Current ↕</th>
         <th onclick="setSortAndFilter('spent_desc')" style="cursor:pointer" title="Click to sort">Spent ↕</th>
         <th onclick="setSortAndFilter('value_desc')" style="cursor:pointer" title="Click to sort">Value Now ↕</th>
