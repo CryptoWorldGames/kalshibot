@@ -6674,7 +6674,7 @@ async function toggleSmartStrategy(src) {
 setInterval(() => {
   if (!document.hidden) {  // Only refresh if tab is visible
     loadSmartStrategyStatus();
-    loadSmartStrategyTokens();
+    // loadSmartStrategyTokens();  // DISABLED - causing infinite load loop
   }
 }, 10000);
 
@@ -6813,8 +6813,8 @@ function renderSmartStrategyTokens(tokens, scanState = {}) {
   document.head.appendChild(style);
 }
 
-// Load token data on page load
-loadSmartStrategyTokens();
+// Load token data on page load — commented out to investigate loading loop
+// loadSmartStrategyTokens();
 
 // ── Collapsible Section Helper ────────────────────────────────────────────
 function toggleSection(sectionId) {
