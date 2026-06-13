@@ -1902,6 +1902,92 @@ def _snapshot_runner():
 
 threading.Thread(target=_snapshot_runner, daemon=True).start()
 
+# ── Auto-update: periodically check for new git commits and pull ──────────────────
+_update_state = {"last_check": 0, "last_pull_result": None, "is_updating": False}
+_update_lock = threading.Lock()
+
+def _check_git_updates():
+    """Check if there are new commits in the remote branch and pull if available."""
+    try:
+        import subprocess
+        # Get the current branch name
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=HERE,
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        current_branch = result.stdout.strip()
+        if not current_branch:
+            current_branch = "main"
+
+        # Fetch latest from remote
+        subprocess.run(
+            ["git", "fetch", "origin", current_branch],
+            cwd=HERE,
+            capture_output=True,
+            timeout=10
+        )
+
+        # Check if local is behind remote
+        result = subprocess.run(
+            ["git", "rev-list", "--count", f"HEAD..origin/{current_branch}"],
+            cwd=HERE,
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        commits_behind = int(result.stdout.strip() or "0")
+
+        if commits_behind > 0:
+            _log(f"[update] {commits_behind} new commit(s) available, pulling...")
+            with _update_lock:
+                _update_state["is_updating"] = True
+
+            # Pull new changes
+            result = subprocess.run(
+                ["git", "pull", "origin", current_branch],
+                cwd=HERE,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+
+            with _update_lock:
+                _update_state["is_updating"] = False
+                _update_state["last_pull_result"] = {
+                    "success": result.returncode == 0,
+                    "output": result.stdout + result.stderr,
+                    "timestamp": time.time()
+                }
+
+            if result.returncode == 0:
+                _log("[update] git pull successful — restart bot to apply changes")
+                return True
+            else:
+                _log(f"[update] git pull failed: {result.stderr}")
+                return False
+
+        with _update_lock:
+            _update_state["last_check"] = time.time()
+        return False
+    except Exception as e:
+        _log(f"[update] check failed: {e}")
+        return False
+
+def _auto_update_runner():
+    """Background thread: periodically check for updates (every 30 min)."""
+    while True:
+        try:
+            time.sleep(1800)  # check every 30 minutes
+            _check_git_updates()
+        except Exception as e:
+            _log(f"[auto-update] error: {e}")
+            time.sleep(60)
+
+threading.Thread(target=_auto_update_runner, daemon=True).start()
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -4091,6 +4177,59 @@ def api_restart():
     return jsonify({"ok": True, "msg": "Restarting — run_bot.bat will git pull and relaunch (~15s)"})
 
 
+@app.route("/api/update/check", methods=["GET"])
+def api_update_check():
+    """Check for available git updates without pulling."""
+    result = _check_git_updates()
+    with _update_lock:
+        last_result = _update_state["last_pull_result"]
+    return jsonify({
+        "ok": True,
+        "available": result,
+        "last_pull": last_result,
+        "is_updating": _update_state["is_updating"]
+    })
+
+
+@app.route("/api/update/status", methods=["GET"])
+def api_update_status():
+    """Check update status and pull result."""
+    with _update_lock:
+        status = {
+            "is_updating": _update_state["is_updating"],
+            "last_check": _update_state["last_check"],
+            "last_pull": _update_state["last_pull_result"]
+        }
+    return jsonify(status)
+
+
+@app.route("/api/update/pull", methods=["POST"])
+def api_update_pull():
+    """Manually trigger a git pull and then restart the bot."""
+    if _update_state["is_updating"]:
+        return jsonify({"ok": False, "error": "Update already in progress"}), 409
+
+    result = _check_git_updates()
+    if result:
+        # Restart bot to apply changes
+        _log("[update] changes applied, restarting bot...")
+        def _restart():
+            time.sleep(1)
+            os._exit(0)
+        threading.Thread(target=_restart, daemon=True).start()
+        return jsonify({
+            "ok": True,
+            "msg": "Update successful, restarting bot...",
+            "last_pull": _update_state["last_pull_result"]
+        })
+    else:
+        return jsonify({
+            "ok": True,
+            "msg": "Already up to date",
+            "last_pull": _update_state["last_pull_result"]
+        })
+
+
 # ── Smart Strategy endpoint ──────────────────────────────────────────────────
 @app.route("/api/smart-strategy", methods=["GET", "POST"])
 def api_smart_strategy():
@@ -4151,160 +4290,6 @@ def api_smart_strategy():
         "active_mode": recommended if smart_strategy["enabled"] else None,
         "active_profiles": active_profiles,
     })
-
-
-@app.route("/api/smart-strategy/tokens")
-def api_smart_strategy_tokens():
-    """Per-token spread analysis with backtesting stats for the 7 main 15-min cryptos.
-    Returns: {tokens: [{symbol, spread, to_beat, price, wins, losses, win_rate, avg_spread_25/50/100}, ...]}"""
-
-    # The 7 main 15-min crypto markets
-    CRYPTO_7 = [
-        ("BTC", "KXBTC15M"),
-        ("ETH", "KXETH15M"),
-        ("SOL", "KXSOL15M"),
-        ("XRP", "KXXRP15M"),
-        ("DOGE", "KXDOGE15M"),
-        ("BNB", "KXBNB15M"),
-        ("HYPE", "KXHYPE15M"),
-    ]
-
-    tokens = []
-
-    # Get live spot prices and spreads for each token
-    spot_prices = {}
-    for symbol, series in CRYPTO_7:
-        try:
-            spot, _src = _spot_price(symbol)
-            spot_prices[symbol] = spot or 0
-        except:
-            spot_prices[symbol] = 0
-
-    # Get backtesting stats from activity log (last 30 days)
-    since = time.time() - 30 * 86400
-    activity = _read_activity(since)
-
-    # Group activity by ticker to calculate per-token stats
-    token_trades = {}
-    for e in activity:
-        ticker = e.get("ticker", "")
-        kind = e.get("kind", "")
-        if kind not in ("buy", "sell"):
-            continue
-        if ticker not in token_trades:
-            token_trades[ticker] = {"buys": [], "sells": []}
-        if kind == "buy":
-            token_trades[ticker]["buys"].append(e)
-        else:
-            token_trades[ticker]["sells"].append(e)
-
-    # Calculate per-token stats
-    for symbol, series in CRYPTO_7:
-        try:
-            # Get current market data
-            markets = kalshi_get("/markets", {
-                "series_ticker": series,
-                "status": "open",
-                "limit": 10
-            }).get("markets", [])
-
-            if not markets:
-                tokens.append({
-                    "symbol": symbol,
-                    "spread": 0,
-                    "to_beat": 0,
-                    "price": spot_prices[symbol],
-                    "wins": 0,
-                    "losses": 0,
-                    "win_rate": 0,
-                    "avg_spread_25": 0,
-                    "avg_spread_50": 0,
-                    "avg_spread_100": 0,
-                })
-                continue
-
-            # Calculate spread from current markets
-            spreads = []
-            for m in markets:
-                strike = _strike_from_market(m)
-                if strike and spot_prices[symbol] > 0:
-                    spreads.append(abs(spot_prices[symbol] - strike))
-
-            current_spread = round(sum(spreads) / len(spreads), 2) if spreads else 0
-            to_beat = current_spread  # What the strategy needs to beat
-
-            # Backtesting stats: calculate win rate and average spreads from settlements
-            wins = losses = 0
-            spreads_25 = spreads_50 = spreads_100 = []
-
-            try:
-                settlements = _cached_settlements(hours=24 * 30)
-                for s in settlements:
-                    ticker = s.get("ticker", "")
-                    # Match by ticker prefix (e.g., "KXBTC15M" matches any KXBTC15M trade)
-                    if not ticker.startswith(series):
-                        continue
-
-                    pnl = float(s.get("pnl") or 0)
-                    if pnl > 0.001:
-                        wins += 1
-                    elif pnl < -0.001:
-                        losses += 1
-
-                    # Track spreads for averaging
-                    cost = float(s.get("cost") or 0)
-                    count = float(s.get("count") or 0)
-                    if count > 0 and cost > 0:
-                        spread_at_entry = (cost / count)
-                        spreads_100.append(spread_at_entry)
-                        if len(spreads_100) <= 50:
-                            spreads_50.append(spread_at_entry)
-                        if len(spreads_100) <= 25:
-                            spreads_25.append(spread_at_entry)
-            except:
-                pass
-
-            win_rate = round(100 * wins / (wins + losses), 1) if (wins + losses) > 0 else 0
-            avg_spread_25 = round(sum(spreads_25) / len(spreads_25), 2) if spreads_25 else 0
-            avg_spread_50 = round(sum(spreads_50) / len(spreads_50), 2) if spreads_50 else 0
-            avg_spread_100 = round(sum(spreads_100) / len(spreads_100), 2) if spreads_100 else 0
-
-            tokens.append({
-                "symbol": symbol,
-                "spread": current_spread,
-                "to_beat": to_beat,
-                "price": spot_prices[symbol],
-                "wins": wins,
-                "losses": losses,
-                "win_rate": win_rate,
-                "avg_spread_25": avg_spread_25,
-                "avg_spread_50": avg_spread_50,
-                "avg_spread_100": avg_spread_100,
-            })
-        except Exception as e:
-            print(f"[smart-strategy] token {symbol} error: {e}")
-            tokens.append({
-                "symbol": symbol,
-                "spread": 0,
-                "to_beat": 0,
-                "price": spot_prices[symbol],
-                "wins": 0,
-                "losses": 0,
-                "win_rate": 0,
-                "avg_spread_25": 0,
-                "avg_spread_50": 0,
-                "avg_spread_100": 0,
-            })
-
-    # Sort by: BTC first, then by highest spread
-    def token_sort_key(t):
-        if t["symbol"] == "BTC":
-            return (0, -t["spread"])
-        return (1, -t["spread"])
-
-    tokens.sort(key=token_sort_key)
-
-    return jsonify({"tokens": tokens})
 
 
 @app.route("/api/smart-strategy/status")
