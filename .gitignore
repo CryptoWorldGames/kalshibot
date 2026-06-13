@@ -18,10 +18,13 @@ build/
 
 # Local settings (machine-specific)
 .claude/settings.local.json
+.claude/settings.local-*.json
 
 # Runtime/Data files (bot-specific)
 bot_positions.json
 bot_strategy.json
+bot_saved_strategies.json
+strategy.json
 bot_config.json
 activity.jsonl
 activity_log.jsonl
@@ -42,6 +45,7 @@ buy_settings.json
 # Secrets — never commit
 .env
 .env.*
+!.env.example
 kalshi-keys/
 *.pem
 kalshi_api_key
