@@ -685,7 +685,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   <!-- Expandable Panel -->
   <div id="smartStrategyPanel" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;padding:16px;border-top:1px solid #2a4a2a">
     <!-- Dynamically populated by loadSmartStrategyTokens() -->
-    <div id="tokenCardsContainer" style="grid-column:1/-1;text-align:center;color:#888">Loading tokens...</div>
+    <div id="tokenCardsContainer" style="grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;text-align:center;color:#888">Loading tokens...</div>
   </div>
 </div>
 
@@ -719,7 +719,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <div id="summaryCards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:18px"></div>
 
     <!-- Per-trade list -->
-    <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;font-weight:700">Buys &amp; Sells <span id="summaryTradesMeta" style="color:#666;text-transform:none;font-weight:400"></span></div>
+    <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-weight:700">Buys &amp; Sells <span id="summaryTradesMeta" style="color:#666;text-transform:none;font-weight:400"></span></div>
     <div id="summaryTrades"></div>
   </div>
 </div><!-- /tab-summary -->
@@ -6738,9 +6738,7 @@ function renderSmartStrategyTokens(tokens, scanState = {}) {
     return;
   }
 
-  const isMobile = window.innerWidth < 480;
   container.innerHTML = '';
-  container.style.gridTemplateColumns = isMobile ? '1fr' : 'repeat(auto-fit,minmax(160px,1fr))';
 
   // Get active token for each profile
   const activeT1 = scanState?.T1?.token;
