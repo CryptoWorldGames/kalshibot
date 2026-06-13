@@ -594,6 +594,14 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   <button class="tab-btn" id="tabPolling" onclick="switchTab('polling')">Polling</button>
 </div>
 
+<!-- ── Smart Strategy Status (Spread + Mode Indicator) ──────────────────────────── -->
+<div id="smartStrategyBar" style="display:flex;align-items:center;justify-content:center;gap:12px;padding:8px 16px;background:#1a2a1a;border-bottom:1px solid #3a5a3a;min-height:32px;font-size:13px;font-weight:700">
+  <span style="color:#888">Smart Strategy:</span>
+  <span id="spreadDisplay" style="color:var(--green)">Loading...</span>
+  <span style="color:#666">→</span>
+  <span id="modeDisplay" style="color:var(--yellow)">Loading...</span>
+</div>
+
 <!-- ── Bot Status Bar (BELOW TABS) ─────────────────────────────────────────────── -->
 <div id="botStatusBar" style="display:flex;align-items:center;justify-content:center;gap:20px;padding:6px 16px;border-bottom:1px solid var(--border);min-height:28px;background:#2a2a2a;position:relative;z-index:100">
   <div style="flex:1;min-width:80px"></div>
@@ -6309,9 +6317,36 @@ async function loadSmartStrategyStatus() {
       s.textContent = txt;
       s.style.color = d.enabled ? "var(--green)" : "#888";
     });
+
+    // Update the top smart strategy bar with spread and mode
+    const spreadEl = document.getElementById("spreadDisplay");
+    const modeEl = document.getElementById("modeDisplay");
+    if (spreadEl && modeEl) {
+      const spread = d.current_spread || 0;
+      const threshold = d.spread_threshold || 100;
+      spreadEl.textContent = `BTC $${spread} (threshold: $${threshold})`;
+
+      if (!d.enabled) {
+        modeEl.textContent = "Smart Strategy OFF";
+        modeEl.style.color = "#888";
+      } else if (mode === "scanner") {
+        modeEl.textContent = "✓ SCANNER ON";
+        modeEl.style.color = "var(--green)";
+      } else if (mode === "lotto") {
+        modeEl.textContent = "✓ LOTTO ON";
+        modeEl.style.color = "var(--green)";
+      } else {
+        modeEl.textContent = "Manual Mode";
+        modeEl.style.color = "var(--yellow)";
+      }
+    }
   } catch(e) {
     console.error("Failed to load Smart Strategy status:", e);
     document.querySelectorAll(".smartStrategyStatus").forEach(s => { s.textContent = "Status unknown"; });
+    const spreadEl = document.getElementById("spreadDisplay");
+    const modeEl = document.getElementById("modeDisplay");
+    if (spreadEl) spreadEl.textContent = "Error loading spread";
+    if (modeEl) modeEl.textContent = "Error";
   }
 }
 
