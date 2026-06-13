@@ -6715,17 +6715,34 @@ function updateMarketTimer() {
 setInterval(updateMarketTimer, 1000);
 updateMarketTimer();
 
+async function fetchWithTimeout(url, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const resp = await fetch(url, {cache: "no-store", signal: controller.signal});
+    clearTimeout(timeout);
+    return resp;
+  } catch(e) {
+    clearTimeout(timeout);
+    throw e;
+  }
+}
+
 async function loadSmartStrategyTokens() {
   try {
     const [tokensResp, statusResp] = await Promise.all([
-      fetch("/api/smart-strategy/tokens", {cache: "no-store"}),
-      fetch("/api/smart-strategy/status", {cache: "no-store"})
+      fetchWithTimeout("/api/smart-strategy/tokens"),
+      fetchWithTimeout("/api/smart-strategy/status")
     ]);
     const tokensData = await tokensResp.json();
     const statusData = await statusResp.json();
     renderSmartStrategyTokens(tokensData.tokens || [], statusData);
   } catch(e) {
     console.error("[smart-strategy] token load failed:", e);
+    const container = document.getElementById("tokenCardsContainer");
+    if (container) {
+      container.innerHTML = '<div style="grid-column:1/-1;color:#f55;padding:20px">Failed to load tokens: ' + e.message + '</div>';
+    }
   }
 }
 
