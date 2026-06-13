@@ -827,13 +827,13 @@ _load_smart_strategy()
 # Each token tracks: enabled, buy_last_min, threshold, mode, order_type, ai_choice
 PER_TOKEN_SETTINGS_FILE = HERE / "per_token_settings.json"
 per_token_settings = {
-    "BTC": {"enabled": False, "buy_last_min": 1, "threshold": 100, "mode": "scanner", "order_type": "market", "ai_choice": True},
-    "ETH": {"enabled": False, "buy_last_min": 1, "threshold": 100, "mode": "scanner", "order_type": "market", "ai_choice": True},
-    "SOL": {"enabled": False, "buy_last_min": 1, "threshold": 100, "mode": "scanner", "order_type": "market", "ai_choice": True},
-    "XRP": {"enabled": False, "buy_last_min": 1, "threshold": 0.25, "mode": "scanner", "order_type": "market", "ai_choice": True},
-    "DOGE": {"enabled": False, "buy_last_min": 1, "threshold": 100, "mode": "scanner", "order_type": "market", "ai_choice": True},
-    "BNB": {"enabled": False, "buy_last_min": 1, "threshold": 100, "mode": "scanner", "order_type": "market", "ai_choice": True},
-    "HYPE": {"enabled": False, "buy_last_min": 1, "threshold": 100, "mode": "scanner", "order_type": "market", "ai_choice": True},
+    "BTC": {"enabled": False, "buy_last_min": 1, "threshold": 100, "mode": "both", "order_type": "market", "ai_choice": True},
+    "ETH": {"enabled": False, "buy_last_min": 1, "threshold": 100, "mode": "both", "order_type": "market", "ai_choice": True},
+    "SOL": {"enabled": False, "buy_last_min": 1, "threshold": 100, "mode": "both", "order_type": "market", "ai_choice": True},
+    "XRP": {"enabled": False, "buy_last_min": 1, "threshold": 0.25, "mode": "both", "order_type": "market", "ai_choice": True},
+    "DOGE": {"enabled": False, "buy_last_min": 1, "threshold": 100, "mode": "both", "order_type": "market", "ai_choice": True},
+    "BNB": {"enabled": False, "buy_last_min": 1, "threshold": 100, "mode": "both", "order_type": "market", "ai_choice": True},
+    "HYPE": {"enabled": False, "buy_last_min": 1, "threshold": 100, "mode": "both", "order_type": "market", "ai_choice": True},
 }
 
 def _load_per_token_settings():
@@ -889,51 +889,77 @@ def _token_from_series(series_ticker: str) -> str:
                     return token
     return None
 
-def _check_per_token_filters(market: dict) -> tuple:
-    """Check if a market passes per-token Smart Strategy filters.
-    Returns (passes, token_symbol) where passes=True if the market should be bought.
-    Checks: token enabled, buy window, spread threshold."""
+def _live_token_spread(token: str):
+    """Latest live spread (distance from strike) for a token, or None if unknown."""
+    td = next((t for t in _token_spread_cache.get("data", [])
+               if t.get("symbol") == token), None)
+    if td and td.get("spread"):
+        return td.get("spread")
+    return None
+
+def _effective_safe_threshold(token: str, cfg: dict) -> float:
+    """The spread that decides Scanner vs Lotto for this token. When 'Let AI
+    choose' is on we use the AI's dynamically-computed safe spread; otherwise the
+    user's manual override. Above this spread = safe (Scanner); below = flip-risk
+    (Lotto)."""
+    if cfg.get("ai_choice", True):
+        rec = _safe_spread_cache["data"].get(token)
+        if rec is not None:
+            return float(rec)
+        # AI hasn't computed yet — fall back to the manual/default value below.
+    return float(cfg.get("threshold", 100) or 100)
+
+def _check_per_token_filters(market: dict, prof: str) -> tuple:
+    """Decide whether `prof` (T1=Scanner / T2=Lotto) should buy this crypto market,
+    honoring the per-token Smart Strategy. The token stays ON all the time — what
+    changes is WHICH strategy fires:
+      • live spread ≥ safe threshold → Scanner (wide cushion, less likely to flip)
+      • live spread <  safe threshold → Lotto   (tight, cheap, may flip)
+    So with both bots running, each token auto-routes to the right one every cycle.
+    Returns (passes, token_symbol)."""
     # Only applies to crypto markets; extract token symbol
     token = _token_from_series(market.get("series_ticker", ""))
     if not token or token not in per_token_settings:
-        return (True, token)  # Not a tracked crypto token, allow through
+        return (True, token)  # Not a per-token crypto market — leave it alone
 
     cfg = per_token_settings[token]
     if not cfg.get("enabled", False):
-        return (False, token)  # Token disabled
+        return (False, token)  # Token off
 
-    # Check "buy in last X minutes" window
+    # Buy ONLY in the last X minutes of the window (the whole point of the 15-min game)
     buy_last_min = cfg.get("buy_last_min", 15)
     close_time_str = market.get("close_time") or market.get("expiration_time", "")
     if close_time_str:
         try:
             close_time = datetime.fromisoformat(close_time_str.replace("Z", "+00:00"))
-            now_utc = datetime.now(timezone.utc)
-            secs_left = (close_time - now_utc).total_seconds()
+            secs_left = (close_time - datetime.now(timezone.utc)).total_seconds()
             if secs_left < 0:
-                return (False, token)  # Market already closed
-            mins_left = secs_left / 60
-            if mins_left > buy_last_min:
-                return (False, token)  # Outside buy window (too much time left)
+                return (False, token)  # Already closed
+            if secs_left / 60 > buy_last_min:
+                return (False, token)  # Too early — outside the buy window
         except Exception:
             pass
 
-    # Check spread threshold (only if ai_choice is False and threshold is set)
-    # If ai_choice is True, we'll use the AI recommendation instead
-    if not cfg.get("ai_choice", True):
-        threshold = cfg.get("threshold", 100)
-        # Find the current spread for this token from the cache
-        token_data = next((t for t in _token_spread_cache.get("data", [])
-                          if t.get("symbol") == token), None)
-        if token_data:
-            current_spread = token_data.get("spread", 0)
-            mode = cfg.get("mode", "scanner")
-            if mode == "scanner" and current_spread < threshold:
-                return (False, token)  # Spread too tight for scanner
-            elif mode == "lotto" and current_spread >= threshold:
-                return (False, token)  # Spread too wide for lotto
+    # Route the token to the strategy its live spread calls for.
+    prof_strategy = "scanner" if prof == "T1" else ("lotto" if prof == "T2" else None)
+    if prof_strategy is None:
+        return (True, token)  # Unknown profile — don't gate on strategy
 
-    return (True, token)  # Market passes all filters
+    pinned = cfg.get("mode", "both")
+    if pinned in ("scanner", "lotto"):
+        wants = pinned  # user pinned this token to one strategy
+    else:
+        # Auto-switch (default): pick strategy from live spread vs safe threshold.
+        current_spread = _live_token_spread(token)
+        if current_spread is None:
+            return (True, token)  # No live data yet — don't block buying
+        threshold = _effective_safe_threshold(token, cfg)
+        wants = "scanner" if current_spread >= threshold else "lotto"
+
+    if wants != prof_strategy:
+        return (False, token)  # The OTHER bot handles this token right now
+
+    return (True, token)
 
 def _refresh_crypto_spread_bg():
     """Background thread: fetch BTC distance-from-strike and update cache."""
@@ -964,12 +990,50 @@ def _average_crypto_spread() -> float:
     return _btc_cushion_cache["val"]
 
 _smart_apply_ts = {"t": 0.0}
+_per_token_refresh_ts = {"t": 0.0}
+
+def _refresh_per_token_spreads_bg():
+    """Refresh the 7 token spreads + AI safe-spread recommendations in the
+    background, so the bot's per-token auto-switch has fresh data even when the
+    Smart Strategy tab isn't open in any browser."""
+    try:
+        _token_spread_cache["data"] = _compute_token_spreads()
+        _token_spread_cache["ts"] = time.time()
+        _compute_safe_spread_recommendations(_token_spread_cache["data"])
+    except Exception as e:
+        print(f"[per-token] background spread refresh failed: {e}")
+    finally:
+        _token_spread_cache["refreshing"] = False
+
 def _apply_smart_strategy():
-    """Re-evaluate every ~60s while enabled so the mode FOLLOWS the market —
-    not just at the moment you click Enable. Switches active_profiles for
-    real (wide → T1 Scanner only, tight → T2 Lotto only); the tab LEDs pick
-    it up on their next status poll."""
+    """Keep the active mode in sync with the live market each cycle.
+
+    Per-token Smart Strategy takes precedence: if ANY token card is ON, we run
+    BOTH bots (T1 Scanner + T2 Lotto) and let _check_per_token_filters route each
+    token to the right one based on its own live spread vs its safe threshold —
+    the token stays on all the time; only the trigger changes. We also keep the
+    7 token spreads + AI recommendations fresh here so this works headless.
+
+    If no token cards are on, fall back to the legacy global master switch
+    (wide BTC spread → Scanner only, tight → Lotto only)."""
     global active_profiles
+
+    any_token_on = any(c.get("enabled") for c in per_token_settings.values())
+    if any_token_on:
+        now = time.time()
+        # Keep spreads + recommendations fresh (~every 15s) without blocking.
+        if (now - _per_token_refresh_ts["t"]) >= 15 and not _token_spread_cache["refreshing"]:
+            _per_token_refresh_ts["t"] = now
+            _token_spread_cache["refreshing"] = True
+            threading.Thread(target=_refresh_per_token_spreads_bg, daemon=True).start()
+        # Run BOTH strategies so each token can auto-route to Scanner or Lotto.
+        want = ["T1", "T2"]
+        if set(active_profiles) != set(want):
+            active_profiles = want
+            _save_profiles()
+            _log("[smart-strategy] per-token active — running Scanner+Lotto, auto-routing each token")
+        return
+
     if not smart_strategy.get("enabled"):
         return
     now = time.time()
@@ -1747,8 +1811,9 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
                 if not hit:
                     continue
 
-                # Apply per-token Smart Strategy filters if enabled
-                passes_token_filter, token_symbol = _check_per_token_filters(m)
+                # Apply per-token Smart Strategy filters (auto-routes each token to
+                # Scanner/Lotto based on its live spread vs its safe threshold).
+                passes_token_filter, token_symbol = _check_per_token_filters(m, prof)
                 if not passes_token_filter:
                     continue
 
@@ -2225,39 +2290,38 @@ def _compute_token_spreads():
 _token_spread_history = {sym: [] for sym in _SMART_TOKENS}  # rolling window of spreads
 _MAX_HISTORY = 30  # keep last 30 measurements for volatility calc
 
+def _round_spread(v: float) -> float:
+    """Round a spread to a sensible precision for its MAGNITUDE — not by token
+    name. BTC's distance-from-strike is ~$100s (whole dollars), DOGE's is fractions
+    of a cent (needs 4 decimals). A fixed rule would zero-out the small tokens."""
+    if v < 0.1:   return round(v, 4)
+    if v < 1:     return round(v, 3)
+    if v < 100:   return round(v, 2)
+    return round(v)
+
 def _calculate_safe_spread(symbol: str, current_spread: float) -> float:
-    """Calculate AI-recommended safe spread for a token based on volatility.
-    Returns a spread threshold that, if exceeded, signals Scanner mode (safe).
-    If below, signals Lotto mode (risky, tight spread)."""
-    if symbol not in _token_spread_history:
-        _token_spread_history[symbol] = []
+    """AI-recommended safe spread for a token, derived from its own recent
+    volatility. Above this distance-from-strike the position has enough cushion
+    to be a Scanner play (less likely to flip); below it, it's a Lotto (cheap,
+    flip-risk). Scales to the token's price magnitude automatically."""
+    hist = _token_spread_history.setdefault(symbol, [])
+    hist.append(current_spread)
+    if len(hist) > _MAX_HISTORY:
+        hist.pop(0)
 
-    # Add current spread to history
-    _token_spread_history[symbol].append(current_spread)
-    if len(_token_spread_history[symbol]) > _MAX_HISTORY:
-        _token_spread_history[symbol].pop(0)
+    if len(hist) < 3:
+        # Not enough history yet — cushion proportional to the live spread (25%
+        # over current). No absolute floor, so cent-scale tokens (DOGE/XRP) and
+        # dollar-scale tokens (BTC/ETH) both get a sane starting threshold.
+        return _round_spread(current_spread * 1.25)
 
-    if len(_token_spread_history[symbol]) < 3:
-        # Not enough history — use heuristic based on token characteristics
-        # Stablecoins (XRP) have tight spreads; larger cap tokens (BTC/ETH) wider
-        if symbol in ("XRP",):
-            return round(max(0.50, current_spread * 1.5), 2)  # 1.5x current
-        else:
-            return round(max(50.0, current_spread * 1.25), 2)  # 1.25x current
-
-    # Enough history — calculate volatility-based recommendation
-    avg = sum(_token_spread_history[symbol]) / len(_token_spread_history[symbol])
-    variance = sum((x - avg) ** 2 for x in _token_spread_history[symbol]) / len(_token_spread_history[symbol])
-    std_dev = variance ** 0.5
-
-    # Safe spread = average + 1.5x std dev (conservative cushion to reduce flip risk)
+    # Enough history — volatility-based: average + 1.5×std dev gives a cushion that
+    # widens for choppy tokens and tightens for calm ones. Never recommend below
+    # 80% of the current spread (so a momentary spike can't strand us in Lotto).
+    avg = sum(hist) / len(hist)
+    std_dev = (sum((x - avg) ** 2 for x in hist) / len(hist)) ** 0.5
     safe_spread = max(avg + 1.5 * std_dev, current_spread * 0.8)
-
-    # Round based on token magnitude
-    if symbol in ("XRP",):
-        return round(safe_spread, 2)
-    else:
-        return round(safe_spread)
+    return _round_spread(safe_spread)
 
 _safe_spread_cache = {"data": {}, "ts": 0.0}
 
@@ -2270,6 +2334,10 @@ def _compute_safe_spread_recommendations(token_spreads):
         spread = token_data.get("spread", 0)
         if symbol and spread > 0:
             recommendations[symbol] = _calculate_safe_spread(symbol, spread)
+    if recommendations:
+        # Cache so the bot's auto-switch can read fresh thresholds without the UI open.
+        _safe_spread_cache["data"] = recommendations
+        _safe_spread_cache["ts"] = time.time()
     return recommendations
 
 
