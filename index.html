@@ -6774,8 +6774,8 @@ function renderSmartStrategyTokens(tokens, scanState = {}) {
       transition:all 0.2s;
     `;
 
-    const spreadColor = t.spread > t.to_beat ? "var(--green)" : "#f5c542";
-    const winRateColor = t.win_rate > 50 ? "var(--green)" : t.win_rate > 40 ? "#f5c542" : "var(--red)";
+    const spreadDisplay = t.spread ? `$${t.spread.toFixed(2)}` : "—";
+    const spreadColor = t.spread > 50 ? "var(--green)" : "#f5c542";
 
     card.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between">
@@ -6783,25 +6783,10 @@ function renderSmartStrategyTokens(tokens, scanState = {}) {
         ${isActive ? `<div style="background:${activeMode === "T1" ? "#ff9416" : "#00d97e"};color:#000;padding:2px 6px;border-radius:3px;font-weight:700;font-size:10px">${activeMode === "T1" ? "SCANNER" : "LOTTO"}</div>` : ""}
       </div>
       <div style="font-size:11px;color:#aaa">
-        <div>Spread: <span style="color:${spreadColor};font-weight:700">$${t.spread.toFixed(2)}</span></div>
-        <div>Price: <span style="color:#0f9">$${t.price.toFixed(2)}</span></div>
+        <div>Spread: <span style="color:${spreadColor};font-weight:700">${spreadDisplay}</span></div>
+        ${t.price_yes ? `<div>Price: <span style="color:#0f9">$${t.price_yes.toFixed(2)}</span></div>` : ""}
       </div>
-      <div style="display:flex;gap:4px;font-size:10px;color:#888">
-        <span>W:${t.wins}</span>
-        <span>L:${t.losses}</span>
-        <span style="color:${winRateColor};font-weight:700">${t.win_rate}%</span>
-      </div>
-      <div style="background:#0a1a0a;padding:6px;border-radius:3px;text-align:center;border:1px solid #1a3a1a">
-        <div style="font-size:10px;color:#666;margin-bottom:4px">Avg Spread</div>
-        <div style="display:flex;gap:4px;justify-content:center">
-          <div style="cursor:pointer;padding:2px 4px;background:#1a3a1a;border-radius:2px;color:#0f9;font-weight:700">25: $${t.avg_spread_25.toFixed(2)}</div>
-          <div style="cursor:pointer;padding:2px 4px;background:#1a3a1a;border-radius:2px;color:#0f9">50: $${t.avg_spread_50.toFixed(2)}</div>
-          <div style="cursor:pointer;padding:2px 4px;background:#1a3a1a;border-radius:2px;color:#0f9">100: $${t.avg_spread_100.toFixed(2)}</div>
-        </div>
-      </div>
-      <input type="number" id="spread-${t.symbol}" value="100" min="5" max="500" step="5"
-        style="width:100%;background:#111;border:1px solid #2a5a2a;border-radius:3px;color:var(--green);padding:4px;font-weight:700;font-size:11px;text-align:center"
-        placeholder="Spread trigger ($)">
+      ${t.message ? `<div style="font-size:10px;color:#f5c542;padding:4px;background:#2a3a2a;border-radius:2px;text-align:center">${t.message}</div>` : `<div style="font-size:10px;color:#666;text-align:center">Learn by trading $1 per bet</div>`}
     `;
 
     container.appendChild(card);
