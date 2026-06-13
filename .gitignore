@@ -58,3 +58,4 @@ venv/
 smart_strategy.json
 spread_guard.json
 CONTEXT.md
+per_token_settings.json

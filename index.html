@@ -6752,14 +6752,25 @@ let _tokenSpreads = {};
 let _tokenPollTimer = null;
 
 // Recommendation: what spread threshold does the AI suggest for this token?
-// Shows the recommended spread in the badge (e.g., "AI: $50.00")
+// Format a spread to a precision that fits its magnitude (BTC ~$100s, DOGE
+// fractions of a cent) — matches the backend's _round_spread so small tokens
+// don't display as "$0".
+function fmtSpread(v) {
+  v = Number(v);
+  if (!isFinite(v)) return "—";
+  if (v < 0.1)  return v.toFixed(4);
+  if (v < 1)    return v.toFixed(3);
+  if (v < 100)  return v.toFixed(2);
+  return Math.round(v).toString();
+}
+
+// Shows the recommended safe spread in the badge (e.g., "AI: $136")
 function smartStrategyRec(symbol) {
   const cfg = _perTokenSettings[symbol] || {};
-  if (!cfg.ai_choice) return `Manual: $${Number(cfg.threshold).toFixed(2)}`;
+  if (!cfg.ai_choice) return `Manual: $${fmtSpread(cfg.threshold)}`;
   const rec = _aiRecommendations[symbol];
   if (rec == null) return "Loading…";
-  const symbol_type = symbol === "XRP" ? "2" : "0";
-  return `AI: $${Number(rec).toFixed(symbol_type)}`;
+  return `AI: $${fmtSpread(rec)}`;
 }
 
 function updateTokenRecBadge(symbol) {
@@ -6773,7 +6784,7 @@ function applyTokenLiveData(tokens) {
   tokens.forEach(t => {
     _tokenSpreads[t.symbol] = t.spread || 0;
     const spreadEl = document.getElementById(`ss_${t.symbol}_spread`);
-    if (spreadEl) spreadEl.textContent = t.spread ? `$${t.spread.toFixed(2)}` : "—";
+    if (spreadEl) spreadEl.textContent = t.spread ? `$${fmtSpread(t.spread)}` : "—";
     updateTokenRecBadge(t.symbol);
   });
 }
@@ -6827,11 +6838,12 @@ function renderSmartStrategyTokenCards(tokens) {
 
   tokens.forEach(t => {
     const symbol = t.symbol;
-    const cfg = _perTokenSettings[symbol] || {enabled: false, buy_last_min: 1, threshold: 100, mode: "scanner", order_type: "market", ai_choice: true};
+    const cfg = _perTokenSettings[symbol] || {enabled: false, buy_last_min: 1, threshold: 100, mode: "both", order_type: "market", ai_choice: true};
     const spread = t.spread || 0;
-    const spreadDisplay = spread ? `$${spread.toFixed(2)}` : "—";
-    const aiRec = _aiRecommendations[symbol] || 100;
-    const symbol_type = symbol === "XRP" ? "2" : "0";
+    const spreadDisplay = spread ? `$${fmtSpread(spread)}` : "—";
+    const recBadge = cfg.ai_choice
+      ? `AI: $${fmtSpread(_aiRecommendations[symbol] != null ? _aiRecommendations[symbol] : cfg.threshold)}`
+      : `Manual: $${fmtSpread(cfg.threshold)}`;
 
     const card = document.createElement("div");
     card.style.cssText = `
@@ -6843,7 +6855,7 @@ function renderSmartStrategyTokenCards(tokens) {
       <div style="display:flex;align-items:center;justify-content:space-between">
         <div style="display:flex;align-items:baseline;gap:8px">
           <span style="font-weight:700;color:var(--green);font-size:14px">${symbol}</span>
-          <span id="ss_${symbol}_rec" style="font-size:11px;font-weight:800;color:#f5c518;letter-spacing:.3px">AI: $${Number(aiRec).toFixed(symbol_type)}</span>
+          <span id="ss_${symbol}_rec" style="font-size:11px;font-weight:800;color:#f5c518;letter-spacing:.3px">${recBadge}</span>
         </div>
         <label class="check-row" style="margin:0">
           <input type="checkbox" id="ss_${symbol}_enabled" ${cfg.enabled ? "checked" : ""}
@@ -6879,24 +6891,25 @@ function renderSmartStrategyTokenCards(tokens) {
       </div>
 
       <div style="border-top:1px solid #2a4a2a;padding-top:10px">
-        <div style="font-size:11px;color:#888;margin-bottom:6px">Mode when spread ≥ threshold:</div>
+        <div style="font-size:11px;color:#888;margin-bottom:6px">Strategy routing:</div>
         <div style="display:flex;gap:6px">
-          <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:11px">
+          <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:11px" title="Spread ≥ safe → Scanner, below → Lotto. Recommended.">
+            <input type="radio" name="ss_${symbol}_mode" value="both" ${cfg.mode === "both" ? "checked" : ""}
+              onchange="updatePerTokenSetting('${symbol}', 'mode', 'both')">
+            Auto
+          </label>
+          <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:11px" title="Pin: only ever buy this token as a Scanner (wide-spread) play.">
             <input type="radio" name="ss_${symbol}_mode" value="scanner" ${cfg.mode === "scanner" ? "checked" : ""}
               onchange="updatePerTokenSetting('${symbol}', 'mode', 'scanner')">
             Scanner
           </label>
-          <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:11px">
+          <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:11px" title="Pin: only ever buy this token as a Lotto (tight-spread) play.">
             <input type="radio" name="ss_${symbol}_mode" value="lotto" ${cfg.mode === "lotto" ? "checked" : ""}
               onchange="updatePerTokenSetting('${symbol}', 'mode', 'lotto')">
             Lotto
           </label>
-          <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:11px">
-            <input type="radio" name="ss_${symbol}_mode" value="both" ${cfg.mode === "both" ? "checked" : ""}
-              onchange="updatePerTokenSetting('${symbol}', 'mode', 'both')">
-            Both
-          </label>
         </div>
+        <div style="font-size:10px;color:#6a9a6a;margin-top:4px">Auto: spread ≥ safe → Scanner; below → Lotto (flip risk)</div>
       </div>
 
       <div style="border-top:1px solid #2a4a2a;padding-top:10px">
@@ -6934,7 +6947,7 @@ function toggleThresholdInput(symbol) {
 async function updatePerTokenSetting(symbol, field, value) {
   // Update local state
   if (!_perTokenSettings[symbol]) {
-    _perTokenSettings[symbol] = {enabled: false, buy_last_min: 1, threshold: 100, mode: "scanner", order_type: "market", ai_choice: true};
+    _perTokenSettings[symbol] = {enabled: false, buy_last_min: 1, threshold: 100, mode: "both", order_type: "market", ai_choice: true};
   }
 
   if (field === "buy_last_min" || field === "threshold") {
@@ -6945,10 +6958,13 @@ async function updatePerTokenSetting(symbol, field, value) {
     _perTokenSettings[symbol][field] = value;
   }
 
-  // If ai_choice changed, update recommendation display
+  // If ai_choice/threshold/mode changed, refresh the recommendation badge.
   if (field === "ai_choice" || field === "threshold" || field === "mode") {
     updateTokenRecBadge(symbol);
   }
+  // Enabling a token here hands its crypto scanning to Smart Strategy, so grey
+  // out the plain crypto checkboxes for it.
+  if (field === "enabled") updateCryptoCheckboxStates();
 
   // Save to backend asynchronously (don't block UI)
   savePerTokenSettingsToBackend();
@@ -6975,7 +6991,7 @@ async function saveSmartStrategyTokenCard(symbol) {
     enabled: document.getElementById(`ss_${symbol}_enabled`)?.checked || false,
     buy_last_min: parseFloat(document.getElementById(`ss_${symbol}_last_min`)?.value) || 1,
     threshold: parseFloat(document.getElementById(`ss_${symbol}_threshold`)?.value) || 100,
-    mode: document.querySelector(`input[name="ss_${symbol}_mode"]:checked`)?.value || "scanner",
+    mode: document.querySelector(`input[name="ss_${symbol}_mode"]:checked`)?.value || "both",
     order_type: document.querySelector(`input[name="ss_${symbol}_order_type"]:checked`)?.value || "market",
     ai_choice: document.getElementById(`ss_${symbol}_ai_choice`)?.checked || false,
   };
@@ -7008,7 +7024,6 @@ function toggleCryptoMasterLotto(checkbox) {
 }
 
 function checkCryptoState() {
-  const settings = loadSmartStrategySettings();
   const checked = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "HYPE"].filter(t => {
     const el = document.getElementById(`crypto${t}`);
     return el && el.checked;
@@ -7039,11 +7054,10 @@ function checkCryptoStateLotto() {
 }
 
 function updateCryptoCheckboxStates() {
-  const settings = loadSmartStrategySettings();
   ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "HYPE"].forEach(token => {
     const el = document.getElementById(`crypto${token}`);
     const lotto_el = document.getElementById(`L_crypto${token}`);
-    const isEnabled = settings[token]?.enabled || false;
+    const isEnabled = _perTokenSettings[token]?.enabled || false;
 
     if (el) {
       el.disabled = isEnabled;
