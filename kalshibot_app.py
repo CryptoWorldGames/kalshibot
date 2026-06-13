@@ -3910,7 +3910,24 @@ def api_summary():
                 kind = "buy" if str(f.get("action", "")).lower() == "buy" else "sell"
                 side = str(f.get("side", "")).lower()
                 cnt = float(f.get("count") or 0)
-                price = float((f.get("yes_price") if side == "yes" else f.get("no_price")) or 0)
+                # Kalshi fills usually carry yes_price/no_price (cents). Some fills
+                # (e.g. market orders) report the executed price under different keys
+                # or in dollars — try every known field so we never show "0¢".
+                def _price_cents(fill, sd):
+                    cand = [
+                        fill.get("yes_price") if sd == "yes" else fill.get("no_price"),
+                        fill.get("price"), fill.get("avg_price"),
+                        fill.get("execution_price"),
+                    ]
+                    for v in cand:
+                        try:
+                            fv = float(v)
+                        except (TypeError, ValueError):
+                            continue
+                        if fv > 0:
+                            return fv if fv >= 1 else round(fv * 100)  # dollars→cents
+                    return 0.0
+                price = _price_cents(f, side)
                 t = {"kind": kind, "ts": ts_epoch, "ticker": f.get("ticker", ""),
                      "side": side, "count": cnt, "price": price}
                 # Attach profile/title/profit from the matching activity-log entry
@@ -3918,6 +3935,12 @@ def api_summary():
                     if abs(float(e.get("ts") or 0) - ts_epoch) < 30:
                         t["profile"] = e.get("profile")
                         t["title"] = e.get("title") or t["ticker"]
+                        # Backfill count/price from the activity log when the fill
+                        # is missing them — keeps the Summary from showing ×0 @ 0¢.
+                        if cnt <= 0 and float(e.get("count") or 0) > 0:
+                            cnt = float(e.get("count")); t["count"] = cnt
+                        if price <= 0 and float(e.get("price") or 0) > 0:
+                            price = float(e.get("price")); t["price"] = price
                         if kind == "sell" and e.get("profit") is not None:
                             t["profit"] = e.get("profit")
                         break
@@ -3938,6 +3961,13 @@ def api_summary():
                 if kind == "buy":
                     buys += 1
                     spent = cnt * price / 100
+                    # Last-resort: use the activity log's recorded spend if we still
+                    # couldn't derive a dollar figure from the fill.
+                    if spent <= 0:
+                        for e in idx.get((t["ticker"], side, "buy"), []):
+                            if abs(float(e.get("ts") or 0) - ts_epoch) < 30 and float(e.get("spent") or 0) > 0:
+                                spent = float(e.get("spent"))
+                                break
                     t["spent"] = round(spent, 2)
                     buy_spent += spent
                 else:
