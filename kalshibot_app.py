@@ -3614,24 +3614,51 @@ def set_strategy():
 
 @app.route("/api/saved-strategies", methods=["GET"])
 def get_saved_strategies():
+    """Get saved strategies for a profile (T1=Scanner, T2=Lotto).
+    Returns exactly 10 slots per profile."""
+    profile = request.args.get("profile", "T1")
     try:
-        data = json.loads(SAVED_STRATS_FILE.read_text(encoding="utf-8")) if SAVED_STRATS_FILE.exists() else []
+        if SAVED_STRATS_FILE.exists():
+            all_data = json.loads(SAVED_STRATS_FILE.read_text(encoding="utf-8"))
+            if isinstance(all_data, dict):  # Per-profile format
+                data = all_data.get(profile, [])
+            else:  # Legacy flat format (assume T1)
+                data = all_data if profile == "T1" else []
+        else:
+            data = []
     except Exception:
         data = []
     # Always return exactly 10 slots
     slots = (data + [None] * 10)[:10]
-    return jsonify({"slots": slots})
+    return jsonify({"slots": slots, "profile": profile})
 
 
 @app.route("/api/saved-strategies", methods=["POST"])
 def set_saved_strategies():
+    """Save strategies for a profile (T1=Scanner, T2=Lotto)."""
     data = request.get_json(silent=True) or {}
+    profile = data.get("profile", "T1")
     slots = data.get("slots", [])
     try:
-        SAVED_STRATS_FILE.write_text(json.dumps(slots), encoding="utf-8")
+        # Load existing data
+        if SAVED_STRATS_FILE.exists():
+            try:
+                all_data = json.loads(SAVED_STRATS_FILE.read_text(encoding="utf-8"))
+                if not isinstance(all_data, dict):  # Migrate legacy format
+                    all_data = {"T1": all_data}
+            except:
+                all_data = {}
+        else:
+            all_data = {}
+
+        # Update the profile's slots
+        all_data[profile] = slots
+
+        # Save back
+        SAVED_STRATS_FILE.write_text(json.dumps(all_data, indent=2), encoding="utf-8")
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "profile": profile})
 
 
 @app.route("/api/sell-settings", methods=["POST"])
