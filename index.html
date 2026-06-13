@@ -676,22 +676,15 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   <!-- Collapsible Header -->
   <div onclick="toggleSmartStrategyPanel()" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;cursor:pointer;user-select:none;background:#1a3a1a">
     <div style="display:flex;align-items:center;gap:12px;flex:1">
-      <span style="font-weight:800;color:var(--green);font-size:14px">⚡ Smart Strategy • 15-min Flipping</span>
+      <span style="font-weight:800;color:var(--green);font-size:14px">⚡ Smart Strategy • 15-min Crypto</span>
       <span id="nextMarketTimer" style="color:var(--yellow);font-weight:700;font-size:12px">Next: 00:00</span>
     </div>
     <span id="smartStrategyToggle" style="color:var(--green);font-size:16px">▼</span>
   </div>
 
-  <!-- Expandable Panel with Token Cards and Thresholds -->
+  <!-- Expandable Panel with Individual Token Cards -->
   <div id="smartStrategyPanel" style="display:block;padding:16px;border-top:1px solid #2a4a2a">
-    <!-- Token Cards Grid -->
-    <div id="tokenCardsContainer" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px"></div>
-
-    <!-- Token Thresholds Configuration -->
-    <div style="border-top:1px solid #2a4a2a;padding-top:12px">
-      <div style="font-size:11px;color:#888;text-transform:uppercase;font-weight:700;margin-bottom:8px">Per-Token Thresholds (spread in $)</div>
-      <div id="tokenThresholdsContainer" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px"></div>
-    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px" id="smartStrategyTokens"></div>
   </div>
 </div>
 
@@ -747,26 +740,6 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <a href="#" onclick="switchTab('coach');return false" style="margin-left:auto;color:var(--blue);font-size:12px;text-decoration:none">full report →</a>
   </div>
   <div id="coachInlineBody" style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:#ddd;line-height:1.45"></div>
-</div>
-
-<!-- Smart Strategy Master Switch + Token Status -->
-<div class="card" style="background:#0d2618;border:2px solid var(--green);margin-bottom:14px">
-  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:12px">
-    <div>
-      <div style="font-size:14px;font-weight:700;color:var(--green)">⚡ Smart Strategy</div>
-      <div style="font-size:12px;color:#aaa;margin-top:4px">Auto-select Scanner or Lotto based on live crypto spread</div>
-    </div>
-    <label class="check-row" style="margin:0">
-      <input type="checkbox" class="smartStrategyEnabled" onchange="toggleSmartStrategy(this)"> Enable
-    </label>
-  </div>
-
-  <!-- Token Status in Scanner -->
-  <div style="border-top:1px solid #1a5a3a;padding-top:12px">
-    <div id="scannerTokensContainer" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;font-size:11px"></div>
-  </div>
-
-  <div class="smartStrategyStatus" style="font-size:12px;color:#888;margin-top:8px">Loading...</div>
 </div>
 
 <!-- Filters -->
@@ -858,11 +831,21 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
           <button class="pill sm" onclick="toggleAllCategories()" style="font-size:12px;padding:4px 12px">Select All</button>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px">
-          <label class="check-row"><input type="checkbox" id="showCrypto" checked onchange="saveSettings()"> Crypto</label>
+          <label class="check-row"><input type="checkbox" id="showCrypto" checked onchange="toggleCryptoMaster(this)"> <strong>Crypto</strong></label>
           <label class="check-row"><input type="checkbox" id="showSports" checked onchange="saveSettings()"> Sports</label>
           <label class="check-row"><input type="checkbox" id="showCombo" checked onchange="saveSettings()"> Combo/Parlay</label>
           <label class="check-row"><input type="checkbox" id="showPolitics" checked onchange="saveSettings()"> Politics / Elections</label>
           <label class="check-row"><input type="checkbox" id="showEconomics" checked onchange="saveSettings()"> Economics / Finance</label>
+        </div>
+        <!-- Individual Crypto Tokens -->
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px 12px;margin-top:8px;padding-top:8px;border-top:1px solid #2a4a2a">
+          <label class="check-row"><input type="checkbox" id="cryptoBTC" data-crypto="BTC" checked onchange="checkCryptoState(); saveSettings()"> BTC</label>
+          <label class="check-row"><input type="checkbox" id="cryptoETH" data-crypto="ETH" checked onchange="checkCryptoState(); saveSettings()"> ETH</label>
+          <label class="check-row"><input type="checkbox" id="cryptoSOL" data-crypto="SOL" checked onchange="checkCryptoState(); saveSettings()"> SOL</label>
+          <label class="check-row"><input type="checkbox" id="cryptoXRP" data-crypto="XRP" checked onchange="checkCryptoState(); saveSettings()"> XRP</label>
+          <label class="check-row"><input type="checkbox" id="cryptoDOGE" data-crypto="DOGE" checked onchange="checkCryptoState(); saveSettings()"> DOGE</label>
+          <label class="check-row"><input type="checkbox" id="cryptoBNB" data-crypto="BNB" checked onchange="checkCryptoState(); saveSettings()"> BNB</label>
+          <label class="check-row"><input type="checkbox" id="cryptoHYPE" data-crypto="HYPE" checked onchange="checkCryptoState(); saveSettings()"> HYPE</label>
         </div>
         <div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.4px;margin:14px 0 6px;border-top:1px solid var(--border);padding-top:10px">FILTERS <span style="font-weight:400">(not categories — these refine what's shown)</span></div>
         <div style="display:flex;gap:16px;flex-wrap:wrap">
@@ -1109,25 +1092,6 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   </div>
 
   <!-- Smart Strategy Master Switch + Token Status -->
-  <div class="card" style="background:#0d2618;border:2px solid var(--green);margin-bottom:14px">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:12px">
-      <div>
-        <div style="font-size:14px;font-weight:700;color:var(--green)">⚡ Smart Strategy</div>
-        <div style="font-size:12px;color:#aaa;margin-top:4px">Auto-select Scanner or Lotto based on live crypto spread</div>
-      </div>
-      <label class="check-row" style="margin:0">
-        <input type="checkbox" class="smartStrategyEnabled" onchange="toggleSmartStrategy(this)"> Enable
-      </label>
-    </div>
-
-    <!-- Token Status in Lotto -->
-    <div style="border-top:1px solid #1a5a3a;padding-top:12px">
-      <div id="lottoTokensContainer" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;font-size:11px"></div>
-    </div>
-
-    <div class="smartStrategyStatus" style="font-size:12px;color:#888;margin-top:8px">Loading...</div>
-  </div>
-
   <!-- Inline Coach (always visible on Lotto page too) -->
   <div id="coachInlineLotto" style="background:#0c1612;border:1px solid #1f6045;border-radius:8px;padding:12px 14px;margin-bottom:14px;display:none">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
@@ -1259,11 +1223,21 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
       <div style="font-size:12px;color:var(--muted);font-weight:700;margin-bottom:8px">CATEGORIES</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 8px">
-        <label class="check-row"><input type="checkbox" id="L_showCrypto" checked onchange="pushLottoSettings()"> Crypto</label>
+        <label class="check-row"><input type="checkbox" id="L_showCrypto" checked onchange="toggleCryptoMasterLotto(this); pushLottoSettings()"> <strong>Crypto</strong></label>
         <label class="check-row"><input type="checkbox" id="L_showSports" checked onchange="pushLottoSettings()"> Sports</label>
         <label class="check-row"><input type="checkbox" id="L_showCombo" checked onchange="pushLottoSettings()"> Combo/Parlay</label>
         <label class="check-row"><input type="checkbox" id="L_showPolitics" checked onchange="pushLottoSettings()"> Politics / Elections</label>
         <label class="check-row"><input type="checkbox" id="L_showEconomics" checked onchange="pushLottoSettings()"> Economics / Finance</label>
+      </div>
+      <!-- Individual Crypto Tokens -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px 8px;margin-top:8px;padding-top:8px;border-top:1px solid #2a4a2a">
+        <label class="check-row"><input type="checkbox" id="L_cryptoBTC" data-crypto="BTC" checked onchange="checkCryptoStateLotto(); pushLottoSettings()"> BTC</label>
+        <label class="check-row"><input type="checkbox" id="L_cryptoETH" data-crypto="ETH" checked onchange="checkCryptoStateLotto(); pushLottoSettings()"> ETH</label>
+        <label class="check-row"><input type="checkbox" id="L_cryptoSOL" data-crypto="SOL" checked onchange="checkCryptoStateLotto(); pushLottoSettings()"> SOL</label>
+        <label class="check-row"><input type="checkbox" id="L_cryptoXRP" data-crypto="XRP" checked onchange="checkCryptoStateLotto(); pushLottoSettings()"> XRP</label>
+        <label class="check-row"><input type="checkbox" id="L_cryptoDOGE" data-crypto="DOGE" checked onchange="checkCryptoStateLotto(); pushLottoSettings()"> DOGE</label>
+        <label class="check-row"><input type="checkbox" id="L_cryptoBNB" data-crypto="BNB" checked onchange="checkCryptoStateLotto(); pushLottoSettings()"> BNB</label>
+        <label class="check-row"><input type="checkbox" id="L_cryptoHYPE" data-crypto="HYPE" checked onchange="checkCryptoStateLotto(); pushLottoSettings()"> HYPE</label>
       </div>
       <div style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.4px;margin:14px 0 6px;border-top:1px solid var(--border);padding-top:10px">FILTERS <span style="font-weight:400">(not categories — these refine what's shown)</span></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
@@ -6677,30 +6651,6 @@ async function loadSmartStrategyStatus() {
   }
 }
 
-async function toggleSmartStrategy(src) {
-  const enabled = !!(src && src.checked);
-  try {
-    await fetch("/api/smart-strategy", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({enabled})
-    });
-    toast(`Smart Strategy ${enabled ? "enabled" : "disabled"}`, "ok");
-  } catch(e) {
-    toast("Failed to update Smart Strategy", "err");
-  }
-  loadSmartStrategyStatus();
-  loadActiveProfile();   // mode switch changes the T1/T2 LEDs — refresh them now
-}
-
-// Auto-refresh Smart Strategy status every 10 seconds so spread updates live
-setInterval(() => {
-  if (!document.hidden) {  // Only refresh if tab is visible
-    loadSmartStrategyStatus();
-    // loadSmartStrategyTokens();  // DISABLED - causing infinite load loop
-  }
-}, 10000);
-
 // ── Per-Token Smart Strategy (7 cryptos: BTC, ETH, SOL, XRP, DOGE, BNB, HYPE) ──
 function toggleSmartStrategyPanel() {
   const panel = document.getElementById("smartStrategyPanel");
@@ -6751,166 +6701,220 @@ async function fetchWithTimeout(url, timeoutMs = 8000) {
   }
 }
 
+// Load Smart Strategy per-token settings
+function loadSmartStrategySettings() {
+  const saved = localStorage.getItem("smart_strategy_tokens");
+  const defaults = {
+    BTC: {enabled: false, buy_last_min: 1, threshold: 100, mode: "scanner"},
+    ETH: {enabled: false, buy_last_min: 1, threshold: 100, mode: "scanner"},
+    SOL: {enabled: false, buy_last_min: 1, threshold: 100, mode: "scanner"},
+    XRP: {enabled: false, buy_last_min: 1, threshold: 0.25, mode: "scanner"},
+    DOGE: {enabled: false, buy_last_min: 1, threshold: 100, mode: "scanner"},
+    BNB: {enabled: false, buy_last_min: 1, threshold: 100, mode: "scanner"},
+    HYPE: {enabled: false, buy_last_min: 1, threshold: 100, mode: "scanner"}
+  };
+  return saved ? JSON.parse(saved) : defaults;
+}
+
+function saveSmartStrategySettings(settings) {
+  localStorage.setItem("smart_strategy_tokens", JSON.stringify(settings));
+  updateCryptoCheckboxStates();
+}
+
 async function loadSmartStrategyTokens() {
   try {
-    const [tokensResp, statusResp] = await Promise.all([
-      fetchWithTimeout("/api/smart-strategy/tokens"),
-      fetchWithTimeout("/api/smart-strategy/status")
-    ]);
-    const tokensData = await tokensResp.json();
-    const statusData = await statusResp.json();
-    renderSmartStrategyTokens(tokensData.tokens || [], statusData);
+    const resp = await fetchWithTimeout("/api/smart-strategy/tokens");
+    const data = await resp.json();
+    renderSmartStrategyTokenCards(data.tokens || []);
   } catch(e) {
     console.error("[smart-strategy] token load failed:", e);
-    const container = document.getElementById("tokenCardsContainer");
+    const container = document.getElementById("smartStrategyTokens");
     if (container) {
-      container.innerHTML = '<div style="grid-column:1/-1;color:#f55;padding:20px">Failed to load tokens: ' + e.message + '</div>';
+      container.innerHTML = '<div style="grid-column:1/-1;color:#f55;padding:20px;text-align:center">Failed to load tokens: ' + e.message + '</div>';
     }
   }
 }
 
-// Load token thresholds from localStorage
-function loadTokenThresholds() {
-  const saved = localStorage.getItem("token_thresholds");
-  return saved ? JSON.parse(saved) : {BTC:100, ETH:100, SOL:100, XRP:0.25, DOGE:100, BNB:100, HYPE:100};
-}
-
-// Save token thresholds to localStorage
-function saveTokenThresholds(thresholds) {
-  localStorage.setItem("token_thresholds", JSON.stringify(thresholds));
-}
-
-function renderSmartStrategyTokens(tokens, scanState = {}) {
-  const container = document.getElementById("tokenCardsContainer");
-  const thresholdContainer = document.getElementById("tokenThresholdsContainer");
+function renderSmartStrategyTokenCards(tokens) {
+  const container = document.getElementById("smartStrategyTokens");
   if (!container) return;
 
-  if (!tokens || tokens.length === 0) {
-    container.innerHTML = '<div style="color:#888;padding:20px">No token data</div>';
-    return;
-  }
-
-  const thresholds = loadTokenThresholds();
-  const tokenMap = {};
-  tokens.forEach(t => { tokenMap[t.symbol] = t; });
-
-  // Render token cards
+  const settings = loadSmartStrategySettings();
   container.innerHTML = '';
-  tokens.forEach((t, idx) => {
-    const threshold = thresholds[t.symbol] || 100;
+
+  tokens.forEach(t => {
+    const symbol = t.symbol;
+    const config = settings[symbol] || settings[symbol];
     const spread = t.spread || 0;
-    const shouldScan = spread >= threshold;
-    const mode = shouldScan ? "SCANNER" : "LOTTO";
-    const modeColor = shouldScan ? "#ff9416" : "#00d97e";
+    const spreadDisplay = spread ? `$${spread.toFixed(2)}` : "—";
 
     const card = document.createElement("div");
     card.style.cssText = `
-      background:#0f2b0f;border:1px solid #2a5a2a;border-radius:6px;padding:12px;
-      display:flex;flex-direction:column;gap:8px;font-size:12px;
-      transition:all 0.2s;
+      background:#0f2b0f;border:1px solid #2a5a2a;border-radius:8px;padding:14px;
+      display:flex;flex-direction:column;gap:10px;font-size:12px;
     `;
-
-    const spreadDisplay = spread ? `$${spread.toFixed(2)}` : "—";
-    const spreadColor = spread >= threshold ? "var(--green)" : "#f5c542";
 
     card.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between">
-        <div style="font-weight:700;color:var(--green);font-size:13px">${t.symbol}</div>
-        <div style="background:${modeColor};color:#000;padding:2px 6px;border-radius:3px;font-weight:700;font-size:10px">${mode}</div>
+        <div style="font-weight:700;color:var(--green);font-size:14px">${symbol}</div>
+        <label class="check-row" style="margin:0">
+          <input type="checkbox" id="ss_${symbol}_enabled" ${config.enabled ? "checked" : ""}
+            onchange="toggleSmartStrategyToken('${symbol}', this.checked); saveSmartStrategySettings(loadSmartStrategySettings())">
+          ON
+        </label>
       </div>
+
       <div style="font-size:11px;color:#aaa">
-        <div>Spread: <span style="color:${spreadColor};font-weight:700">${spreadDisplay}</span></div>
-        <div style="font-size:10px;color:#666">Threshold: $${threshold.toFixed(2)}</div>
+        <div>Current Spread: <span style="color:var(--green);font-weight:700">${spreadDisplay}</span></div>
       </div>
+
+      <div style="border-top:1px solid #2a4a2a;padding-top:10px">
+        <div style="font-size:11px;color:#888;margin-bottom:6px">Buy in last X min:</div>
+        <input type="number" id="ss_${symbol}_last_min" value="${config.buy_last_min}" min="0.25" max="15" step="0.25"
+          style="width:100%;padding:6px;background:#0a1f0a;border:1px solid #2a5a2a;color:var(--green);font-size:12px;border-radius:4px"
+          onchange="updateSmartStrategyToken('${symbol}', 'buy_last_min', this.value)">
+      </div>
+
+      <div style="border-top:1px solid #2a4a2a;padding-top:10px">
+        <div style="font-size:11px;color:#888;margin-bottom:6px">Threshold (Lotto ↓ / Scanner ↑):</div>
+        <input type="number" id="ss_${symbol}_threshold" value="${config.threshold}" min="0.01" step="0.01"
+          style="width:100%;padding:6px;background:#0a1f0a;border:1px solid #2a5a2a;color:var(--green);font-size:12px;border-radius:4px"
+          onchange="updateSmartStrategyToken('${symbol}', 'threshold', this.value)">
+      </div>
+
+      <div style="border-top:1px solid #2a4a2a;padding-top:10px">
+        <div style="font-size:11px;color:#888;margin-bottom:6px">Mode when spread ≥ threshold:</div>
+        <div style="display:flex;gap:6px">
+          <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:11px">
+            <input type="radio" name="ss_${symbol}_mode" value="scanner" ${config.mode === "scanner" ? "checked" : ""}
+              onchange="updateSmartStrategyToken('${symbol}', 'mode', 'scanner')">
+            Scanner
+          </label>
+          <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:11px">
+            <input type="radio" name="ss_${symbol}_mode" value="lotto" ${config.mode === "lotto" ? "checked" : ""}
+              onchange="updateSmartStrategyToken('${symbol}', 'mode', 'lotto')">
+            Lotto
+          </label>
+          <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:11px">
+            <input type="radio" name="ss_${symbol}_mode" value="both" ${config.mode === "both" ? "checked" : ""}
+              onchange="updateSmartStrategyToken('${symbol}', 'mode', 'both')">
+            Both
+          </label>
+        </div>
+      </div>
+
+      <button class="sm ghost" style="margin-top:8px;font-size:11px;padding:6px 12px;background:var(--green);color:#000;font-weight:600"
+        onclick="saveSmartStrategyTokenCard('${symbol}')">Save</button>
     `;
 
     container.appendChild(card);
   });
-
-  // Render threshold inputs
-  if (thresholdContainer) {
-    thresholdContainer.innerHTML = '';
-    tokens.forEach(t => {
-      const threshold = thresholds[t.symbol] || 100;
-      const inp = document.createElement("div");
-      inp.style.cssText = "display:flex;align-items:center;gap:4px;font-size:11px";
-      inp.innerHTML = `
-        <span style="width:40px;color:#aaa">${t.symbol}:</span>
-        <input type="number" value="${threshold}" step="0.01" style="width:60px;padding:4px;background:#0f2b0f;border:1px solid #2a5a2a;color:#0f9;font-size:11px"
-          onchange="updateTokenThreshold('${t.symbol}', this.value)">
-      `;
-      thresholdContainer.appendChild(inp);
-    });
-  }
-
-  // Also render in Scanner and Lotto tabs
-  renderScannerLottoTokens(tokens);
 }
 
-function updateTokenThreshold(symbol, value) {
-  const thresholds = loadTokenThresholds();
-  thresholds[symbol] = parseFloat(value) || 100;
-  saveTokenThresholds(thresholds);
-  loadSmartStrategyTokens(); // Refresh to show updated mode
+function toggleSmartStrategyToken(symbol, enabled) {
+  const settings = loadSmartStrategySettings();
+  if (!settings[symbol]) settings[symbol] = {enabled: false, buy_last_min: 1, threshold: 100, mode: "scanner"};
+  settings[symbol].enabled = enabled;
+  saveSmartStrategySettings(settings);
 }
 
-// Render token status in Scanner and Lotto tabs
-function renderScannerLottoTokens(tokens) {
-  const thresholds = loadTokenThresholds();
-  const tokenSymbols = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "HYPE"];
+function updateSmartStrategyToken(symbol, field, value) {
+  const settings = loadSmartStrategySettings();
+  if (!settings[symbol]) settings[symbol] = {enabled: false, buy_last_min: 1, threshold: 100, mode: "scanner"};
 
-  // Scanner tokens
-  const scannerContainer = document.getElementById("scannerTokensContainer");
-  if (scannerContainer && tokens && tokens.length > 0) {
-    scannerContainer.innerHTML = "";
-    tokens.forEach(t => {
-      const threshold = thresholds[t.symbol] || 100;
-      const spread = t.spread || 0;
-      const shouldScan = spread >= threshold;
-      const modeColor = shouldScan ? "#ff9416" : "#ccc";
-      const spreadDisplay = spread ? `$${spread.toFixed(2)}` : "—";
-      const badge = document.createElement("div");
-      badge.style.cssText = `
-        background:#0f2b0f;border:1px solid #2a5a2a;border-radius:4px;padding:6px 8px;
-        display:flex;align-items:center;justify-content:space-between;gap:6px;
-      `;
-      badge.innerHTML = `
-        <span style="color:var(--green);font-weight:700">${t.symbol}</span>
-        <span style="color:#666;font-size:10px">${spreadDisplay}</span>
-        <span style="background:${modeColor};width:4px;height:4px;border-radius:50%"></span>
-      `;
-      scannerContainer.appendChild(badge);
-    });
+  if (field === "buy_last_min" || field === "threshold") {
+    settings[symbol][field] = parseFloat(value) || 0;
+  } else {
+    settings[symbol][field] = value;
   }
+  localStorage.setItem("smart_strategy_tokens", JSON.stringify(settings));
+}
 
-  // Lotto tokens (same display)
-  const lottoContainer = document.getElementById("lottoTokensContainer");
-  if (lottoContainer && tokens && tokens.length > 0) {
-    lottoContainer.innerHTML = "";
-    tokens.forEach(t => {
-      const threshold = thresholds[t.symbol] || 100;
-      const spread = t.spread || 0;
-      const shouldScan = spread >= threshold;
-      const modeColor = shouldScan ? "#ff9416" : "#ccc";
-      const spreadDisplay = spread ? `$${spread.toFixed(2)}` : "—";
-      const badge = document.createElement("div");
-      badge.style.cssText = `
-        background:#0f2b0f;border:1px solid #2a5a2a;border-radius:4px;padding:6px 8px;
-        display:flex;align-items:center;justify-content:space-between;gap:6px;
-      `;
-      badge.innerHTML = `
-        <span style="color:var(--green);font-weight:700">${t.symbol}</span>
-        <span style="color:#666;font-size:10px">${spreadDisplay}</span>
-        <span style="background:${modeColor};width:4px;height:4px;border-radius:50%"></span>
-      `;
-      lottoContainer.appendChild(badge);
-    });
+function saveSmartStrategyTokenCard(symbol) {
+  const settings = loadSmartStrategySettings();
+  if (!settings[symbol]) settings[symbol] = {enabled: false, buy_last_min: 1, threshold: 100, mode: "scanner"};
+
+  settings[symbol].enabled = document.getElementById(`ss_${symbol}_enabled`)?.checked || false;
+  settings[symbol].buy_last_min = parseFloat(document.getElementById(`ss_${symbol}_last_min`)?.value) || 1;
+  settings[symbol].threshold = parseFloat(document.getElementById(`ss_${symbol}_threshold`)?.value) || 100;
+  settings[symbol].mode = document.querySelector(`input[name="ss_${symbol}_mode"]:checked`)?.value || "scanner";
+
+  saveSmartStrategySettings(settings);
+  toast(`${symbol} Smart Strategy saved`, "ok");
+}
+
+// Crypto checkbox management
+function toggleCryptoMaster(checkbox) {
+  const all_checked = checkbox.checked;
+  ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "HYPE"].forEach(token => {
+    const el = document.getElementById(`crypto${token}`);
+    if (el) el.checked = all_checked;
+  });
+  saveSettings();
+}
+
+function toggleCryptoMasterLotto(checkbox) {
+  const all_checked = checkbox.checked;
+  ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "HYPE"].forEach(token => {
+    const el = document.getElementById(`L_crypto${token}`);
+    if (el) el.checked = all_checked;
+  });
+  pushLottoSettings();
+}
+
+function checkCryptoState() {
+  const settings = loadSmartStrategySettings();
+  const checked = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "HYPE"].filter(t => {
+    const el = document.getElementById(`crypto${t}`);
+    return el && el.checked;
+  });
+  const allChecked = checked.length === 7;
+  const noneChecked = checked.length === 0;
+
+  const masterEl = document.getElementById("showCrypto");
+  if (masterEl) {
+    masterEl.indeterminate = !allChecked && !noneChecked;
+    if (allChecked || noneChecked) masterEl.checked = allChecked;
   }
+}
+
+function checkCryptoStateLotto() {
+  const checked = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "HYPE"].filter(t => {
+    const el = document.getElementById(`L_crypto${t}`);
+    return el && el.checked;
+  });
+  const allChecked = checked.length === 7;
+  const noneChecked = checked.length === 0;
+
+  const masterEl = document.getElementById("L_showCrypto");
+  if (masterEl) {
+    masterEl.indeterminate = !allChecked && !noneChecked;
+    if (allChecked || noneChecked) masterEl.checked = allChecked;
+  }
+}
+
+function updateCryptoCheckboxStates() {
+  const settings = loadSmartStrategySettings();
+  ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "HYPE"].forEach(token => {
+    const el = document.getElementById(`crypto${token}`);
+    const lotto_el = document.getElementById(`L_crypto${token}`);
+    const isEnabled = settings[token]?.enabled || false;
+
+    if (el) {
+      el.disabled = isEnabled;
+      el.style.opacity = isEnabled ? "0.5" : "1";
+    }
+    if (lotto_el) {
+      lotto_el.disabled = isEnabled;
+      lotto_el.style.opacity = isEnabled ? "0.5" : "1";
+    }
+  });
 }
 
 // Load token data once on page load
 document.addEventListener('DOMContentLoaded', () => {
   loadSmartStrategyTokens();
+  updateCryptoCheckboxStates();
 });
 
 // ── Collapsible Section Helper ────────────────────────────────────────────
