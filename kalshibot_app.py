@@ -2247,7 +2247,11 @@ _TOKEN_SPREAD_TTL = 12.0  # seconds — short so the spread tracks the market
 
 def _fetch_one_token_spread(symbol, series_prefix):
     """Live 'spread' for one token = how far spot is from the nearest strike
-    (how far it is from 'flipping'), averaged over the nearest open markets."""
+    (how far it is from 'flipping'). Returns both:
+      • spread        — blended over the nearest open markets (the live headline)
+      • nearest_*     — the SOONEST-closing game's own spread + seconds-to-close,
+                        so we can record the spread in its final minute (the moment
+                        that actually decides a flip, since the bot buys at the end)."""
     try:
         spot, _src = _spot_price(symbol)
         d = kalshi_get("/markets", {"series_ticker": series_prefix,
@@ -2257,17 +2261,35 @@ def _fetch_one_token_spread(symbol, series_prefix):
             return {"symbol": symbol, "spread": 0, "spot": 0, "volume": 0, "message": "No open markets"}
         cushions = []
         total_vol = 0
+        nearest = None  # (secs_to_close, close_ts, spread) for the soonest-closing game
+        now_ts = time.time()
         for m in markets:
             strike = _strike_from_market(m)
-            if strike and spot:
-                cushions.append(abs(spot - strike))
+            cush = abs(spot - strike) if (strike and spot) else None
+            if cush is not None:
+                cushions.append(cush)
             total_vol += int(m.get("volume", 0) or 0)
+            # Track the soonest-closing game so we can capture its closing spread.
+            ct_str = m.get("close_time") or m.get("expiration_time") or ""
+            if cush is not None and ct_str:
+                try:
+                    close_ts = datetime.fromisoformat(ct_str.replace("Z", "+00:00")).timestamp()
+                    secs = close_ts - now_ts
+                    if secs > 0 and (nearest is None or secs < nearest[0]):
+                        nearest = (secs, close_ts, cush)
+                except Exception:
+                    pass
         if not spot:
             return {"symbol": symbol, "spread": 0, "spot": 0, "volume": total_vol, "message": "No spot price"}
         if not cushions:
             return {"symbol": symbol, "spread": 0, "spot": round(spot, 2), "volume": total_vol, "message": "No strike data"}
-        return {"symbol": symbol, "spread": round(sum(cushions) / len(cushions), 2),
-                "spot": round(spot, 2), "volume": total_vol, "ticker": markets[0].get("ticker", "")}
+        out = {"symbol": symbol, "spread": round(sum(cushions) / len(cushions), 2),
+               "spot": round(spot, 2), "volume": total_vol, "ticker": markets[0].get("ticker", "")}
+        if nearest:
+            out["nearest_secs"] = round(nearest[0])
+            out["nearest_close_ts"] = nearest[1]
+            out["nearest_spread"] = round(nearest[2], 4)
+        return out
     except Exception as e:
         return {"symbol": symbol, "spread": 0, "spot": 0, "volume": 0, "message": f"error: {e}"}
 
@@ -2295,7 +2317,8 @@ def _compute_token_spreads():
 _GAME_SECS  = 900    # 15-minute game
 _MAX_GAMES  = 96     # keep 24h of games
 _GAMES_4H   = 16     # 4 hours = 16 games
-_token_game_spreads = {sym: {} for sym in _SMART_TOKENS}  # {game_bucket: spread}
+_CLOSING_WINDOW = 90 # only record a game's spread within the last 90s before close
+_token_game_spreads = {sym: {} for sym in _SMART_TOKENS}  # {game_bucket: closing_spread}
 
 def _round_spread(v: float) -> float:
     """Round a spread to a sensible precision for its MAGNITUDE — not by token
@@ -2306,12 +2329,13 @@ def _round_spread(v: float) -> float:
     if v < 100:   return round(v, 2)
     return round(v)
 
-def _record_spread_sample(symbol: str, spread: float):
-    """Record the live spread against its 15-min game bucket. The last reading in
-    a game overwrites earlier ones, so each game contributes ONE spread (the one
-    nearest its close — the moment that matters for flip risk)."""
+def _record_closing_spread(symbol: str, close_ts: float, spread: float):
+    """Record a game's spread in its FINAL MINUTE, bucketed by the game's own close
+    time so each 15-min game stores exactly one value — the spread right before it
+    closed (when the bot buys and a flip is decided). Later reads (even closer to
+    close) overwrite, so we keep the tightest pre-close reading."""
     buckets = _token_game_spreads.setdefault(symbol, {})
-    b = int(time.time() // _GAME_SECS)
+    b = int(close_ts // _GAME_SECS)
     buckets[b] = spread
     if len(buckets) > _MAX_GAMES:                      # prune oldest games
         for old in sorted(buckets)[:-_MAX_GAMES]:
@@ -2376,8 +2400,17 @@ def _compute_safe_spread_recommendations(token_spreads):
     for token_data in token_spreads:
         symbol = token_data.get("symbol")
         spread = token_data.get("spread", 0)
-        if symbol and spread > 0:
-            _record_spread_sample(symbol, spread)  # feed the 4h reference average
+        if not symbol:
+            continue
+        # Record the per-GAME history ONLY in the final minute before a game closes,
+        # so each game stores the spread at the moment the bot buys (when a flip is
+        # decided) — not a blend across the whole 15 minutes.
+        nsecs = token_data.get("nearest_secs")
+        nclose = token_data.get("nearest_close_ts")
+        nspread = token_data.get("nearest_spread")
+        if (nspread and nclose and nsecs is not None and 0 <= nsecs <= _CLOSING_WINDOW):
+            _record_closing_spread(symbol, nclose, nspread)
+        if spread > 0:
             recommendations[symbol] = _calculate_safe_spread(symbol, spread)
     if recommendations:
         # Cache so the bot's auto-switch can read fresh thresholds without the UI open.
