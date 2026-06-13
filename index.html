@@ -6713,7 +6713,13 @@ function loadSmartStrategySettings() {
     BNB: {enabled: false, buy_last_min: 1, threshold: 100, mode: "scanner"},
     HYPE: {enabled: false, buy_last_min: 1, threshold: 100, mode: "scanner"}
   };
-  return saved ? JSON.parse(saved) : defaults;
+  if (!saved) return defaults;
+  try {
+    const parsed = JSON.parse(saved);
+    return {...defaults, ...parsed};
+  } catch {
+    return defaults;
+  }
 }
 
 function saveSmartStrategySettings(settings) {
