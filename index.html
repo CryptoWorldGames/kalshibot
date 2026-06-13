@@ -6744,7 +6744,7 @@ function renderSmartStrategyTokenCards(tokens) {
 
   tokens.forEach(t => {
     const symbol = t.symbol;
-    const config = settings[symbol] || settings[symbol];
+    const config = settings[symbol] || {enabled: false, buy_last_min: 1, threshold: 100, mode: "scanner"};
     const spread = t.spread || 0;
     const spreadDisplay = spread ? `$${spread.toFixed(2)}` : "—";
 
