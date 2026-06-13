@@ -2081,7 +2081,7 @@ def system_info():
 @app.route("/api/smart-strategy/tokens")
 def smart_strategy_tokens():
     """Return live spread data for 7 crypto 15-min tokens.
-    Lightweight endpoint — no expensive backtesting calculations.
+    Lightweight endpoint — makes concurrent API calls to stay fast.
     Data accumulates naturally as user trades."""
 
     tokens = {
@@ -2096,25 +2096,24 @@ def smart_strategy_tokens():
 
     result = []
 
-    for symbol, series_prefix in tokens.items():
+    def fetch_token_data(symbol, series_prefix):
+        """Fetch market data for one token (runs in thread pool)."""
         try:
-            # Get current markets for this token (find the one expiring soonest)
+            # Get current markets for this token
             markets_url = f"{BASE_URL}{API_PREFIX}/markets?series_ticker={series_prefix}"
-            markets_resp = req.get(markets_url, timeout=3)
+            markets_resp = req.get(markets_url, timeout=2)
             markets_resp.raise_for_status()
             markets_data = markets_resp.json()
 
             if not markets_data.get("markets"):
-                # No markets found for this token yet
-                result.append({
+                return {
                     "symbol": symbol,
                     "spread": 0,
                     "price_yes": 0,
                     "price_no": 0,
                     "volume": 0,
-                    "message": "No markets yet"
-                })
-                continue
+                    "message": "No markets"
+                }
 
             # Find best market (least time to expiry with volume)
             best_market = None
@@ -2124,40 +2123,52 @@ def smart_strategy_tokens():
                     break
 
             if not best_market:
-                result.append({
+                return {
                     "symbol": symbol,
                     "spread": 0,
                     "price_yes": 0,
                     "price_no": 0,
                     "volume": 0,
-                    "message": "No active markets"
-                })
-                continue
+                    "message": "No live markets"
+                }
 
             # Calculate spread
             price_yes = float(best_market.get("last_price_yes", 0)) or 50
             price_no = float(best_market.get("last_price_no", 0)) or 50
             spread = abs(price_yes - price_no)
 
-            result.append({
+            return {
                 "symbol": symbol,
                 "spread": round(spread, 2),
                 "price_yes": round(price_yes, 2),
                 "price_no": round(price_no, 2),
                 "volume": int(best_market.get("volume", 0)),
                 "ticker": best_market.get("ticker_name", ""),
-            })
+            }
 
         except Exception as e:
-            # Market unavailable — skip gracefully
-            result.append({
+            return {
                 "symbol": symbol,
                 "spread": 0,
                 "price_yes": 0,
                 "price_no": 0,
                 "volume": 0,
-                "message": f"Error: {str(e)[:30]}"
-            })
+                "message": "API error"
+            }
+
+    # Fetch all tokens concurrently
+    with concurrent.futures.ThreadPoolExecutor(max_workers=7) as executor:
+        futures = {executor.submit(fetch_token_data, sym, prefix): sym
+                   for sym, prefix in tokens.items()}
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                result.append(future.result())
+            except Exception:
+                pass
+
+    # Sort by symbol order
+    symbol_order = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "HYPE"]
+    result.sort(key=lambda t: symbol_order.index(t.get("symbol", "")) if t.get("symbol") in symbol_order else 999)
 
     return jsonify({
         "tokens": result,
