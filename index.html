@@ -749,9 +749,9 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   <div id="coachInlineBody" style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:#ddd;line-height:1.45"></div>
 </div>
 
-<!-- Smart Strategy Master Switch -->
+<!-- Smart Strategy Master Switch + Token Status -->
 <div class="card" style="background:#0d2618;border:2px solid var(--green);margin-bottom:14px">
-  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:12px">
     <div>
       <div style="font-size:14px;font-weight:700;color:var(--green)">⚡ Smart Strategy</div>
       <div style="font-size:12px;color:#aaa;margin-top:4px">Auto-select Scanner or Lotto based on live crypto spread</div>
@@ -760,6 +760,12 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
       <input type="checkbox" class="smartStrategyEnabled" onchange="toggleSmartStrategy(this)"> Enable
     </label>
   </div>
+
+  <!-- Token Status in Scanner -->
+  <div style="border-top:1px solid #1a5a3a;padding-top:12px">
+    <div id="scannerTokensContainer" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;font-size:11px"></div>
+  </div>
+
   <div class="smartStrategyStatus" style="font-size:12px;color:#888;margin-top:8px">Loading...</div>
 </div>
 
@@ -1102,9 +1108,9 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <div class="botHeaderTxt"><b style="color:#fff">Lotto Bot</b> <span style="color:#ff9416;font-weight:800">T2</span> — tap the switch to turn this bot on or off. Bots can run at the same time as the Scanner bot.</div>
   </div>
 
-  <!-- Smart Strategy Master Switch (same as Scanner) -->
+  <!-- Smart Strategy Master Switch + Token Status -->
   <div class="card" style="background:#0d2618;border:2px solid var(--green);margin-bottom:14px">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:12px">
       <div>
         <div style="font-size:14px;font-weight:700;color:var(--green)">⚡ Smart Strategy</div>
         <div style="font-size:12px;color:#aaa;margin-top:4px">Auto-select Scanner or Lotto based on live crypto spread</div>
@@ -1113,6 +1119,12 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
         <input type="checkbox" class="smartStrategyEnabled" onchange="toggleSmartStrategy(this)"> Enable
       </label>
     </div>
+
+    <!-- Token Status in Lotto -->
+    <div style="border-top:1px solid #1a5a3a;padding-top:12px">
+      <div id="lottoTokensContainer" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;font-size:11px"></div>
+    </div>
+
     <div class="smartStrategyStatus" style="font-size:12px;color:#888;margin-top:8px">Loading...</div>
   </div>
 
@@ -6825,6 +6837,9 @@ function renderSmartStrategyTokens(tokens, scanState = {}) {
       thresholdContainer.appendChild(inp);
     });
   }
+
+  // Also render in Scanner and Lotto tabs
+  renderScannerLottoTokens(tokens);
 }
 
 function updateTokenThreshold(symbol, value) {
@@ -6832,6 +6847,60 @@ function updateTokenThreshold(symbol, value) {
   thresholds[symbol] = parseFloat(value) || 100;
   saveTokenThresholds(thresholds);
   loadSmartStrategyTokens(); // Refresh to show updated mode
+}
+
+// Render token status in Scanner and Lotto tabs
+function renderScannerLottoTokens(tokens) {
+  const thresholds = loadTokenThresholds();
+  const tokenSymbols = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "HYPE"];
+
+  // Scanner tokens
+  const scannerContainer = document.getElementById("scannerTokensContainer");
+  if (scannerContainer && tokens && tokens.length > 0) {
+    scannerContainer.innerHTML = "";
+    tokens.forEach(t => {
+      const threshold = thresholds[t.symbol] || 100;
+      const spread = t.spread || 0;
+      const shouldScan = spread >= threshold;
+      const modeColor = shouldScan ? "#ff9416" : "#ccc";
+      const spreadDisplay = spread ? `$${spread.toFixed(2)}` : "—";
+      const badge = document.createElement("div");
+      badge.style.cssText = `
+        background:#0f2b0f;border:1px solid #2a5a2a;border-radius:4px;padding:6px 8px;
+        display:flex;align-items:center;justify-content:space-between;gap:6px;
+      `;
+      badge.innerHTML = `
+        <span style="color:var(--green);font-weight:700">${t.symbol}</span>
+        <span style="color:#666;font-size:10px">${spreadDisplay}</span>
+        <span style="background:${modeColor};width:4px;height:4px;border-radius:50%"></span>
+      `;
+      scannerContainer.appendChild(badge);
+    });
+  }
+
+  // Lotto tokens (same display)
+  const lottoContainer = document.getElementById("lottoTokensContainer");
+  if (lottoContainer && tokens && tokens.length > 0) {
+    lottoContainer.innerHTML = "";
+    tokens.forEach(t => {
+      const threshold = thresholds[t.symbol] || 100;
+      const spread = t.spread || 0;
+      const shouldScan = spread >= threshold;
+      const modeColor = shouldScan ? "#ff9416" : "#ccc";
+      const spreadDisplay = spread ? `$${spread.toFixed(2)}` : "—";
+      const badge = document.createElement("div");
+      badge.style.cssText = `
+        background:#0f2b0f;border:1px solid #2a5a2a;border-radius:4px;padding:6px 8px;
+        display:flex;align-items:center;justify-content:space-between;gap:6px;
+      `;
+      badge.innerHTML = `
+        <span style="color:var(--green);font-weight:700">${t.symbol}</span>
+        <span style="color:#666;font-size:10px">${spreadDisplay}</span>
+        <span style="background:${modeColor};width:4px;height:4px;border-radius:50%"></span>
+      `;
+      lottoContainer.appendChild(badge);
+    });
+  }
 }
 
 // Load token data once on page load
