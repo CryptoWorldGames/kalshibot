@@ -2068,9 +2068,11 @@ def _get_balance(force: bool = False):
 
 @app.route("/api/system-info")
 def system_info():
-    """Return system information (hostname, OS, etc.) for onboarding and diagnostics."""
+    """Return system information (username, hostname, OS, etc.) for onboarding and diagnostics."""
     import platform
+    username = os.getenv("USERNAME", "").strip() or socket.gethostname()
     return jsonify({
+        "username": username,
         "hostname": socket.gethostname(),
         "platform": platform.system(),
     })

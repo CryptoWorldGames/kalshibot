@@ -1690,21 +1690,23 @@ async function showOnboarding() {
   const modal = document.getElementById("onboardingModal");
   if (modal) modal.style.display = "flex";
 
-  // Fetch and pre-fill the actual system hostname
+  // Wait a tick for DOM to fully render, then fetch and pre-fill the username
+  await new Promise(r => setTimeout(r, 10));
+
   try {
     const res = await fetch("/api/system-info");
     if (res.ok) {
       const data = await res.json();
       const input = document.getElementById("computerName");
-      if (input && data.hostname) {
-        input.value = data.hostname;
+      if (input && data.username) {
+        input.value = data.username;
+        updateStoragePath();  // Update path after setting value
       }
     }
   } catch (e) {
     console.error("Failed to fetch system info:", e);
+    updateStoragePath();
   }
-
-  updateStoragePath();
 }
 
 function updateStoragePath() {
