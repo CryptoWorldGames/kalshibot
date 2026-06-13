@@ -6385,6 +6385,13 @@ async function toggleSmartStrategy(src) {
   loadActiveProfile();   // mode switch changes the T1/T2 LEDs — refresh them now
 }
 
+// Auto-refresh Smart Strategy status every 10 seconds so spread updates live
+setInterval(() => {
+  if (!document.hidden) {  // Only refresh if tab is visible
+    loadSmartStrategyStatus();
+  }
+}, 10000);
+
 // ── Lotto (T2) settings: independent form, posts to profile T2 ────────────
 function setLottoEndsWithin(mins) {
   document.getElementById("L_minutes").value = mins;
