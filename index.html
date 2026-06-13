@@ -502,6 +502,54 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 </head>
 <body>
 
+<!-- ── SPLASH PAGE (First Load) ──────────────────────────────────── -->
+<div id="splashPage" style="position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:2000;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:32px;padding:40px 20px;text-align:center">
+  <div>
+    <div style="font-size:72px;font-weight:900;letter-spacing:-2px;margin-bottom:16px">
+      <span style="color:#fff">Kalshi</span><span style="color:var(--green)">Bot</span>
+    </div>
+    <div style="font-size:14px;color:#aaa;max-width:400px;line-height:1.6;margin-bottom:20px">
+      This is a trading bot that you can use on <b>Kalshi.com</b> to buy and sell for you <b>24/7</b>.
+      <br/><br/>
+      <span style="color:var(--yellow)">⚠️ It is still under development — use at your own risk!</span>
+    </div>
+    <div style="font-size:12px;color:#666;margin-bottom:24px" id="splashVersion">v—</div>
+    <button onclick="closeSplashAndSetup()" style="background:var(--green);border:none;color:#000;padding:12px 28px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;transition:all .2s">
+      Get Started →
+    </button>
+  </div>
+</div>
+
+<!-- ── ONBOARDING MODAL ──────────────────────────────────────────── -->
+<div id="onboardingModal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:1999;display:none;align-items:center;justify-content:center">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:40px;width:90%;max-width:500px;text-align:center">
+    <div style="font-size:28px;font-weight:700;color:#fff;margin-bottom:12px">Welcome to KalshiBot!</div>
+    <div style="font-size:13px;color:#aaa;margin-bottom:32px;line-height:1.6">
+      Let's set up your bot. We'll store your Kalshi API keys safely on your computer in a dedicated folder.
+    </div>
+
+    <div style="text-align:left;margin-bottom:20px;background:#0f0f0f;padding:20px;border-radius:8px;border:1px solid var(--border)">
+      <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:12px">📁 STORAGE FOLDER</div>
+      <div style="font-size:12px;color:#aaa;margin-bottom:16px">
+        What's your computer's name or nickname? This helps organize your setup folder.
+      </div>
+      <input type="text" id="computerName" placeholder="e.g., home-pc, laptop, trading-machine"
+        style="width:100%;background:#111;border:1px solid var(--border);border-radius:6px;color:#fff;padding:10px 12px;font-size:13px;font-family:monospace;margin-bottom:16px">
+      <div style="font-size:11px;color:#666;line-height:1.5">
+        Your credentials will be stored in:<br/>
+        <span id="storagePath" style="color:var(--green);font-weight:700;font-family:monospace">C:\Users\YourName\KalshiBots\home-pc\</span>
+      </div>
+    </div>
+
+    <button onclick="skipOnboarding()" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:10px 20px;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer;margin-right:10px;transition:all .2s;width:calc(50% - 5px)">
+      Skip for Now
+    </button>
+    <button onclick="completeOnboarding()" style="background:var(--green);border:none;color:#000;padding:10px 20px;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer;width:calc(50% - 5px);transition:all .2s">
+      Continue
+    </button>
+  </div>
+</div>
+
 <!-- ── NAV ──────────────────────────────────────────────────────── -->
 <nav>
   <div style="display:flex;flex-direction:column;gap:2px;margin-right:32px">
@@ -573,6 +621,35 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
         Upload custom audio files (MP3, WAV, OGG) for each notification type. Max 5MB per file.
       </div>
       <div id="soundsList"></div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">ℹ️ About</div>
+      <div style="font-size:13px;color:#ddd;line-height:1.6">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+          <span>KalshiBot Version</span>
+          <span id="settingsVersion" style="font-weight:700;color:var(--green);font-family:monospace">v—</span>
+        </div>
+        <div style="margin-bottom:12px">
+          <div style="font-size:11px;color:#888;margin-bottom:6px">Check for updates</div>
+          <button onclick="checkForUpdates()" style="background:transparent;border:1px solid var(--border);color:var(--blue);padding:6px 12px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;transition:all .2s;width:100%">
+            🔄 Check GitHub for Updates
+          </button>
+          <div id="updateStatus" style="font-size:11px;color:#888;margin-top:8px;display:none"></div>
+        </div>
+        <div style="background:#0f0f0f;padding:12px;border-radius:6px;border:1px solid var(--border);margin-top:12px">
+          <div style="font-size:11px;color:#888;margin-bottom:8px">📥 <b>How to update:</b></div>
+          <div style="font-size:11px;color:#aaa;line-height:1.6;font-family:monospace">
+            1. Open Command Prompt or Terminal<br/>
+            2. Navigate to your bot folder:<br/>
+            <span style="color:#666">cd C:\Users\YourName\Documents\kalshibot</span><br/>
+            3. Download the latest version:<br/>
+            <span style="color:#666">git pull origin main</span><br/>
+            4. Restart the bot (close and run again)<br/>
+            <span style="color:#666">python kalshibot_app.py</span>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -1560,6 +1637,112 @@ let pnlCurrentTotal = 0;
 
 function cyclePnlPeriod() {} // kept for compatibility
 
+// ── Splash Page & Onboarding ──────────────────────────────────────────
+function loadVersionInfo() {
+  fetch("/api/version")
+    .then(r => r.json())
+    .then(data => {
+      const v = data.version;
+      document.getElementById("splashVersion").textContent = `v${v}`;
+      document.getElementById("navVersion").textContent = `v${v}`;
+      document.getElementById("settingsVersion").textContent = `v${v}`;
+      document.getElementById("footerVersion").textContent = `v${v}`;
+    })
+    .catch(() => {});
+}
+
+function closeSplashAndSetup() {
+  const splash = document.getElementById("splashPage");
+  if (splash) splash.style.display = "none";
+
+  const hasSeenOnboarding = localStorage.getItem("kalshibot_onboarded");
+  if (!hasSeenOnboarding) {
+    showOnboarding();
+  }
+}
+
+function showOnboarding() {
+  const modal = document.getElementById("onboardingModal");
+  if (modal) modal.style.display = "flex";
+  updateStoragePath();
+}
+
+function updateStoragePath() {
+  const input = document.getElementById("computerName");
+  const computerName = input?.value?.trim() || "home-pc";
+  const pathEl = document.getElementById("storagePath");
+
+  if (pathEl) {
+    const isWindows = /Windows|MSIE|Trident/.test(navigator.userAgent);
+    const path = isWindows
+      ? `C:\\Users\\YourName\\KalshiBots\\${computerName}\\`
+      : `~/KalshiBots/${computerName}/`;
+    pathEl.textContent = path;
+  }
+}
+
+function completeOnboarding() {
+  const computerName = document.getElementById("computerName")?.value || "home-pc";
+  localStorage.setItem("kalshibot_computer_name", computerName);
+  localStorage.setItem("kalshibot_onboarded", "true");
+
+  const modal = document.getElementById("onboardingModal");
+  if (modal) modal.style.display = "none";
+
+  toast(`✓ Setup saved: ${computerName}`, "ok");
+}
+
+function skipOnboarding() {
+  localStorage.setItem("kalshibot_onboarded", "true");
+  const modal = document.getElementById("onboardingModal");
+  if (modal) modal.style.display = "none";
+}
+
+// ── Update Checking ───────────────────────────────────────────────────
+async function checkForUpdates() {
+  const statusEl = document.getElementById("updateStatus");
+  if (!statusEl) return;
+
+  statusEl.style.display = "block";
+  statusEl.textContent = "Checking GitHub...";
+  statusEl.style.color = "#888";
+
+  try {
+    const resp = await fetch("https://api.github.com/repos/CryptoWorldGames/kalshibot/releases/latest", {cache: "no-store"});
+    if (!resp.ok) throw new Error("GitHub API error");
+
+    const data = await resp.json();
+    const latestVersion = data.tag_name?.replace("v", "") || "unknown";
+    const currentVersion = (document.getElementById("navVersion").textContent || "v1.3.0").replace("v", "");
+
+    if (latestVersion === "unknown") {
+      statusEl.textContent = "Could not check version";
+      statusEl.style.color = "#f5c542";
+      return;
+    }
+
+    if (latestVersion > currentVersion) {
+      statusEl.innerHTML = `
+        <div style="color:var(--green);margin-bottom:8px">
+          ✓ <b>Update available: v${latestVersion}</b> (current: v${currentVersion})
+        </div>
+        <div style="font-size:10px;line-height:1.5;color:#aaa">
+          Open Command Prompt and run:<br/>
+          <span style="color:#666;font-family:monospace">cd C:\Users\YourName\Documents\kalshibot</span><br/>
+          <span style="color:#666;font-family:monospace">git pull origin main</span><br/>
+          Then restart the bot.
+        </div>
+      `;
+    } else {
+      statusEl.textContent = `✓ You're up to date (v${currentVersion})`;
+      statusEl.style.color = "var(--green)";
+    }
+  } catch(e) {
+    statusEl.textContent = `Error checking updates: ${e.message}`;
+    statusEl.style.color = "var(--red)";
+  }
+}
+
 function refreshPnlDisplay() {
   const wrap = document.getElementById("navPnlAll");
   if (!wrap) return;
@@ -2263,8 +2446,30 @@ async function loadSettlements() {
 window.addEventListener("load", () => {
   // Show the running build's version in the header, and restore the saved timezone.
   loadVersion();
+  loadVersionInfo();  // Load version for splash page & about section
   const _tzSel = document.getElementById("tzSelect");
   if (_tzSel) _tzSel.value = getTimezone();
+
+  // Set up onboarding and computer name input listener
+  const computerNameInput = document.getElementById("computerName");
+  if (computerNameInput) {
+    computerNameInput.addEventListener("input", updateStoragePath);
+    // Populate with saved name if available
+    const savedName = localStorage.getItem("kalshibot_computer_name");
+    if (savedName) computerNameInput.value = savedName;
+  }
+  updateStoragePath();  // Update path on load
+
+  // Check if we should show splash page (first time)
+  const hasSeenSplash = localStorage.getItem("kalshibot_splash_seen");
+  if (!hasSeenSplash) {
+    localStorage.setItem("kalshibot_splash_seen", "true");
+    // Splash page is visible by default - will be closed when user clicks button
+  } else {
+    // Hide splash page if not first visit
+    const splash = document.getElementById("splashPage");
+    if (splash) splash.style.display = "none";
+  }
   // Load bot status (running/stopped) and cash first
   loadBotStatus();
   loadCash();
