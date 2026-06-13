@@ -1677,8 +1677,18 @@ function closeSplashAndSetup() {
   const splash = document.getElementById("splashPage");
   if (splash) splash.style.display = "none";
 
+  // Check if localStorage works (not in private mode)
+  let isPrivateMode = false;
+  try {
+    localStorage.setItem("_test", "1");
+    localStorage.removeItem("_test");
+  } catch (e) {
+    isPrivateMode = true;  // Private mode detected
+  }
+
+  // Skip onboarding in private mode OR if user has already onboarded
   const hasSeenOnboarding = localStorage.getItem("kalshibot_onboarded");
-  if (!hasSeenOnboarding) {
+  if (!hasSeenOnboarding && !isPrivateMode) {
     showOnboarding();
   }
 }
