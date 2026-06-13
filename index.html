@@ -682,10 +682,16 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <span id="smartStrategyToggle" style="color:var(--green);font-size:16px">▼</span>
   </div>
 
-  <!-- Expandable Panel -->
-  <div id="smartStrategyPanel" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;padding:16px;border-top:1px solid #2a4a2a">
-    <!-- Dynamically populated by loadSmartStrategyTokens() -->
-    <div id="tokenCardsContainer" style="grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;text-align:center;color:#888">Loading tokens...</div>
+  <!-- Expandable Panel with Token Cards and Thresholds -->
+  <div id="smartStrategyPanel" style="display:block;padding:16px;border-top:1px solid #2a4a2a">
+    <!-- Token Cards Grid -->
+    <div id="tokenCardsContainer" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px"></div>
+
+    <!-- Token Thresholds Configuration -->
+    <div style="border-top:1px solid #2a4a2a;padding-top:12px">
+      <div style="font-size:11px;color:#888;text-transform:uppercase;font-weight:700;margin-bottom:8px">Per-Token Thresholds (spread in $)</div>
+      <div id="tokenThresholdsContainer" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px"></div>
+    </div>
   </div>
 </div>
 
@@ -6746,71 +6752,86 @@ async function loadSmartStrategyTokens() {
   }
 }
 
+// Load token thresholds from localStorage
+function loadTokenThresholds() {
+  const saved = localStorage.getItem("token_thresholds");
+  return saved ? JSON.parse(saved) : {BTC:100, ETH:100, SOL:100, XRP:0.25, DOGE:100, BNB:100, HYPE:100};
+}
+
+// Save token thresholds to localStorage
+function saveTokenThresholds(thresholds) {
+  localStorage.setItem("token_thresholds", JSON.stringify(thresholds));
+}
+
 function renderSmartStrategyTokens(tokens, scanState = {}) {
   const container = document.getElementById("tokenCardsContainer");
+  const thresholdContainer = document.getElementById("tokenThresholdsContainer");
   if (!container) return;
 
-  if (tokens.length === 0) {
-    container.innerHTML = '<div style="grid-column:1/-1;color:#888;padding:20px">No token data</div>';
+  if (!tokens || tokens.length === 0) {
+    container.innerHTML = '<div style="color:#888;padding:20px">No token data</div>';
     return;
   }
 
+  const thresholds = loadTokenThresholds();
+  const tokenMap = {};
+  tokens.forEach(t => { tokenMap[t.symbol] = t; });
+
+  // Render token cards
   container.innerHTML = '';
-
-  // Get active token for each profile
-  const activeT1 = scanState?.T1?.token;
-  const activeT2 = scanState?.T2?.token;
-  const activeProfiles = scanState?.active_profiles || [];
-  const isT1Active = activeProfiles.includes("T1");
-  const isT2Active = activeProfiles.includes("T2");
-
   tokens.forEach((t, idx) => {
-    const isActive = (isT1Active && t.symbol === activeT1) || (isT2Active && t.symbol === activeT2);
-    const activeMode = isT1Active && t.symbol === activeT1 ? "T1" : isT2Active && t.symbol === activeT2 ? "T2" : null;
+    const threshold = thresholds[t.symbol] || 100;
+    const spread = t.spread || 0;
+    const shouldScan = spread >= threshold;
+    const mode = shouldScan ? "SCANNER" : "LOTTO";
+    const modeColor = shouldScan ? "#ff9416" : "#00d97e";
 
     const card = document.createElement("div");
-    const borderColor = isActive ? "var(--green)" : "#2a5a2a";
-    const borderWidth = isActive ? "2px" : "1px";
-    const bgColor = isActive ? "#0f3d0f" : "#0f2b0f";
-
     card.style.cssText = `
-      background:${bgColor};
-      border:${borderWidth} solid ${borderColor};
-      border-radius:6px;
-      padding:12px;
-      display:flex;
-      flex-direction:column;
-      gap:8px;
-      font-size:12px;
-      animation:slideIn 0.3s ease forwards;
-      animation-delay:${idx * 50}ms;
-      opacity:0;
-      box-shadow:${isActive ? "0 0 12px rgba(0,217,126,0.3)" : "none"};
+      background:#0f2b0f;border:1px solid #2a5a2a;border-radius:6px;padding:12px;
+      display:flex;flex-direction:column;gap:8px;font-size:12px;
       transition:all 0.2s;
     `;
 
-    const spreadDisplay = t.spread ? `$${t.spread.toFixed(2)}` : "—";
-    const spreadColor = t.spread > 50 ? "var(--green)" : "#f5c542";
+    const spreadDisplay = spread ? `$${spread.toFixed(2)}` : "—";
+    const spreadColor = spread >= threshold ? "var(--green)" : "#f5c542";
 
     card.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between">
         <div style="font-weight:700;color:var(--green);font-size:13px">${t.symbol}</div>
-        ${isActive ? `<div style="background:${activeMode === "T1" ? "#ff9416" : "#00d97e"};color:#000;padding:2px 6px;border-radius:3px;font-weight:700;font-size:10px">${activeMode === "T1" ? "SCANNER" : "LOTTO"}</div>` : ""}
+        <div style="background:${modeColor};color:#000;padding:2px 6px;border-radius:3px;font-weight:700;font-size:10px">${mode}</div>
       </div>
       <div style="font-size:11px;color:#aaa">
         <div>Spread: <span style="color:${spreadColor};font-weight:700">${spreadDisplay}</span></div>
-        ${t.price_yes ? `<div>Price: <span style="color:#0f9">$${t.price_yes.toFixed(2)}</span></div>` : ""}
+        <div style="font-size:10px;color:#666">Threshold: $${threshold.toFixed(2)}</div>
       </div>
-      ${t.message ? `<div style="font-size:10px;color:#f5c542;padding:4px;background:#2a3a2a;border-radius:2px;text-align:center">${t.message}</div>` : `<div style="font-size:10px;color:#666;text-align:center">Learn by trading $1 per bet</div>`}
     `;
 
     container.appendChild(card);
   });
 
-  // Add animation
-  const style = document.createElement("style");
-  style.textContent = `@keyframes slideIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }`;
-  document.head.appendChild(style);
+  // Render threshold inputs
+  if (thresholdContainer) {
+    thresholdContainer.innerHTML = '';
+    tokens.forEach(t => {
+      const threshold = thresholds[t.symbol] || 100;
+      const inp = document.createElement("div");
+      inp.style.cssText = "display:flex;align-items:center;gap:4px;font-size:11px";
+      inp.innerHTML = `
+        <span style="width:40px;color:#aaa">${t.symbol}:</span>
+        <input type="number" value="${threshold}" step="0.01" style="width:60px;padding:4px;background:#0f2b0f;border:1px solid #2a5a2a;color:#0f9;font-size:11px"
+          onchange="updateTokenThreshold('${t.symbol}', this.value)">
+      `;
+      thresholdContainer.appendChild(inp);
+    });
+  }
+}
+
+function updateTokenThreshold(symbol, value) {
+  const thresholds = loadTokenThresholds();
+  thresholds[symbol] = parseFloat(value) || 100;
+  saveTokenThresholds(thresholds);
+  loadSmartStrategyTokens(); // Refresh to show updated mode
 }
 
 // Load token data once on page load
