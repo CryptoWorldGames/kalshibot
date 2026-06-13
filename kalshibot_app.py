@@ -2078,6 +2078,94 @@ def system_info():
     })
 
 
+@app.route("/api/smart-strategy/tokens")
+def smart_strategy_tokens():
+    """Return live spread data for 7 crypto 15-min tokens.
+    Lightweight endpoint — no expensive backtesting calculations.
+    Data accumulates naturally as user trades."""
+
+    tokens = {
+        "BTC": "KXBTC15M",
+        "ETH": "KXETH15M",
+        "SOL": "KXSOL15M",
+        "XRP": "KXXRP15M",
+        "DOGE": "KXDOGE15M",
+        "BNB": "KXBNB15M",
+        "HYPE": "KXHYPE15M",
+    }
+
+    result = []
+
+    for symbol, series_prefix in tokens.items():
+        try:
+            # Get current markets for this token (find the one expiring soonest)
+            markets_url = f"{BASE_URL}{API_PREFIX}/markets?series_ticker={series_prefix}"
+            markets_resp = req.get(markets_url, timeout=3)
+            markets_resp.raise_for_status()
+            markets_data = markets_resp.json()
+
+            if not markets_data.get("markets"):
+                # No markets found for this token yet
+                result.append({
+                    "symbol": symbol,
+                    "spread": 0,
+                    "price_yes": 0,
+                    "price_no": 0,
+                    "volume": 0,
+                    "message": "No markets yet"
+                })
+                continue
+
+            # Find best market (least time to expiry with volume)
+            best_market = None
+            for m in markets_data["markets"]:
+                if m.get("status") == "live" and m.get("volume", 0) > 0:
+                    best_market = m
+                    break
+
+            if not best_market:
+                result.append({
+                    "symbol": symbol,
+                    "spread": 0,
+                    "price_yes": 0,
+                    "price_no": 0,
+                    "volume": 0,
+                    "message": "No active markets"
+                })
+                continue
+
+            # Calculate spread
+            price_yes = float(best_market.get("last_price_yes", 0)) or 50
+            price_no = float(best_market.get("last_price_no", 0)) or 50
+            spread = abs(price_yes - price_no)
+
+            result.append({
+                "symbol": symbol,
+                "spread": round(spread, 2),
+                "price_yes": round(price_yes, 2),
+                "price_no": round(price_no, 2),
+                "volume": int(best_market.get("volume", 0)),
+                "ticker": best_market.get("ticker_name", ""),
+            })
+
+        except Exception as e:
+            # Market unavailable — skip gracefully
+            result.append({
+                "symbol": symbol,
+                "spread": 0,
+                "price_yes": 0,
+                "price_no": 0,
+                "volume": 0,
+                "message": f"Error: {str(e)[:30]}"
+            })
+
+    return jsonify({
+        "tokens": result,
+        "timestamp": time.time(),
+        "note": "Data accumulates from your trades — start with $1 per trade to learn safely"
+    })
+
+
 @app.route("/api/balance")
 def balance_only():
     """Lightweight cash + positions value — one (cached) Kalshi call. The frontend
