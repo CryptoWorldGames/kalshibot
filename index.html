@@ -1020,6 +1020,17 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <div class="smartStrategyStatus" style="font-size:12px;color:#888;margin-top:8px">Loading...</div>
   </div>
 
+  <!-- Inline Coach (always visible on Lotto page too) -->
+  <div id="coachInlineLotto" style="background:#0c1612;border:1px solid #1f6045;border-radius:8px;padding:12px 14px;margin-bottom:14px;display:none">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <span style="font-size:14px">💡</span>
+      <span style="font-weight:700;font-size:13px;color:var(--green);text-transform:uppercase;letter-spacing:.5px">Coach</span>
+      <span style="font-size:11px;color:#888" id="coachInlineLottoMeta"></span>
+      <a href="#" onclick="switchTab('coach');return false" style="margin-left:auto;color:var(--blue);font-size:12px;text-decoration:none">full report →</a>
+    </div>
+    <div id="coachInlineLottoBody" style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:#ddd;line-height:1.45"></div>
+  </div>
+
   <!-- M1–M5 memory slots (Lotto page ONLY) — like a calculator's memory buttons -->
   <div class="card" style="margin-bottom:10px">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -1101,7 +1112,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 
       <!-- BUY DOWN -->
       <div style="flex:1;border:1px solid var(--border);border-radius:8px;padding:12px">
-        <label class="check-row" style="font-weight:700;color:var(--red);display:block;margin-bottom:8px"><input type="checkbox" id="L_enableBuyDown" onchange="pushLottoSettings()"> 📉 BUY DOWN (NO)</label>
+        <label class="check-row" style="font-weight:700;color:var(--red);display:block;margin-bottom:8px"><input type="checkbox" id="L_enableBuyDown" checked onchange="pushLottoSettings()"> 📉 BUY DOWN (NO)</label>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
           <span style="font-size:12px;color:var(--muted)">From</span>
           <input type="number" id="L_minProbDown" min="1" max="99" value="1" onchange="pushLottoSettings()" oninput="pushLottoSettings()">
@@ -4686,21 +4697,29 @@ async function refreshClippy() {
     const inline = document.getElementById("coachInline");
     const body   = document.getElementById("coachInlineBody");
     const meta   = document.getElementById("coachInlineMeta");
-    if (inline && body) {
-      if (recs.length) {
-        body.innerHTML = recs.slice(0, 3).map(rc => {
+    const inlineLotto = document.getElementById("coachInlineLotto");
+    const bodyLotto   = document.getElementById("coachInlineLottoBody");
+    const metaLotto   = document.getElementById("coachInlineLottoMeta");
+
+    const content = recs.length
+      ? recs.slice(0, 3).map(rc => {
           const color = rc.type === "prefer" ? "var(--green)" : rc.type === "avoid" ? "var(--red)" : "var(--blue)";
           const icon  = rc.type === "prefer" ? "↑" : rc.type === "avoid" ? "↓" : "ⓘ";
           const msg   = rc.msg.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
           return `<div style="display:flex;gap:8px;align-items:flex-start"><span style="color:${color};font-weight:700;min-width:14px">${icon}</span><span>${msg}</span></div>`;
-        }).join("");
-        if (meta) meta.textContent = `based on ${d.totals?.trades || 0} settled trades`;
-        inline.style.display = "block";
-      } else {
-        body.innerHTML = '<div style="color:#888;font-size:12px">Not enough data yet — recommendations sharpen as more trades settle.</div>';
-        if (meta) meta.textContent = "";
-        inline.style.display = "block";
-      }
+        }).join("")
+      : '<div style="color:#888;font-size:12px">Not enough data yet — recommendations sharpen as more trades settle.</div>';
+    const metaText = recs.length ? `based on ${d.totals?.trades || 0} settled trades` : "";
+
+    if (inline && body) {
+      body.innerHTML = content;
+      if (meta) meta.textContent = metaText;
+      inline.style.display = "block";
+    }
+    if (inlineLotto && bodyLotto) {
+      bodyLotto.innerHTML = content;
+      if (metaLotto) metaLotto.textContent = metaText;
+      inlineLotto.style.display = "block";
     }
 
     // Floating Clippy: only the top recommendation, dismissable per-rec
