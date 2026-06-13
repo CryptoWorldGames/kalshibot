@@ -2066,6 +2066,16 @@ def _get_balance(force: bool = False):
         return cached  # last-known on failure; None only if we never succeeded
 
 
+@app.route("/api/system-info")
+def system_info():
+    """Return system information (hostname, OS, etc.) for onboarding and diagnostics."""
+    import platform
+    return jsonify({
+        "hostname": socket.gethostname(),
+        "platform": platform.system(),
+    })
+
+
 @app.route("/api/balance")
 def balance_only():
     """Lightweight cash + positions value — one (cached) Kalshi call. The frontend
