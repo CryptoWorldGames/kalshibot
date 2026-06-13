@@ -2078,88 +2078,92 @@ def system_info():
     })
 
 
-@app.route("/api/smart-strategy/tokens")
-def smart_strategy_tokens():
-    """Return live spread data for 7 crypto 15-min tokens.
-    Lightweight endpoint — makes concurrent API calls to stay fast.
-    Data accumulates naturally as user trades."""
+# ── Smart Strategy token cards: cached live spreads ─────────────────────────
+_SMART_TOKENS = {
+    "BTC": "KXBTC15M", "ETH": "KXETH15M", "SOL": "KXSOL15M",
+    "XRP": "KXXRP15M", "DOGE": "KXDOGE15M", "BNB": "KXBNB15M",
+    "HYPE": "KXHYPE15M",
+}
+_token_spread_cache = {"data": [], "ts": 0.0, "refreshing": False}
+_TOKEN_SPREAD_TTL = 12.0  # seconds — short so the spread tracks the market
 
-    tokens = {
-        "BTC": "KXBTC15M",
-        "ETH": "KXETH15M",
-        "SOL": "KXSOL15M",
-        "XRP": "KXXRP15M",
-        "DOGE": "KXDOGE15M",
-        "BNB": "KXBNB15M",
-        "HYPE": "KXHYPE15M",
-    }
+def _fetch_one_token_spread(symbol, series_prefix):
+    """Live 'spread' for one token = how far spot is from the nearest strike
+    (how far it is from 'flipping'), averaged over the nearest open markets."""
+    try:
+        spot, _src = _spot_price(symbol)
+        d = kalshi_get("/markets", {"series_ticker": series_prefix,
+                                    "status": "open", "limit": 5})
+        markets = (d or {}).get("markets", [])
+        if not markets:
+            return {"symbol": symbol, "spread": 0, "spot": 0, "volume": 0, "message": "No open markets"}
+        cushions = []
+        total_vol = 0
+        for m in markets:
+            strike = _strike_from_market(m)
+            if strike and spot:
+                cushions.append(abs(spot - strike))
+            total_vol += int(m.get("volume", 0) or 0)
+        if not spot:
+            return {"symbol": symbol, "spread": 0, "spot": 0, "volume": total_vol, "message": "No spot price"}
+        if not cushions:
+            return {"symbol": symbol, "spread": 0, "spot": round(spot, 2), "volume": total_vol, "message": "No strike data"}
+        return {"symbol": symbol, "spread": round(sum(cushions) / len(cushions), 2),
+                "spot": round(spot, 2), "volume": total_vol, "ticker": markets[0].get("ticker", "")}
+    except Exception as e:
+        return {"symbol": symbol, "spread": 0, "spot": 0, "volume": 0, "message": f"error: {e}"}
 
+def _compute_token_spreads():
+    """Fetch all 7 token spreads concurrently, sorted in display order."""
     result = []
-
-    def fetch_token_data(symbol, series_prefix):
-        """Fetch the live 'spread' for one token (runs in thread pool).
-
-        'Spread' here = how far the token's spot price is from the nearest
-        strike — i.e. how far it is from 'flipping'. This is the same metric
-        the Smart Strategy status bar shows ("BTC is $73 from flipping").
-        Averaged over the few nearest open markets for stability."""
-        try:
-            spot, _src = _spot_price(symbol)
-            d = kalshi_get("/markets", {"series_ticker": series_prefix,
-                                        "status": "open", "limit": 5})
-            markets = (d or {}).get("markets", [])
-
-            if not markets:
-                return {"symbol": symbol, "spread": 0, "spot": 0,
-                        "volume": 0, "message": "No open markets"}
-
-            # Distance of spot from each strike → average = current spread
-            cushions = []
-            total_vol = 0
-            for m in markets:
-                strike = _strike_from_market(m)
-                if strike and spot:
-                    cushions.append(abs(spot - strike))
-                total_vol += int(m.get("volume", 0) or 0)
-
-            if not spot:
-                return {"symbol": symbol, "spread": 0, "spot": 0,
-                        "volume": total_vol, "message": "No spot price"}
-            if not cushions:
-                return {"symbol": symbol, "spread": 0, "spot": round(spot, 2),
-                        "volume": total_vol, "message": "No strike data"}
-
-            spread = round(sum(cushions) / len(cushions), 2)
-            return {
-                "symbol": symbol,
-                "spread": spread,
-                "spot": round(spot, 2),
-                "volume": total_vol,
-                "ticker": markets[0].get("ticker", ""),
-            }
-
-        except Exception as e:
-            return {"symbol": symbol, "spread": 0, "spot": 0,
-                    "volume": 0, "message": f"error: {e}"}
-
-    # Fetch all tokens concurrently
     with concurrent.futures.ThreadPoolExecutor(max_workers=7) as executor:
-        futures = {executor.submit(fetch_token_data, sym, prefix): sym
-                   for sym, prefix in tokens.items()}
+        futures = {executor.submit(_fetch_one_token_spread, sym, prefix): sym
+                   for sym, prefix in _SMART_TOKENS.items()}
         for future in concurrent.futures.as_completed(futures):
             try:
                 result.append(future.result())
             except Exception:
                 pass
+    order = list(_SMART_TOKENS.keys())
+    result.sort(key=lambda t: order.index(t.get("symbol")) if t.get("symbol") in order else 999)
+    return result
 
-    # Sort by symbol order
-    symbol_order = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "HYPE"]
-    result.sort(key=lambda t: symbol_order.index(t.get("symbol", "")) if t.get("symbol") in symbol_order else 999)
+
+@app.route("/api/smart-strategy/tokens")
+def smart_strategy_tokens():
+    """Per-token live spread for the Smart Strategy cards. Served from a short
+    cache: the first call computes synchronously (slow — 7 spot+market lookups),
+    later calls are instant and a background thread keeps the data fresh so the
+    spread tracks live price movements."""
+    now = time.time()
+    fresh = (now - _token_spread_cache["ts"]) < _TOKEN_SPREAD_TTL
+    have_data = bool(_token_spread_cache["data"])
+
+    if not fresh and not _token_spread_cache["refreshing"]:
+        _token_spread_cache["refreshing"] = True
+        if have_data:
+            # Serve the (slightly stale) cache instantly, refresh in background.
+            def _bg():
+                try:
+                    _token_spread_cache["data"] = _compute_token_spreads()
+                    _token_spread_cache["ts"] = time.time()
+                except Exception as e:
+                    print(f"[smart-strategy] token refresh failed: {e}")
+                finally:
+                    _token_spread_cache["refreshing"] = False
+            threading.Thread(target=_bg, daemon=True).start()
+        else:
+            # First ever call — compute now so the cards have data to show.
+            try:
+                _token_spread_cache["data"] = _compute_token_spreads()
+                _token_spread_cache["ts"] = time.time()
+            finally:
+                _token_spread_cache["refreshing"] = False
 
     return jsonify({
-        "tokens": result,
-        "timestamp": time.time(),
-        "note": "Data accumulates from your trades — start with $1 per trade to learn safely"
+        "tokens": _token_spread_cache["data"],
+        "timestamp": _token_spread_cache["ts"],
+        "note": "Spread = distance from the strike (how far the token is from flipping)",
     })
 
 
