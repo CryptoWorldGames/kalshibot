@@ -531,9 +531,9 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <div style="text-align:left;margin-bottom:20px;background:#0f0f0f;padding:20px;border-radius:8px;border:1px solid var(--border)">
       <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:12px">📁 STORAGE FOLDER</div>
       <div style="font-size:12px;color:#aaa;margin-bottom:16px">
-        What's your computer's name or nickname? This helps organize your setup folder.
+        Your computer name (we auto-detected it below, but you can customize it if you prefer).
       </div>
-      <input type="text" id="computerName" placeholder="e.g., home-pc, laptop, trading-machine"
+      <input type="text" id="computerName" placeholder="your-computer-name"
         style="width:100%;background:#111;border:1px solid var(--border);border-radius:6px;color:#fff;padding:10px 12px;font-size:13px;font-family:monospace;margin-bottom:16px">
       <div style="font-size:11px;color:#666;line-height:1.5">
         Your credentials will be stored in:<br/>
@@ -1686,9 +1686,24 @@ function closeSplashAndSetup() {
   }
 }
 
-function showOnboarding() {
+async function showOnboarding() {
   const modal = document.getElementById("onboardingModal");
   if (modal) modal.style.display = "flex";
+
+  // Fetch and pre-fill the actual system hostname
+  try {
+    const res = await fetch("/api/system-info");
+    if (res.ok) {
+      const data = await res.json();
+      const input = document.getElementById("computerName");
+      if (input && data.hostname) {
+        input.value = data.hostname;
+      }
+    }
+  } catch (e) {
+    console.error("Failed to fetch system info:", e);
+  }
+
   updateStoragePath();
 }
 
