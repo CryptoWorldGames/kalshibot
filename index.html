@@ -1135,6 +1135,18 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     </div>
   </div>
 
+  <!-- Saved Strategies (T2 — same as Scanner) -->
+  <div class="card" style="margin-bottom:10px">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <span style="font-size:12px;color:var(--muted);font-weight:700">⭐ SAVED STRATEGIES (Lotto)</span>
+      <button class="sm ghost" style="font-size:12px;padding:6px 14px" onclick="document.getElementById('L_strategySlots').style.display=document.getElementById('L_strategySlots').style.display==='none'?'block':'none'">🎯 Load Strategy</button>
+    </div>
+    <div id="L_strategySlots" style="display:none;border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:12px;background:#0a0a0a">
+      <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">10 Saved Strategies — click a name to load, hit Save to store current settings</div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px" id="L_stratSlotGrid"></div>
+    </div>
+  </div>
+
   <!-- AUTO MODE (T2) — identical to Scanner -->
   <div class="card" style="margin-bottom:10px">
     <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:12px">⚙️ AUTO MODE — scans + auto-buys</div>
@@ -6343,6 +6355,44 @@ function loadStratSlot(i) {
     : "— ready, hit Start Bot";
   toast(`✓ Loaded "${slot.name}" ${tail}`, "ok");
 }
+
+// ── Lotto Saved Strategies (T2 — syncs with backend) ─────────────────────
+async function renderLottoStratSlots() {
+  const grid = document.getElementById("L_stratSlotGrid");
+  if (!grid) return;
+  try {
+    const resp = await fetch("/api/saved-strategies?profile=T2", {cache: "no-store"});
+    const data = await resp.json();
+    const slots = data.slots || [];
+    grid.innerHTML = slots.map((slot, i) => {
+      const name = slot?.name || `Strategy ${i+1}`;
+      const hasData = !!slot;
+      return `<div style="display:flex;gap:4px;align-items:center">
+        <button onclick="loadLottoStratSlot(${i})" style="flex:1;background:${hasData?'#1a2a1a':'#111'};border:1px solid ${hasData?'var(--green)':'var(--border)'};border-radius:6px;color:${hasData?'var(--green)':'#666'};padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${hasData?'Click to load: '+name:'Empty slot'}">
+          ${hasData?'✓ ':''}${name}
+        </button>
+        <button onclick="saveLottoStratSlot(${i})" style="background:#0a1a0a;border:1px solid var(--border);border-radius:6px;color:var(--green);padding:6px 8px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap" title="Save current settings here">Save</button>
+      </div>`;
+    }).join("");
+  } catch(e) {
+    grid.innerHTML = `<div style="grid-column:1/-1;color:var(--red);font-size:11px">Failed to load strategies</div>`;
+  }
+}
+
+async function saveLottoStratSlot(i) {
+  const name = prompt(`Name for Strategy ${i+1}:`, `Strategy ${i+1}`);
+  if (name === null) return;
+  const chk = id => { const el = document.getElementById(id); return el ? el.checked : false; };
+  const num = (id,d) => { const el = document.getElementById(id); const v = parseFloat(el?.value); return isNaN(v)?d:v; };
+  const stratData = {name,enable_buy_up:chk("L_enableBuyUp"),up_min:num("L_minProb",80),up_max:num("L_maxProb",96),enable_buy_down:chk("L_enableBuyDown"),down_min:num("L_minProbDown",80),down_max:num("L_maxProbDown",96),minutes:num("L_minutes",15),buy_amount:num("L_buyAmount",1),max_per_scan:num("L_autoMaxPerScan",20),max_concurrent:num("L_autoMaxConcurrent",20),max_per_market:num("L_maxBuysPerMarket",1),show_crypto:chk("L_showCrypto"),show_sports:chk("L_showSports"),show_combo:chk("L_showCombo"),show_politics:chk("L_showPolitics"),show_economics:chk("L_showEconomics"),good_liq:chk("L_goodLiq"),hide_multi:chk("L_hideMultiOutcome")};
+  try{const resp=await fetch("/api/saved-strategies?profile=T2",{cache:"no-store"}),data=await resp.json(),slots=data.slots||[];slots[i]=stratData;await fetch("/api/saved-strategies",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({profile:"T2",slots})});toast(`✓ Saved "${name}"`,"ok");renderLottoStratSlots()}catch(e){toast("Failed to save","err")}
+}
+
+async function loadLottoStratSlot(i) {
+  try{const resp=await fetch("/api/saved-strategies?profile=T2",{cache:"no-store"}),data=await resp.json(),slot=(data.slots||[])[i];if(!slot){toast("Empty slot","");return}const set=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v},chk=(id,v)=>{const el=document.getElementById(id);if(el)el.checked=!!v};chk("L_enableBuyUp",slot.enable_buy_up);set("L_minProb",slot.up_min);set("L_maxProb",slot.up_max);chk("L_enableBuyDown",slot.enable_buy_down);set("L_minProbDown",slot.down_min);set("L_maxProbDown",slot.down_max);set("L_minutes",slot.minutes);set("L_buyAmount",slot.buy_amount);set("L_autoMaxPerScan",slot.max_per_scan);set("L_autoMaxConcurrent",slot.max_concurrent);set("L_maxBuysPerMarket",slot.max_per_market);chk("L_showCrypto",slot.show_crypto);chk("L_showSports",slot.show_sports);chk("L_showCombo",slot.show_combo);chk("L_showPolitics",slot.show_politics);chk("L_showEconomics",slot.show_economics);chk("L_goodLiq",slot.good_liq);chk("L_hideMultiOutcome",slot.hide_multi);pushLottoSettings();renderLottoStratSlots();toast(`✓ Loaded "${slot.name}"`,"ok")}catch(e){toast("Failed to load","err")}
+}
+
+renderLottoStratSlots();
 
 // ── Settings save/load ───────────────────────────────────────────────────
 
