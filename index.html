@@ -2863,7 +2863,7 @@ async function pushStrategy() {
   try {
     // Timeout so a busy server (mid-scan) can't make the save hang forever.
     const _ctrl = new AbortController();
-    const _tid = setTimeout(() => _ctrl.abort(), 8000);
+    const _tid = setTimeout(() => _ctrl.abort(), 15000);
     // Send the ACTUAL frontend stratMode (not converted) so backend knows exactly which strategy was selected
     const resp = await fetch("/api/strategy", {
       method:"POST", headers:{"Content-Type":"application/json"},
