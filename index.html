@@ -1139,35 +1139,35 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <div id="coachInlineLottoBody" style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:#ddd;line-height:1.45"></div>
   </div>
 
-  <!-- M1–M5 memory slots (Lotto page ONLY) — like a calculator's memory buttons -->
-  <div class="card" style="margin-bottom:10px">
-    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-      <span style="font-size:12px;color:var(--muted);font-weight:700">MEMORY</span>
-      <button id="lottoMemSaveBtn" onclick="toggleLottoMemSave()" style="background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:12px;font-weight:700;padding:6px 10px;cursor:pointer">💾 Save</button>
-      <button class="lottoMem" id="lottoMem1" onclick="lottoMemClick(1)">M1</button>
-      <button class="lottoMem" id="lottoMem2" onclick="lottoMemClick(2)">M2</button>
-      <button class="lottoMem" id="lottoMem3" onclick="lottoMemClick(3)">M3</button>
-      <button class="lottoMem" id="lottoMem4" onclick="lottoMemClick(4)">M4</button>
-      <button class="lottoMem" id="lottoMem5" onclick="lottoMemClick(5)">M5</button>
-      <span id="lottoMemHint" style="font-size:11px;color:var(--muted)">tap to recall</span>
-    </div>
-  </div>
-
-  <!-- Saved Strategies (T2 — same as Scanner) -->
+  <!-- Saved Strategies (unified format, same as Scanner) -->
   <div class="card" style="margin-bottom:10px">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-      <span style="font-size:12px;color:var(--muted);font-weight:700">⭐ SAVED STRATEGIES (Lotto)</span>
-      <button class="sm ghost" style="font-size:12px;padding:6px 14px" onclick="document.getElementById('L_strategySlots').style.display=document.getElementById('L_strategySlots').style.display==='none'?'block':'none'">🎯 Load Strategy</button>
+      <span onclick="toggleSection('L_strategyBody')" style="cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);font-weight:700">
+        <span id="L_strategyBody-toggle" style="font-size:16px;color:var(--green)">▼</span>
+        ⭐ SAVED STRATEGIES (Lotto)
+      </span>
+      <div style="display:flex;gap:6px">
+        <button id="lottoMemSaveBtn" class="sm ghost" onclick="toggleLottoMemSave()" style="font-size:12px;padding:6px 10px">💾 Save</button>
+        <button class="sm ghost" style="font-size:12px;padding:6px 10px" onclick="toggleSection('L_strategySlots')">🎯 Load</button>
+      </div>
     </div>
-    <div id="L_strategySlots" style="display:none;border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:12px;background:#0a0a0a">
-      <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">10 Saved Strategies — click a name to load, hit Save to store current settings</div>
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px" id="L_stratSlotGrid"></div>
+    <div id="L_strategyBody" style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+      <div id="L_strategySlots" style="display:none;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;background:#0a0a0a">
+        <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">10 Saved Strategies — click a name to load, hit Save to store current settings</div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px" id="L_stratSlotGrid"></div>
+      </div>
     </div>
   </div>
 
-  <!-- AUTO MODE (T2) — identical to Scanner -->
+  <!-- AUTO MODE (T2) — identical to Scanner, with collapse/expand -->
   <div class="card" style="margin-bottom:10px">
-    <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:12px">⚙️ AUTO MODE — scans + auto-buys</div>
+    <div onclick="toggleSection('L_autoModeBody')" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;font-size:13px;font-weight:700;color:#fff;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span id="L_autoModeBody-toggle" style="font-size:16px;color:var(--green)">▼</span>
+        ⚙️ AUTO MODE — scans + auto-buys
+      </div>
+    </div>
+    <div id="L_autoModeBody">
     <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
       <label class="radio-pill" id="L_rpTime" onclick="setLottoRunMode('time')"><input type="radio" name="L_runMode" value="time">
         Run for minutes
@@ -1206,8 +1206,13 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   </div>
 
   <div class="card">
-    <div class="card-title">🎟️ Lotto Bot Settings (T2)</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:14px">A second, independent bot. Set it up however you like — it only trades when its switch above is <b>ON</b> (it can run at the same time as the Scanner bot). Changes save automatically.</div>
+    <div onclick="toggleSection('L_settingsBody')" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;gap:8px" class="card-title">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span id="L_settingsBody-toggle" style="font-size:16px;color:var(--green)">▼</span>
+        🎟️ Lotto Bot Settings (T2)
+      </div>
+    </div>
+    <div id="L_settingsBody" style="font-size:12px;color:var(--muted);margin-bottom:14px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">A second, independent bot. Set it up however you like — it only trades when its switch above is <b>ON</b> (it can run at the same time as the Scanner bot). Changes save automatically.</div>
 
     <!-- BUY UP & BUY DOWN (SIDE-BY-SIDE) -->
     <div style="display:flex;gap:12px;margin-bottom:10px">
