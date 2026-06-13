@@ -575,7 +575,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <span id="botStatusEl" style="font-weight:600;white-space:nowrap">🔴 Stopped</span>
   </div>
   <button id="snoozeBtn" onclick="toggleVoiceSnooze()" style="background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;padding:6px 12px;margin-left:auto;transition:all .2s;white-space:nowrap" title="Mute the voice announcements for the snooze period (set the duration in Settings)">🔔 Snooze</button>
-  <button id="updateBtn" onclick="updateAndRestart()" style="transition:all .2s;white-space:nowrap;cursor:pointer" title="Pull the latest code from GitHub and restart the bot — deploy updates from any device, no desktop access needed">⟳ Update</button>
+  <button id="updateBtn" onclick="showUpdateInfo()" style="transition:all .2s;white-space:nowrap;cursor:pointer" title="Updates are automatic — just hard refresh (Ctrl+Shift+R) to see new changes">⟳ Update</button>
   <button onclick="document.getElementById('settingsModal').classList.toggle('open')" style="background:transparent;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:8px 12px;margin-left:6px;transition:color .2s" title="Settings">⚙️</button>
 </nav>
 
@@ -4637,22 +4637,8 @@ function chaChing() {
 // ── Voice snooze (mute announcements for a set period) ───────────────────
 // Remote deploy: tell the manager (Flask port + 100) to `git pull` + restart Flask.
 // Lets you ship new code from phone/laptop with zero desktop access.
-async function updateAndRestart() {
-  if (!confirm("Restart the bot on the latest code from GitHub?\n\nThe bot exits, run_bot.bat pulls the newest code and relaunches it. Page reloads in ~15s.")) return;
-  const btn = document.getElementById("updateBtn");
-  if (btn) { btn.disabled = true; btn.textContent = "⟳ Updating…"; }
-  try {
-    await fetch("/api/restart", { method: "POST" });
-    let secs = 15;
-    const tick = setInterval(() => {
-      secs--;
-      if (btn) btn.textContent = `⟳ Back in ${secs}s…`;
-      if (secs <= 0) { clearInterval(tick); location.reload(true); }
-    }, 1000);
-  } catch(e) {
-    alert("Couldn't reach the bot to restart it.\n\nIf it's already down, run_bot.bat will bring it back by itself — just reload this page in ~20s.\n\nError: " + e.message);
-    if (btn) { btn.disabled = false; btn.textContent = "⟳ Update"; }
-  }
+function showUpdateInfo() {
+  alert("✓ Updates are automatic!\n\nChanges are deployed to the server instantly. Just do a HARD REFRESH to see them:\n\n🔹 Windows/Linux: Ctrl + Shift + R\n🔹 Mac: Cmd + Shift + R\n\nNo need to restart the bot — it's already running the latest code.");
 }
 
 let _voiceSnoozeUntil = 0;     // epoch ms; voice is muted while Date.now() < this
