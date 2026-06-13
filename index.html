@@ -6712,7 +6712,11 @@ function loadSmartStrategySettings() {
   if (!saved) return defaults;
   try {
     const parsed = JSON.parse(saved);
-    return {...defaults, ...parsed};
+    const result = {};
+    for (const token in defaults) {
+      result[token] = {...defaults[token], ...parsed[token]};
+    }
+    return result;
   } catch {
     return defaults;
   }
