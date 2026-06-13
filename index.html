@@ -6684,7 +6684,7 @@ function updateMarketTimer() {
 setInterval(updateMarketTimer, 1000);
 updateMarketTimer();
 
-async function fetchWithTimeout(url, timeoutMs = 8000) {
+async function fetchWithTimeout(url, timeoutMs = 20000) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
