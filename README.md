@@ -12,26 +12,28 @@ A Flask-based prediction market trading bot for Kalshi with real-time scanning, 
 
 → **See [SETUP.md](SETUP.md) for secure installation instructions**
 
-## Quick Start
+## Quick Start (Home PC)
 
-1. **Start the bot:**
+1. **[Download & setup (5 min)](SETUP.md)** — Extract ZIP, install Python dependencies, add Kalshi API keys
+
+2. **Start the bot:**
    ```bash
-   cd "kalshi bot"
-   python app.py
+   cd your-bot-folder
+   python kalshibot_app.py
    ```
-   Open http://localhost:5000
+   Then open **http://localhost:5003** in your browser
 
-2. **Configure filters** (Scanner tab):
-   - Set buy probability range (e.g., 80-96%)
-   - Choose time window (24h recommended)
-   - Enable categories (Crypto, Sports, etc.)
+3. **Configure your strategy** (Scanner tab):
+   - **Buy Range**: Set probability (e.g., 80-96%)
+   - **Time Window**: 24h (recommended — catches more markets)
+   - **Categories**: Enable which types to trade
+   - **Buy Amount**: $1-2 per contract (spread risk)
+   - **Profit Target**: 5-10% (realistic)
+   - **Stop-Loss**: 20-30% protection
 
-3. **Set strategy** (right panel):
-   - Profit targets (sell at % or $)
-   - Stop-loss protection (auto-sell if losing X%)
-   - Buy amount per contract ($1-5 recommended)
+4. **Click "Start Bot"** and it scans every 30 seconds
 
-4. **Hit "Start Bot"** - it will scan every 30 seconds and buy automatically
+See **[SETUP.md](SETUP.md)** for detailed step-by-step installation instructions.
 
 ## Features
 
