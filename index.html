@@ -6755,20 +6755,74 @@ function saveSmartStrategySettings(settings) {
   updateCryptoCheckboxStates();
 }
 
+// Latest live spread per token (so the recommendation can recompute when the
+// user edits a threshold/mode without waiting for the next poll).
+let _tokenSpreads = {};
+let _tokenPollTimer = null;
+
+// Recommendation: should this token be ON right now, given its live spread,
+// threshold and mode? Wide spread favors Scanner; tight spread favors Lotto.
+function smartStrategyRec(symbol) {
+  const spread = _tokenSpreads[symbol];
+  if (spread == null || spread <= 0) return "";          // no live data yet
+  const cfg = loadSmartStrategySettings()[symbol] || {};
+  const thr = Number(cfg.threshold) || 0;
+  const mode = cfg.mode || "scanner";
+  let on;
+  if (mode === "both")        on = true;
+  else if (mode === "lotto")  on = spread < thr;          // tight = flip likely
+  else                        on = spread >= thr;         // scanner: wide = safe
+  return on ? "REC: ON" : "REC: OFF";
+}
+
+function updateTokenRecBadge(symbol) {
+  const el = document.getElementById(`ss_${symbol}_rec`);
+  if (el) el.textContent = smartStrategyRec(symbol);
+}
+
+// Update spreads + recommendations in place (no full re-render, so the user's
+// inputs/radios aren't disturbed while they edit).
+function applyTokenLiveData(tokens) {
+  tokens.forEach(t => {
+    _tokenSpreads[t.symbol] = t.spread || 0;
+    const spreadEl = document.getElementById(`ss_${t.symbol}_spread`);
+    if (spreadEl) spreadEl.textContent = t.spread ? `$${t.spread.toFixed(2)}` : "—";
+    updateTokenRecBadge(t.symbol);
+  });
+}
+
 async function loadSmartStrategyTokens() {
+  const container = document.getElementById("smartStrategyTokens");
+  // First load is slow — we pull live prices + markets for all 7 tokens. Show a
+  // friendly notice ONLY when no cards exist yet, so background refreshes don't
+  // wipe the cards the user is already looking at.
+  const firstLoad = container && !container.querySelector("input");
+  if (firstLoad) {
+    container.innerHTML =
+      '<div style="grid-column:1/-1;padding:26px;text-align:center;line-height:1.6">' +
+        '<div style="font-size:24px;margin-bottom:8px">⏳</div>' +
+        '<div style="font-weight:700;color:var(--green);font-size:14px">Loading Smart Strategy cards…</div>' +
+        '<div style="color:#999;margin-top:6px;font-size:12px">Please allow 1–2 minutes — pulling live prices for all 7 tokens.</div>' +
+      '</div>';
+  }
   try {
-    console.log("[loadSmartStrategyTokens] Starting token load...");
-    const resp = await fetchWithTimeout("/api/smart-strategy/tokens", 25000);
-    console.log("[loadSmartStrategyTokens] Response received:", resp.status);
+    const resp = await fetchWithTimeout("/api/smart-strategy/tokens", 120000);
     const data = await resp.json();
-    console.log("[loadSmartStrategyTokens] Data parsed, tokens:", data.tokens?.length);
-    renderSmartStrategyTokenCards(data.tokens || []);
-    console.log("[loadSmartStrategyTokens] Rendering complete");
+    const tokens = data.tokens || [];
+    // Re-render the cards only when they don't exist yet; otherwise update in
+    // place so live spreads track the market without resetting the controls.
+    if (!container || !container.querySelector("input")) {
+      renderSmartStrategyTokenCards(tokens);
+    }
+    applyTokenLiveData(tokens);
+    // Keep the spreads live (server caches, so this is cheap).
+    if (!_tokenPollTimer) _tokenPollTimer = setInterval(loadSmartStrategyTokens, 10000);
   } catch(e) {
-    console.error("[loadSmartStrategyTokens] FAILED:", e.message, e);
-    const container = document.getElementById("smartStrategyTokens");
-    if (container) {
-      container.innerHTML = '<div style="grid-column:1/-1;color:#f55;padding:20px;text-align:center">Failed to load tokens: ' + e.message + '</div>';
+    console.error("[smart-strategy] token load failed:", e);
+    if (container && !container.querySelector("input")) {
+      container.innerHTML =
+        '<div style="grid-column:1/-1;color:#f55;padding:20px;text-align:center">Couldn\'t load tokens: ' + e.message +
+        '<br><span style="color:#888;font-size:12px">It may just be slow — it will retry automatically.</span></div>';
     }
   }
 }
@@ -6794,7 +6848,10 @@ function renderSmartStrategyTokenCards(tokens) {
 
     card.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between">
-        <div style="font-weight:700;color:var(--green);font-size:14px">${symbol}</div>
+        <div style="display:flex;align-items:baseline;gap:8px">
+          <span style="font-weight:700;color:var(--green);font-size:14px">${symbol}</span>
+          <span id="ss_${symbol}_rec" style="font-size:11px;font-weight:800;color:#f5c518;letter-spacing:.3px"></span>
+        </div>
         <label class="check-row" style="margin:0">
           <input type="checkbox" id="ss_${symbol}_enabled" ${config.enabled ? "checked" : ""}
             onchange="toggleSmartStrategyToken('${symbol}', this.checked); saveSmartStrategySettings(loadSmartStrategySettings())">
@@ -6803,7 +6860,7 @@ function renderSmartStrategyTokenCards(tokens) {
       </div>
 
       <div style="font-size:11px;color:#aaa">
-        <div>Current Spread: <span style="color:var(--green);font-weight:700">${spreadDisplay}</span></div>
+        <div>Current Spread: <span id="ss_${symbol}_spread" style="color:var(--green);font-weight:700">${spreadDisplay}</span></div>
       </div>
 
       <div style="border-top:1px solid #2a4a2a;padding-top:10px">
@@ -6866,6 +6923,8 @@ function updateSmartStrategyToken(symbol, field, value) {
     settings[symbol][field] = value;
   }
   localStorage.setItem("smart_strategy_tokens", JSON.stringify(settings));
+  // Recommendation depends on threshold + mode — refresh it right away.
+  if (field === "threshold" || field === "mode") updateTokenRecBadge(symbol);
 }
 
 function saveSmartStrategyTokenCard(symbol) {
