@@ -6813,8 +6813,10 @@ function renderSmartStrategyTokens(tokens, scanState = {}) {
   document.head.appendChild(style);
 }
 
-// Load token data on page load — commented out to investigate loading loop
-// loadSmartStrategyTokens();
+// Load token data once on page load
+document.addEventListener('DOMContentLoaded', () => {
+  loadSmartStrategyTokens();
+});
 
 // ── Collapsible Section Helper ────────────────────────────────────────────
 function toggleSection(sectionId) {
