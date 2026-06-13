@@ -6725,54 +6725,41 @@ async function fetchWithTimeout(url, timeoutMs = 20000) {
   }
 }
 
-// Load Smart Strategy per-token settings
-function loadSmartStrategySettings() {
-  const saved = localStorage.getItem("smart_strategy_tokens");
-  const defaults = {
-    BTC: {enabled: false, buy_last_min: 1, threshold: 100, mode: "scanner"},
-    ETH: {enabled: false, buy_last_min: 1, threshold: 100, mode: "scanner"},
-    SOL: {enabled: false, buy_last_min: 1, threshold: 100, mode: "scanner"},
-    XRP: {enabled: false, buy_last_min: 1, threshold: 0.25, mode: "scanner"},
-    DOGE: {enabled: false, buy_last_min: 1, threshold: 100, mode: "scanner"},
-    BNB: {enabled: false, buy_last_min: 1, threshold: 100, mode: "scanner"},
-    HYPE: {enabled: false, buy_last_min: 1, threshold: 100, mode: "scanner"}
-  };
-  if (!saved) return defaults;
+// Load Smart Strategy per-token settings from backend
+let _perTokenSettings = {};
+let _aiRecommendations = {};
+
+async function loadPerTokenSettings() {
   try {
-    const parsed = JSON.parse(saved);
-    const result = {};
-    for (const token in defaults) {
-      result[token] = {...defaults[token], ...parsed[token]};
+    const resp = await fetch("/api/smart-strategy/per-token", {cache: "no-store"});
+    const data = await resp.json();
+    if (data.settings) {
+      _perTokenSettings = data.settings;
+      // Extract AI recommendations for display
+      for (const token in data.settings) {
+        _aiRecommendations[token] = data.settings[token].ai_recommended_spread;
+      }
+      return data.settings;
     }
-    return result;
-  } catch {
-    return defaults;
+  } catch(e) {
+    console.error("[per-token] load failed:", e);
   }
+  return {};
 }
 
-function saveSmartStrategySettings(settings) {
-  localStorage.setItem("smart_strategy_tokens", JSON.stringify(settings));
-  updateCryptoCheckboxStates();
-}
-
-// Latest live spread per token (so the recommendation can recompute when the
-// user edits a threshold/mode without waiting for the next poll).
+// Latest live spread per token
 let _tokenSpreads = {};
 let _tokenPollTimer = null;
 
-// Recommendation: should this token be ON right now, given its live spread,
-// threshold and mode? Wide spread favors Scanner; tight spread favors Lotto.
+// Recommendation: what spread threshold does the AI suggest for this token?
+// Shows the recommended spread in the badge (e.g., "AI: $50.00")
 function smartStrategyRec(symbol) {
-  const spread = _tokenSpreads[symbol];
-  if (spread == null || spread <= 0) return "";          // no live data yet
-  const cfg = loadSmartStrategySettings()[symbol] || {};
-  const thr = Number(cfg.threshold) || 0;
-  const mode = cfg.mode || "scanner";
-  let on;
-  if (mode === "both")        on = true;
-  else if (mode === "lotto")  on = spread < thr;          // tight = flip likely
-  else                        on = spread >= thr;         // scanner: wide = safe
-  return on ? "REC: ON" : "REC: OFF";
+  const cfg = _perTokenSettings[symbol] || {};
+  if (!cfg.ai_choice) return `Manual: $${Number(cfg.threshold).toFixed(2)}`;
+  const rec = _aiRecommendations[symbol];
+  if (rec == null) return "Loading…";
+  const symbol_type = symbol === "XRP" ? "2" : "0";
+  return `AI: $${Number(rec).toFixed(symbol_type)}`;
 }
 
 function updateTokenRecBadge(symbol) {
@@ -6806,9 +6793,14 @@ async function loadSmartStrategyTokens() {
       '</div>';
   }
   try {
-    const resp = await fetchWithTimeout("/api/smart-strategy/tokens", 120000);
-    const data = await resp.json();
-    const tokens = data.tokens || [];
+    // Load both token spreads and per-token settings in parallel
+    const [tokensResp, settingsResp] = await Promise.all([
+      fetchWithTimeout("/api/smart-strategy/tokens", 120000),
+      loadPerTokenSettings()
+    ]);
+    const tokensData = await tokensResp.json();
+    const tokens = tokensData.tokens || [];
+
     // Re-render the cards only when they don't exist yet; otherwise update in
     // place so live spreads track the market without resetting the controls.
     if (!container || !container.querySelector("input")) {
@@ -6831,14 +6823,15 @@ function renderSmartStrategyTokenCards(tokens) {
   const container = document.getElementById("smartStrategyTokens");
   if (!container) return;
 
-  const settings = loadSmartStrategySettings();
   container.innerHTML = '';
 
   tokens.forEach(t => {
     const symbol = t.symbol;
-    const config = settings[symbol] || {enabled: false, buy_last_min: 1, threshold: 100, mode: "scanner"};
+    const cfg = _perTokenSettings[symbol] || {enabled: false, buy_last_min: 1, threshold: 100, mode: "scanner", order_type: "market", ai_choice: true};
     const spread = t.spread || 0;
     const spreadDisplay = spread ? `$${spread.toFixed(2)}` : "—";
+    const aiRec = _aiRecommendations[symbol] || 100;
+    const symbol_type = symbol === "XRP" ? "2" : "0";
 
     const card = document.createElement("div");
     card.style.cssText = `
@@ -6850,11 +6843,11 @@ function renderSmartStrategyTokenCards(tokens) {
       <div style="display:flex;align-items:center;justify-content:space-between">
         <div style="display:flex;align-items:baseline;gap:8px">
           <span style="font-weight:700;color:var(--green);font-size:14px">${symbol}</span>
-          <span id="ss_${symbol}_rec" style="font-size:11px;font-weight:800;color:#f5c518;letter-spacing:.3px"></span>
+          <span id="ss_${symbol}_rec" style="font-size:11px;font-weight:800;color:#f5c518;letter-spacing:.3px">AI: $${Number(aiRec).toFixed(symbol_type)}</span>
         </div>
         <label class="check-row" style="margin:0">
-          <input type="checkbox" id="ss_${symbol}_enabled" ${config.enabled ? "checked" : ""}
-            onchange="toggleSmartStrategyToken('${symbol}', this.checked); saveSmartStrategySettings(loadSmartStrategySettings())">
+          <input type="checkbox" id="ss_${symbol}_enabled" ${cfg.enabled ? "checked" : ""}
+            onchange="updatePerTokenSetting('${symbol}', 'enabled', this.checked)">
           ON
         </label>
       </div>
@@ -6864,36 +6857,60 @@ function renderSmartStrategyTokenCards(tokens) {
       </div>
 
       <div style="border-top:1px solid #2a4a2a;padding-top:10px">
-        <div style="font-size:11px;color:#888;margin-bottom:6px">Buy in last X min:</div>
-        <input type="number" id="ss_${symbol}_last_min" value="${config.buy_last_min}" min="0.25" max="15" step="0.25"
+        <label class="check-row" style="font-size:11px;margin:0">
+          <input type="checkbox" id="ss_${symbol}_ai_choice" ${cfg.ai_choice ? "checked" : ""}
+            onchange="updatePerTokenSetting('${symbol}', 'ai_choice', this.checked); toggleThresholdInput('${symbol}')">
+          Let AI choose safe spread
+        </label>
+      </div>
+
+      <div style="border-top:1px solid #2a4a2a;padding-top:10px;${cfg.ai_choice ? "display:none" : ""}" id="ss_${symbol}_threshold_div">
+        <div style="font-size:11px;color:#888;margin-bottom:6px">Manual threshold (or override AI):</div>
+        <input type="number" id="ss_${symbol}_threshold" value="${cfg.threshold}" min="0.01" step="0.01"
           style="width:100%;padding:6px;background:#0a1f0a;border:1px solid #2a5a2a;color:var(--green);font-size:12px;border-radius:4px"
-          onchange="updateSmartStrategyToken('${symbol}', 'buy_last_min', this.value)">
+          onchange="updatePerTokenSetting('${symbol}', 'threshold', this.value)">
       </div>
 
       <div style="border-top:1px solid #2a4a2a;padding-top:10px">
-        <div style="font-size:11px;color:#888;margin-bottom:6px">Threshold (Lotto ↓ / Scanner ↑):</div>
-        <input type="number" id="ss_${symbol}_threshold" value="${config.threshold}" min="0.01" step="0.01"
+        <div style="font-size:11px;color:#888;margin-bottom:6px">Buy in last X min:</div>
+        <input type="number" id="ss_${symbol}_last_min" value="${cfg.buy_last_min}" min="0.25" max="15" step="0.25"
           style="width:100%;padding:6px;background:#0a1f0a;border:1px solid #2a5a2a;color:var(--green);font-size:12px;border-radius:4px"
-          onchange="updateSmartStrategyToken('${symbol}', 'threshold', this.value)">
+          onchange="updatePerTokenSetting('${symbol}', 'buy_last_min', this.value)">
       </div>
 
       <div style="border-top:1px solid #2a4a2a;padding-top:10px">
         <div style="font-size:11px;color:#888;margin-bottom:6px">Mode when spread ≥ threshold:</div>
         <div style="display:flex;gap:6px">
           <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:11px">
-            <input type="radio" name="ss_${symbol}_mode" value="scanner" ${config.mode === "scanner" ? "checked" : ""}
-              onchange="updateSmartStrategyToken('${symbol}', 'mode', 'scanner')">
+            <input type="radio" name="ss_${symbol}_mode" value="scanner" ${cfg.mode === "scanner" ? "checked" : ""}
+              onchange="updatePerTokenSetting('${symbol}', 'mode', 'scanner')">
             Scanner
           </label>
           <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:11px">
-            <input type="radio" name="ss_${symbol}_mode" value="lotto" ${config.mode === "lotto" ? "checked" : ""}
-              onchange="updateSmartStrategyToken('${symbol}', 'mode', 'lotto')">
+            <input type="radio" name="ss_${symbol}_mode" value="lotto" ${cfg.mode === "lotto" ? "checked" : ""}
+              onchange="updatePerTokenSetting('${symbol}', 'mode', 'lotto')">
             Lotto
           </label>
           <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:11px">
-            <input type="radio" name="ss_${symbol}_mode" value="both" ${config.mode === "both" ? "checked" : ""}
-              onchange="updateSmartStrategyToken('${symbol}', 'mode', 'both')">
+            <input type="radio" name="ss_${symbol}_mode" value="both" ${cfg.mode === "both" ? "checked" : ""}
+              onchange="updatePerTokenSetting('${symbol}', 'mode', 'both')">
             Both
+          </label>
+        </div>
+      </div>
+
+      <div style="border-top:1px solid #2a4a2a;padding-top:10px">
+        <div style="font-size:11px;color:#888;margin-bottom:6px">Order type:</div>
+        <div style="display:flex;gap:6px">
+          <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:11px">
+            <input type="radio" name="ss_${symbol}_order_type" value="market" ${cfg.order_type === "market" ? "checked" : ""}
+              onchange="updatePerTokenSetting('${symbol}', 'order_type', 'market')">
+            Market
+          </label>
+          <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:11px">
+            <input type="radio" name="ss_${symbol}_order_type" value="limit" ${cfg.order_type === "limit" ? "checked" : ""}
+              onchange="updatePerTokenSetting('${symbol}', 'order_type', 'limit')">
+            Limit
           </label>
         </div>
       </div>
@@ -6906,37 +6923,68 @@ function renderSmartStrategyTokenCards(tokens) {
   });
 }
 
-function toggleSmartStrategyToken(symbol, enabled) {
-  const settings = loadSmartStrategySettings();
-  if (!settings[symbol]) settings[symbol] = {enabled: false, buy_last_min: 1, threshold: 100, mode: "scanner"};
-  settings[symbol].enabled = enabled;
-  saveSmartStrategySettings(settings);
+function toggleThresholdInput(symbol) {
+  const div = document.getElementById(`ss_${symbol}_threshold_div`);
+  const aiChoice = document.getElementById(`ss_${symbol}_ai_choice`)?.checked;
+  if (div) {
+    div.style.display = aiChoice ? "none" : "";
+  }
 }
 
-function updateSmartStrategyToken(symbol, field, value) {
-  const settings = loadSmartStrategySettings();
-  if (!settings[symbol]) settings[symbol] = {enabled: false, buy_last_min: 1, threshold: 100, mode: "scanner"};
+async function updatePerTokenSetting(symbol, field, value) {
+  // Update local state
+  if (!_perTokenSettings[symbol]) {
+    _perTokenSettings[symbol] = {enabled: false, buy_last_min: 1, threshold: 100, mode: "scanner", order_type: "market", ai_choice: true};
+  }
 
   if (field === "buy_last_min" || field === "threshold") {
-    settings[symbol][field] = parseFloat(value) || 0;
+    _perTokenSettings[symbol][field] = parseFloat(value) || 0;
+  } else if (field === "enabled" || field === "ai_choice") {
+    _perTokenSettings[symbol][field] = value;
   } else {
-    settings[symbol][field] = value;
+    _perTokenSettings[symbol][field] = value;
   }
-  localStorage.setItem("smart_strategy_tokens", JSON.stringify(settings));
-  // Recommendation depends on threshold + mode — refresh it right away.
-  if (field === "threshold" || field === "mode") updateTokenRecBadge(symbol);
+
+  // If ai_choice changed, update recommendation display
+  if (field === "ai_choice" || field === "threshold" || field === "mode") {
+    updateTokenRecBadge(symbol);
+  }
+
+  // Save to backend asynchronously (don't block UI)
+  savePerTokenSettingsToBackend();
 }
 
-function saveSmartStrategyTokenCard(symbol) {
-  const settings = loadSmartStrategySettings();
-  if (!settings[symbol]) settings[symbol] = {enabled: false, buy_last_min: 1, threshold: 100, mode: "scanner"};
+async function savePerTokenSettingsToBackend() {
+  try {
+    const resp = await fetch("/api/smart-strategy/per-token", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({settings: _perTokenSettings})
+    });
+    if (!resp.ok) {
+      console.error("[per-token] save failed:", await resp.text());
+    }
+  } catch(e) {
+    console.error("[per-token] save error:", e);
+  }
+}
 
-  settings[symbol].enabled = document.getElementById(`ss_${symbol}_enabled`)?.checked || false;
-  settings[symbol].buy_last_min = parseFloat(document.getElementById(`ss_${symbol}_last_min`)?.value) || 1;
-  settings[symbol].threshold = parseFloat(document.getElementById(`ss_${symbol}_threshold`)?.value) || 100;
-  settings[symbol].mode = document.querySelector(`input[name="ss_${symbol}_mode"]:checked`)?.value || "scanner";
+async function saveSmartStrategyTokenCard(symbol) {
+  // Collect current form values
+  const cfg = {
+    enabled: document.getElementById(`ss_${symbol}_enabled`)?.checked || false,
+    buy_last_min: parseFloat(document.getElementById(`ss_${symbol}_last_min`)?.value) || 1,
+    threshold: parseFloat(document.getElementById(`ss_${symbol}_threshold`)?.value) || 100,
+    mode: document.querySelector(`input[name="ss_${symbol}_mode"]:checked`)?.value || "scanner",
+    order_type: document.querySelector(`input[name="ss_${symbol}_order_type"]:checked`)?.value || "market",
+    ai_choice: document.getElementById(`ss_${symbol}_ai_choice`)?.checked || false,
+  };
 
-  saveSmartStrategySettings(settings);
+  // Update local state
+  _perTokenSettings[symbol] = cfg;
+
+  // Save to backend
+  await savePerTokenSettingsToBackend();
   toast(`${symbol} Smart Strategy saved`, "ok");
 }
 

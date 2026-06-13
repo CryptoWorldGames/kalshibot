@@ -823,6 +823,39 @@ def _save_smart_strategy():
         print(f"[smart-strategy] save failed: {e}")
 _load_smart_strategy()
 
+# ── Per-token Smart Strategy settings (from localStorage / frontend config) ──
+# Each token tracks: enabled, buy_last_min, threshold, mode, order_type, ai_choice
+PER_TOKEN_SETTINGS_FILE = HERE / "per_token_settings.json"
+per_token_settings = {
+    "BTC": {"enabled": False, "buy_last_min": 1, "threshold": 100, "mode": "scanner", "order_type": "market", "ai_choice": True},
+    "ETH": {"enabled": False, "buy_last_min": 1, "threshold": 100, "mode": "scanner", "order_type": "market", "ai_choice": True},
+    "SOL": {"enabled": False, "buy_last_min": 1, "threshold": 100, "mode": "scanner", "order_type": "market", "ai_choice": True},
+    "XRP": {"enabled": False, "buy_last_min": 1, "threshold": 0.25, "mode": "scanner", "order_type": "market", "ai_choice": True},
+    "DOGE": {"enabled": False, "buy_last_min": 1, "threshold": 100, "mode": "scanner", "order_type": "market", "ai_choice": True},
+    "BNB": {"enabled": False, "buy_last_min": 1, "threshold": 100, "mode": "scanner", "order_type": "market", "ai_choice": True},
+    "HYPE": {"enabled": False, "buy_last_min": 1, "threshold": 100, "mode": "scanner", "order_type": "market", "ai_choice": True},
+}
+
+def _load_per_token_settings():
+    global per_token_settings
+    try:
+        if PER_TOKEN_SETTINGS_FILE.exists():
+            d = json.loads(PER_TOKEN_SETTINGS_FILE.read_text(encoding="utf-8"))
+            if isinstance(d, dict):
+                for token in per_token_settings:
+                    if token in d:
+                        per_token_settings[token].update(d[token])
+    except Exception as e:
+        print(f"[per-token] settings load failed: {e}")
+
+def _save_per_token_settings():
+    try:
+        PER_TOKEN_SETTINGS_FILE.write_text(json.dumps(per_token_settings, indent=2), encoding="utf-8")
+    except Exception as e:
+        print(f"[per-token] settings save failed: {e}")
+
+_load_per_token_settings()
+
 # ── Per-token tracking: which token each profile is currently scanning ──
 _scan_state = {
     "T1": {"token": None, "timestamp": 0},  # Scanner current token
@@ -855,6 +888,52 @@ def _token_from_series(series_ticker: str) -> str:
                 if len(token) <= 4:  # BTC, ETH, SOL, XRP, DOGE, BNB, HYPE are all ≤4 chars
                     return token
     return None
+
+def _check_per_token_filters(market: dict) -> tuple:
+    """Check if a market passes per-token Smart Strategy filters.
+    Returns (passes, token_symbol) where passes=True if the market should be bought.
+    Checks: token enabled, buy window, spread threshold."""
+    # Only applies to crypto markets; extract token symbol
+    token = _token_from_series(market.get("series_ticker", ""))
+    if not token or token not in per_token_settings:
+        return (True, token)  # Not a tracked crypto token, allow through
+
+    cfg = per_token_settings[token]
+    if not cfg.get("enabled", False):
+        return (False, token)  # Token disabled
+
+    # Check "buy in last X minutes" window
+    buy_last_min = cfg.get("buy_last_min", 15)
+    close_time_str = market.get("close_time") or market.get("expiration_time", "")
+    if close_time_str:
+        try:
+            close_time = datetime.fromisoformat(close_time_str.replace("Z", "+00:00"))
+            now_utc = datetime.now(timezone.utc)
+            secs_left = (close_time - now_utc).total_seconds()
+            if secs_left < 0:
+                return (False, token)  # Market already closed
+            mins_left = secs_left / 60
+            if mins_left > buy_last_min:
+                return (False, token)  # Outside buy window (too much time left)
+        except Exception:
+            pass
+
+    # Check spread threshold (only if ai_choice is False and threshold is set)
+    # If ai_choice is True, we'll use the AI recommendation instead
+    if not cfg.get("ai_choice", True):
+        threshold = cfg.get("threshold", 100)
+        # Find the current spread for this token from the cache
+        token_data = next((t for t in _token_spread_cache.get("data", [])
+                          if t.get("symbol") == token), None)
+        if token_data:
+            current_spread = token_data.get("spread", 0)
+            mode = cfg.get("mode", "scanner")
+            if mode == "scanner" and current_spread < threshold:
+                return (False, token)  # Spread too tight for scanner
+            elif mode == "lotto" and current_spread >= threshold:
+                return (False, token)  # Spread too wide for lotto
+
+    return (True, token)  # Market passes all filters
 
 def _refresh_crypto_spread_bg():
     """Background thread: fetch BTC distance-from-strike and update cache."""
@@ -1667,6 +1746,12 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
                     no_buy_within_mins=no_buy_within, crypto_times=None, hide_multi=hide_multi)
                 if not hit:
                     continue
+
+                # Apply per-token Smart Strategy filters if enabled
+                passes_token_filter, token_symbol = _check_per_token_filters(m)
+                if not passes_token_filter:
+                    continue
+
                 ticker = m.get("ticker", "")
                 yes_p = _market_price(m, "yes")
                 no_p  = _market_price(m, "no")
@@ -1710,14 +1795,22 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
                 # "stuck" buying nothing. Count it so the cycle summary surfaces it.
                 skipped_too_small += 1
                 continue
+
+            # Determine order type based on per-token settings (default: market)
+            token = _token_from_series(m.get("series_ticker", ""))
+            order_type = "market"  # default
+            if token and token in per_token_settings:
+                order_type = per_token_settings[token].get("order_type", "market")
+
             order_body = {
                 "ticker": ticker,
                 "client_order_id": str(uuid.uuid4()),
                 "action": "buy",
                 "side": side,
-                "type": "market",
+                "type": order_type,
                 "count": contracts,
             }
+            # For both order types, include the price as a limit/reference
             if side == "yes": order_body["yes_price"] = pc
             else:             order_body["no_price"]  = pc
             try:
@@ -2127,6 +2220,57 @@ def _compute_token_spreads():
     order = list(_SMART_TOKENS.keys())
     result.sort(key=lambda t: order.index(t.get("symbol")) if t.get("symbol") in order else 999)
     return result
+
+# ── Safe spread recommendations: dynamic thresholds based on token characteristics ──
+_token_spread_history = {sym: [] for sym in _SMART_TOKENS}  # rolling window of spreads
+_MAX_HISTORY = 30  # keep last 30 measurements for volatility calc
+
+def _calculate_safe_spread(symbol: str, current_spread: float) -> float:
+    """Calculate AI-recommended safe spread for a token based on volatility.
+    Returns a spread threshold that, if exceeded, signals Scanner mode (safe).
+    If below, signals Lotto mode (risky, tight spread)."""
+    if symbol not in _token_spread_history:
+        _token_spread_history[symbol] = []
+
+    # Add current spread to history
+    _token_spread_history[symbol].append(current_spread)
+    if len(_token_spread_history[symbol]) > _MAX_HISTORY:
+        _token_spread_history[symbol].pop(0)
+
+    if len(_token_spread_history[symbol]) < 3:
+        # Not enough history — use heuristic based on token characteristics
+        # Stablecoins (XRP) have tight spreads; larger cap tokens (BTC/ETH) wider
+        if symbol in ("XRP",):
+            return round(max(0.50, current_spread * 1.5), 2)  # 1.5x current
+        else:
+            return round(max(50.0, current_spread * 1.25), 2)  # 1.25x current
+
+    # Enough history — calculate volatility-based recommendation
+    avg = sum(_token_spread_history[symbol]) / len(_token_spread_history[symbol])
+    variance = sum((x - avg) ** 2 for x in _token_spread_history[symbol]) / len(_token_spread_history[symbol])
+    std_dev = variance ** 0.5
+
+    # Safe spread = average + 1.5x std dev (conservative cushion to reduce flip risk)
+    safe_spread = max(avg + 1.5 * std_dev, current_spread * 0.8)
+
+    # Round based on token magnitude
+    if symbol in ("XRP",):
+        return round(safe_spread, 2)
+    else:
+        return round(safe_spread)
+
+_safe_spread_cache = {"data": {}, "ts": 0.0}
+
+def _compute_safe_spread_recommendations(token_spreads):
+    """Given current token spreads, compute safe spread recommendations for each.
+    Returns dict: {BTC: rec_spread, ETH: rec_spread, ...}"""
+    recommendations = {}
+    for token_data in token_spreads:
+        symbol = token_data.get("symbol")
+        spread = token_data.get("spread", 0)
+        if symbol and spread > 0:
+            recommendations[symbol] = _calculate_safe_spread(symbol, spread)
+    return recommendations
 
 
 @app.route("/api/smart-strategy/tokens")
@@ -4183,6 +4327,77 @@ def api_smart_strategy_status():
         "per_token_spreads": _scan_state["per_token_spreads"],
         "active_profiles": active_profiles,
     })
+
+
+@app.route("/api/smart-strategy/per-token", methods=["GET", "POST"])
+def api_per_token_settings():
+    """Per-token Smart Strategy configuration and AI recommendations.
+    GET: return current per-token settings and safe spread recommendations.
+    POST: update per-token settings from frontend localStorage."""
+
+    if request.method == "GET":
+        # Get live token spreads for recommendation calculation
+        token_spreads = _token_spread_cache.get("data", [])
+        recommendations = _compute_safe_spread_recommendations(token_spreads)
+
+        # Build response with current settings + recommendations
+        result = {}
+        for token in per_token_settings:
+            cfg = per_token_settings[token]
+            result[token] = {
+                "enabled": cfg.get("enabled", False),
+                "buy_last_min": cfg.get("buy_last_min", 1),
+                "threshold": cfg.get("threshold", 100),
+                "mode": cfg.get("mode", "scanner"),
+                "order_type": cfg.get("order_type", "market"),
+                "ai_choice": cfg.get("ai_choice", True),
+                "ai_recommended_spread": recommendations.get(token, 100),
+            }
+        return jsonify({"settings": result})
+
+    # POST: update per-token settings
+    data = request.get_json(silent=True) or {}
+    if "settings" in data:
+        try:
+            new_settings = data["settings"]
+            for token in per_token_settings:
+                if token in new_settings:
+                    token_cfg = new_settings[token]
+                    # Validate and update each field
+                    if "enabled" in token_cfg:
+                        per_token_settings[token]["enabled"] = bool(token_cfg["enabled"])
+                    if "buy_last_min" in token_cfg:
+                        per_token_settings[token]["buy_last_min"] = float(token_cfg["buy_last_min"])
+                    if "threshold" in token_cfg:
+                        per_token_settings[token]["threshold"] = float(token_cfg["threshold"])
+                    if "mode" in token_cfg and token_cfg["mode"] in ("scanner", "lotto", "both"):
+                        per_token_settings[token]["mode"] = token_cfg["mode"]
+                    if "order_type" in token_cfg and token_cfg["order_type"] in ("market", "limit"):
+                        per_token_settings[token]["order_type"] = token_cfg["order_type"]
+                    if "ai_choice" in token_cfg:
+                        per_token_settings[token]["ai_choice"] = bool(token_cfg["ai_choice"])
+            _save_per_token_settings()
+            _log("[per-token] settings updated from frontend")
+        except Exception as e:
+            _log(f"[per-token] settings update error: {e}")
+            return jsonify({"error": str(e)}), 400
+
+    # Return updated state + recommendations
+    token_spreads = _token_spread_cache.get("data", [])
+    recommendations = _compute_safe_spread_recommendations(token_spreads)
+    result = {}
+    for token in per_token_settings:
+        cfg = per_token_settings[token]
+        result[token] = {
+            "enabled": cfg.get("enabled", False),
+            "buy_last_min": cfg.get("buy_last_min", 1),
+            "threshold": cfg.get("threshold", 100),
+            "mode": cfg.get("mode", "scanner"),
+            "order_type": cfg.get("order_type", "market"),
+            "ai_choice": cfg.get("ai_choice", True),
+            "ai_recommended_spread": recommendations.get(token, 100),
+        }
+    return jsonify({"settings": result})
 
 
 @app.route("/api/audit")
