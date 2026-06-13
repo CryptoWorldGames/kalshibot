@@ -2290,6 +2290,33 @@ def _compute_token_spreads():
 _token_spread_history = {sym: [] for sym in _SMART_TOKENS}  # rolling window of spreads
 _MAX_HISTORY = 30  # keep last 30 measurements for volatility calc
 
+# Timestamped spread log per token, pruned to the last 4h, so we can show the
+# user "average spread (last 4h)" as a reference when they set a manual threshold.
+_token_spread_log = {sym: [] for sym in _SMART_TOKENS}  # [(ts, spread), ...]
+_SPREAD_LOG_WINDOW = 4 * 3600  # 4 hours in seconds
+
+def _record_spread_sample(symbol: str, spread: float):
+    """Append a timestamped spread sample and prune anything older than the window."""
+    log = _token_spread_log.setdefault(symbol, [])
+    now = time.time()
+    log.append((now, spread))
+    cutoff = now - _SPREAD_LOG_WINDOW
+    # Drop old samples from the front (list is chronological).
+    while log and log[0][0] < cutoff:
+        log.pop(0)
+
+def _avg_spread_window(symbol: str):
+    """Return (avg_spread, span_minutes, count) over the logged window for a token,
+    or (None, 0, 0) if no samples yet. span_minutes is how much real time the
+    samples actually cover — so the UI can say '4h' or honestly '12m' on a fresh start."""
+    log = _token_spread_log.get(symbol, [])
+    if not log:
+        return (None, 0, 0)
+    vals = [s for _ts, s in log]
+    avg = sum(vals) / len(vals)
+    span_mins = round((log[-1][0] - log[0][0]) / 60)
+    return (_round_spread(avg), span_mins, len(vals))
+
 def _round_spread(v: float) -> float:
     """Round a spread to a sensible precision for its MAGNITUDE — not by token
     name. BTC's distance-from-strike is ~$100s (whole dollars), DOGE's is fractions
@@ -2333,6 +2360,7 @@ def _compute_safe_spread_recommendations(token_spreads):
         symbol = token_data.get("symbol")
         spread = token_data.get("spread", 0)
         if symbol and spread > 0:
+            _record_spread_sample(symbol, spread)  # feed the 4h reference average
             recommendations[symbol] = _calculate_safe_spread(symbol, spread)
     if recommendations:
         # Cache so the bot's auto-switch can read fresh thresholds without the UI open.
@@ -4412,14 +4440,17 @@ def api_per_token_settings():
         result = {}
         for token in per_token_settings:
             cfg = per_token_settings[token]
+            avg, span_mins, n = _avg_spread_window(token)
             result[token] = {
                 "enabled": cfg.get("enabled", False),
                 "buy_last_min": cfg.get("buy_last_min", 1),
                 "threshold": cfg.get("threshold", 100),
-                "mode": cfg.get("mode", "scanner"),
+                "mode": cfg.get("mode", "both"),
                 "order_type": cfg.get("order_type", "market"),
                 "ai_choice": cfg.get("ai_choice", True),
                 "ai_recommended_spread": recommendations.get(token, 100),
+                "avg_spread_4h": avg,
+                "avg_spread_span_mins": span_mins,
             }
         return jsonify({"settings": result})
 
@@ -4456,14 +4487,17 @@ def api_per_token_settings():
     result = {}
     for token in per_token_settings:
         cfg = per_token_settings[token]
+        avg, span_mins, n = _avg_spread_window(token)
         result[token] = {
             "enabled": cfg.get("enabled", False),
             "buy_last_min": cfg.get("buy_last_min", 1),
             "threshold": cfg.get("threshold", 100),
-            "mode": cfg.get("mode", "scanner"),
+            "mode": cfg.get("mode", "both"),
             "order_type": cfg.get("order_type", "market"),
             "ai_choice": cfg.get("ai_choice", True),
             "ai_recommended_spread": recommendations.get(token, 100),
+            "avg_spread_4h": avg,
+            "avg_spread_span_mins": span_mins,
         }
     return jsonify({"settings": result})
 

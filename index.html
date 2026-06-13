@@ -6728,6 +6728,7 @@ async function fetchWithTimeout(url, timeoutMs = 20000) {
 // Load Smart Strategy per-token settings from backend
 let _perTokenSettings = {};
 let _aiRecommendations = {};
+let _avgSpread4h = {};  // {SYM: {avg, span_mins}} — reference for manual thresholds
 
 async function loadPerTokenSettings() {
   try {
@@ -6735,9 +6736,13 @@ async function loadPerTokenSettings() {
     const data = await resp.json();
     if (data.settings) {
       _perTokenSettings = data.settings;
-      // Extract AI recommendations for display
+      // Extract AI recommendations + 4h reference averages for display
       for (const token in data.settings) {
         _aiRecommendations[token] = data.settings[token].ai_recommended_spread;
+        _avgSpread4h[token] = {
+          avg: data.settings[token].avg_spread_4h,
+          span_mins: data.settings[token].avg_spread_span_mins || 0,
+        };
       }
       return data.settings;
     }
@@ -6745,6 +6750,15 @@ async function loadPerTokenSettings() {
     console.error("[per-token] load failed:", e);
   }
   return {};
+}
+
+// "avg spread (last 4h): $X" reference text — labels the real span we have so a
+// fresh start honestly says "last 12m" instead of pretending it's 4h.
+function avgSpreadHelperText(symbol) {
+  const s = _avgSpread4h[symbol];
+  if (!s || s.avg == null) return "avg spread: gathering data…";
+  const span = s.span_mins >= 240 ? "last 4h" : `last ${s.span_mins}m`;
+  return `avg spread (${span}): $${fmtSpread(s.avg)}`;
 }
 
 // Latest live spread per token
@@ -6785,7 +6799,7 @@ function applyTokenLiveData(tokens) {
     _tokenSpreads[t.symbol] = t.spread || 0;
     const spreadEl = document.getElementById(`ss_${t.symbol}_spread`);
     if (spreadEl) spreadEl.textContent = t.spread ? `$${fmtSpread(t.spread)}` : "—";
-    updateTokenRecBadge(t.symbol);
+    refreshTokenDynamicFields(t.symbol);
   });
 }
 
@@ -6871,16 +6885,16 @@ function renderSmartStrategyTokenCards(tokens) {
       <div style="border-top:1px solid #2a4a2a;padding-top:10px">
         <label class="check-row" style="font-size:11px;margin:0">
           <input type="checkbox" id="ss_${symbol}_ai_choice" ${cfg.ai_choice ? "checked" : ""}
-            onchange="updatePerTokenSetting('${symbol}', 'ai_choice', this.checked); toggleThresholdInput('${symbol}')">
+            onchange="onAiChoiceToggle('${symbol}', this.checked)">
           Let AI choose safe spread
         </label>
-      </div>
-
-      <div style="border-top:1px solid #2a4a2a;padding-top:10px;${cfg.ai_choice ? "display:none" : ""}" id="ss_${symbol}_threshold_div">
-        <div style="font-size:11px;color:#888;margin-bottom:6px">Manual threshold (or override AI):</div>
-        <input type="number" id="ss_${symbol}_threshold" value="${cfg.threshold}" min="0.01" step="0.01"
-          style="width:100%;padding:6px;background:#0a1f0a;border:1px solid #2a5a2a;color:var(--green);font-size:12px;border-radius:4px"
-          onchange="updatePerTokenSetting('${symbol}', 'threshold', this.value)">
+        <div style="font-size:11px;color:#888;margin:8px 0 6px">Safe spread threshold:</div>
+        <input type="number" id="ss_${symbol}_threshold"
+          value="${cfg.ai_choice ? fmtSpread(_aiRecommendations[symbol] != null ? _aiRecommendations[symbol] : cfg.threshold) : cfg.threshold}"
+          min="0.0001" step="0.01"
+          style="width:100%;padding:6px;background:#0a1f0a;border:1px solid #2a5a2a;color:var(--green);font-size:12px;border-radius:4px;${cfg.ai_choice ? "opacity:.6" : ""}"
+          oninput="onThresholdManualEdit('${symbol}', this.value)">
+        <div id="ss_${symbol}_avg4h" style="font-size:10px;color:#6a9a6a;margin-top:4px;${cfg.ai_choice ? "display:none" : ""}">${avgSpreadHelperText(symbol)}</div>
       </div>
 
       <div style="border-top:1px solid #2a4a2a;padding-top:10px">
@@ -6936,11 +6950,61 @@ function renderSmartStrategyTokenCards(tokens) {
   });
 }
 
-function toggleThresholdInput(symbol) {
-  const div = document.getElementById(`ss_${symbol}_threshold_div`);
-  const aiChoice = document.getElementById(`ss_${symbol}_ai_choice`)?.checked;
-  if (div) {
-    div.style.display = aiChoice ? "none" : "";
+// Checking "Let AI choose" hands the spread back to the AI: grey the input, fill
+// it with the AI value, hide the 4h reference. Unchecking lets you type a number.
+function onAiChoiceToggle(symbol, checked) {
+  if (!_perTokenSettings[symbol]) _perTokenSettings[symbol] = {};
+  _perTokenSettings[symbol].ai_choice = checked;
+  const input = document.getElementById(`ss_${symbol}_threshold`);
+  const avgEl = document.getElementById(`ss_${symbol}_avg4h`);
+  if (checked) {
+    const rec = _aiRecommendations[symbol];
+    if (input && rec != null) input.value = fmtSpread(rec);
+    if (input) input.style.opacity = ".6";
+    if (avgEl) avgEl.style.display = "none";
+  } else {
+    if (input) input.style.opacity = "1";
+    // Persist whatever's currently shown as the manual starting point.
+    if (input) _perTokenSettings[symbol].threshold = parseFloat(input.value) || _perTokenSettings[symbol].threshold;
+    if (avgEl) { avgEl.style.display = ""; avgEl.textContent = avgSpreadHelperText(symbol); }
+  }
+  updateTokenRecBadge(symbol);
+  savePerTokenSettingsToBackend();
+}
+
+// Typing your own number IS the signal that you want manual control — so it
+// auto-unchecks "Let AI choose" and reveals the 4h average for reference.
+function onThresholdManualEdit(symbol, value) {
+  if (!_perTokenSettings[symbol]) _perTokenSettings[symbol] = {};
+  const cb = document.getElementById(`ss_${symbol}_ai_choice`);
+  if (cb && cb.checked) cb.checked = false;
+  _perTokenSettings[symbol].ai_choice = false;
+  _perTokenSettings[symbol].threshold = parseFloat(value) || 0;
+  const input = document.getElementById(`ss_${symbol}_threshold`);
+  if (input) input.style.opacity = "1";
+  const avgEl = document.getElementById(`ss_${symbol}_avg4h`);
+  if (avgEl) { avgEl.style.display = ""; avgEl.textContent = avgSpreadHelperText(symbol); }
+  updateTokenRecBadge(symbol);
+  savePerTokenSettingsToBackend();
+}
+
+// Refresh the per-card dynamic fields after each poll: keep AI-driven inputs in
+// sync with the latest recommendation, and the manual-mode 4h average current.
+// Never clobber an input the user is actively typing in.
+function refreshTokenDynamicFields(symbol) {
+  updateTokenRecBadge(symbol);
+  const cfg = _perTokenSettings[symbol] || {};
+  const input = document.getElementById(`ss_${symbol}_threshold`);
+  const avgEl = document.getElementById(`ss_${symbol}_avg4h`);
+  const focused = input && document.activeElement === input;
+  if (cfg.ai_choice) {
+    const rec = _aiRecommendations[symbol];
+    if (input && rec != null && !focused) input.value = fmtSpread(rec);
+    if (input) input.style.opacity = ".6";
+    if (avgEl) avgEl.style.display = "none";
+  } else {
+    if (input) input.style.opacity = "1";
+    if (avgEl) { avgEl.style.display = ""; avgEl.textContent = avgSpreadHelperText(symbol); }
   }
 }
 
