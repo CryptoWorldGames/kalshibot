@@ -53,3 +53,4 @@ venv/
 *.log
 smart_strategy.json
 spread_guard.json
+CONTEXT.md
