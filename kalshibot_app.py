@@ -2097,64 +2097,50 @@ def smart_strategy_tokens():
     result = []
 
     def fetch_token_data(symbol, series_prefix):
-        """Fetch market data for one token (runs in thread pool)."""
+        """Fetch the live 'spread' for one token (runs in thread pool).
+
+        'Spread' here = how far the token's spot price is from the nearest
+        strike — i.e. how far it is from 'flipping'. This is the same metric
+        the Smart Strategy status bar shows ("BTC is $73 from flipping").
+        Averaged over the few nearest open markets for stability."""
         try:
-            # Get current markets for this token
-            markets_url = f"{BASE_URL}{API_PREFIX}/markets?series_ticker={series_prefix}"
-            markets_resp = req.get(markets_url, timeout=2)
-            markets_resp.raise_for_status()
-            markets_data = markets_resp.json()
+            spot, _src = _spot_price(symbol)
+            d = kalshi_get("/markets", {"series_ticker": series_prefix,
+                                        "status": "open", "limit": 5})
+            markets = (d or {}).get("markets", [])
 
-            if not markets_data.get("markets"):
-                return {
-                    "symbol": symbol,
-                    "spread": 0,
-                    "price_yes": 0,
-                    "price_no": 0,
-                    "volume": 0,
-                    "message": "No markets"
-                }
+            if not markets:
+                return {"symbol": symbol, "spread": 0, "spot": 0,
+                        "volume": 0, "message": "No open markets"}
 
-            # Find best market (least time to expiry with volume)
-            best_market = None
-            for m in markets_data["markets"]:
-                if m.get("status") == "live" and m.get("volume", 0) > 0:
-                    best_market = m
-                    break
+            # Distance of spot from each strike → average = current spread
+            cushions = []
+            total_vol = 0
+            for m in markets:
+                strike = _strike_from_market(m)
+                if strike and spot:
+                    cushions.append(abs(spot - strike))
+                total_vol += int(m.get("volume", 0) or 0)
 
-            if not best_market:
-                return {
-                    "symbol": symbol,
-                    "spread": 0,
-                    "price_yes": 0,
-                    "price_no": 0,
-                    "volume": 0,
-                    "message": "No live markets"
-                }
+            if not spot:
+                return {"symbol": symbol, "spread": 0, "spot": 0,
+                        "volume": total_vol, "message": "No spot price"}
+            if not cushions:
+                return {"symbol": symbol, "spread": 0, "spot": round(spot, 2),
+                        "volume": total_vol, "message": "No strike data"}
 
-            # Calculate spread
-            price_yes = float(best_market.get("last_price_yes", 0)) or 50
-            price_no = float(best_market.get("last_price_no", 0)) or 50
-            spread = abs(price_yes - price_no)
-
+            spread = round(sum(cushions) / len(cushions), 2)
             return {
                 "symbol": symbol,
-                "spread": round(spread, 2),
-                "price_yes": round(price_yes, 2),
-                "price_no": round(price_no, 2),
-                "volume": int(best_market.get("volume", 0)),
-                "ticker": best_market.get("ticker_name", ""),
+                "spread": spread,
+                "spot": round(spot, 2),
+                "volume": total_vol,
+                "ticker": markets[0].get("ticker", ""),
             }
 
         except Exception as e:
-            return {
-                "symbol": symbol,
-                "spread": 0,
-                "price_yes": 0,
-                "price_no": 0,
-                "volume": 0,
-                "message": "API error"
-            }
+            return {"symbol": symbol, "spread": 0, "spot": 0,
+                    "volume": 0, "message": f"error: {e}"}
 
     # Fetch all tokens concurrently
     with concurrent.futures.ThreadPoolExecutor(max_workers=7) as executor:
