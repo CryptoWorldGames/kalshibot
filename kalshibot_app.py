@@ -823,12 +823,38 @@ def _save_smart_strategy():
         print(f"[smart-strategy] save failed: {e}")
 _load_smart_strategy()
 
+# ── Per-token tracking: which token each profile is currently scanning ──
+_scan_state = {
+    "T1": {"token": None, "timestamp": 0},  # Scanner current token
+    "T2": {"token": None, "timestamp": 0},  # Lotto current token
+    "per_token_spreads": {  # Per-token spread thresholds (default $100)
+        "BTC": 100.0, "ETH": 100.0, "SOL": 100.0, "XRP": 100.0,
+        "DOGE": 100.0, "BNB": 100.0, "HYPE": 100.0,
+    }
+}
+
 _CRYPTO_15M_PREFIXES = ("KXBTC15M", "KXETH15M", "KXSOL15M", "KXHYPE15M",
                         "KXDOGE15M", "KXBNB15M", "KXXRP15M",
                         "KXBTC30M", "KXETH30M", "KXSOL30M",
                         "KXBTC1H", "KXETH1H", "KXSOL1H")
 
 _btc_cushion_cache = {"val": 0.0, "ts": 0.0, "refreshing": False}
+
+def _token_from_series(series_ticker: str) -> str:
+    """Extract token symbol from series ticker (e.g., 'KXBTC15M' -> 'BTC')."""
+    if not series_ticker:
+        return None
+    ticker = series_ticker.upper()
+    # Extract token: KXBTC15M -> BTC, KXETH1H -> ETH, KXXRP15M -> XRP, etc.
+    if ticker.startswith("KX"):
+        rest = ticker[2:]  # Remove 'KX' prefix
+        # Remove time suffix (15M, 30M, 1H, 1D, 1W, 1MO, etc.)
+        for suffix in ["15M", "30M", "1H", "4H", "1D", "1W", "1MO", "2W"]:
+            if rest.endswith(suffix):
+                token = rest[:-len(suffix)]
+                if len(token) <= 4:  # BTC, ETH, SOL, XRP, DOGE, BNB, HYPE are all ≤4 chars
+                    return token
+    return None
 
 def _refresh_crypto_spread_bg():
     """Background thread: fetch BTC distance-from-strike and update cache."""
@@ -3063,6 +3089,12 @@ def scan():
         if len(results) >= 20:
             break
         try:
+            # Track which token is currently being scanned (for UI highlighting)
+            token = _token_from_series(st)
+            if token and show_crypto:
+                _scan_state["T1" if "T1" in active_profiles else "T2"]["token"] = token
+                _scan_state["T1" if "T1" in active_profiles else "T2"]["timestamp"] = time.time()
+
             d = _rate_get("/markets", {"series_ticker": st, "status": "open", "limit": 200})
             batch = d.get("markets", [])
             if batch:
@@ -4135,6 +4167,18 @@ def api_smart_strategy_tokens():
     tokens.sort(key=token_sort_key)
 
     return jsonify({"tokens": tokens})
+
+
+@app.route("/api/smart-strategy/status")
+def api_smart_strategy_status():
+    """Current scan state: which token each profile is analyzing.
+    Returns: {T1: {token, timestamp}, T2: {token, timestamp}, per_token_spreads: {...}}"""
+    return jsonify({
+        "T1": _scan_state["T1"],
+        "T2": _scan_state["T2"],
+        "per_token_spreads": _scan_state["per_token_spreads"],
+        "active_profiles": active_profiles,
+    })
 
 
 @app.route("/api/audit")
