@@ -530,14 +530,33 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 
     <div style="text-align:left;margin-bottom:20px;background:#0f0f0f;padding:20px;border-radius:8px;border:1px solid var(--border)">
       <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:12px">📁 STORAGE FOLDER</div>
-      <div style="font-size:12px;color:#aaa;margin-bottom:16px">
-        Your computer name (we auto-detected it below, but you can customize it if you prefer).
+
+      <!-- Windows username -->
+      <div style="font-size:12px;color:#fff;font-weight:700;margin-bottom:4px">
+        ⚠️ Your Windows username
       </div>
-      <input type="text" id="computerName" placeholder="your-computer-name"
+      <div style="font-size:11px;color:#f5a623;margin-bottom:8px;line-height:1.5">
+        This MUST be your real PC login name (the folder under <b>C:\Users\</b>).
+        We auto-filled it below — only change it if it's wrong. <b>No spaces.</b>
+      </div>
+      <input type="text" id="winUsername" placeholder="e.g. your-username"
+        oninput="sanitizeNoSpaces(this); updateStoragePath()"
+        style="width:100%;background:#111;border:1px solid #f5a623;border-radius:6px;color:#fff;padding:10px 12px;font-size:13px;font-family:monospace;margin-bottom:16px">
+
+      <!-- Profile / computer label -->
+      <div style="font-size:12px;color:#fff;font-weight:700;margin-bottom:4px">
+        This computer's label
+      </div>
+      <div style="font-size:11px;color:#aaa;margin-bottom:8px;line-height:1.5">
+        A short name so home vs. laptop data stay separate (e.g. <b>home-pc</b>, <b>laptop</b>). No spaces.
+      </div>
+      <input type="text" id="computerName" placeholder="home-pc"
+        oninput="sanitizeNoSpaces(this); updateStoragePath()"
         style="width:100%;background:#111;border:1px solid var(--border);border-radius:6px;color:#fff;padding:10px 12px;font-size:13px;font-family:monospace;margin-bottom:16px">
+
       <div style="font-size:11px;color:#666;line-height:1.5">
-        Your credentials will be stored in:<br/>
-        <span id="storagePath" style="color:var(--green);font-weight:700;font-family:monospace">C:\Users\YourName\KalshiBots\home-pc\</span>
+        Your files will be stored in:<br/>
+        <span id="storagePath" style="color:var(--green);font-weight:700;font-family:monospace">C:\Users\your-username\KalshiBots\home-pc\</span>
       </div>
     </div>
 
@@ -1704,34 +1723,43 @@ async function showOnboarding() {
     const res = await fetch("/api/system-info");
     if (res.ok) {
       const data = await res.json();
-      const input = document.getElementById("computerName");
-      if (input && data.username) {
-        input.value = data.username;
-        updateStoragePath();  // Update path after setting value
-      }
+      const userInput = document.getElementById("winUsername");
+      if (userInput && data.username) userInput.value = data.username;
     }
   } catch (e) {
     console.error("Failed to fetch system info:", e);
-    updateStoragePath();
   }
+  updateStoragePath();  // always render the path (with whatever we have)
+}
+
+// Strip spaces live — folder names with spaces break the storage path.
+function sanitizeNoSpaces(el) {
+  const clean = el.value.replace(/\s+/g, "");
+  if (clean !== el.value) el.value = clean;
 }
 
 function updateStoragePath() {
-  const input = document.getElementById("computerName");
-  const computerName = input?.value?.trim() || "home-pc";
+  const username = document.getElementById("winUsername")?.value?.trim() || "YourUsername";
+  const computerName = document.getElementById("computerName")?.value?.trim() || "home-pc";
   const pathEl = document.getElementById("storagePath");
 
   if (pathEl) {
     const isWindows = /Windows|MSIE|Trident/.test(navigator.userAgent);
     const path = isWindows
-      ? `C:\\Users\\YourName\\KalshiBots\\${computerName}\\`
+      ? `C:\\Users\\${username}\\KalshiBots\\${computerName}\\`
       : `~/KalshiBots/${computerName}/`;
     pathEl.textContent = path;
   }
 }
 
 function completeOnboarding() {
-  const computerName = document.getElementById("computerName")?.value || "home-pc";
+  const username = document.getElementById("winUsername")?.value?.trim() || "";
+  const computerName = document.getElementById("computerName")?.value?.trim() || "home-pc";
+  if (!username) {
+    alert("Please enter your Windows username (the folder name under C:\\Users\\).");
+    return;
+  }
+  localStorage.setItem("kalshibot_win_username", username);
   localStorage.setItem("kalshibot_computer_name", computerName);
   localStorage.setItem("kalshibot_onboarded", "true");
 
