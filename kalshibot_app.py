@@ -2372,11 +2372,16 @@ def _spread_volatility(symbol: str, games: int = _GAMES_4H):
     return (_round_spread(std), round(cv, 3), elevated)
 
 def _calculate_safe_spread(symbol: str, current_spread: float) -> float:
-    """AI-recommended safe spread = the trailing per-GAME average plus a volatility
-    cushion, so it sits a bit above the typical spread to reduce flip risk. Computed
-    from the last 16 games (4h). Above this distance-from-strike → Scanner (safe);
-    below → Lotto (flip-risk). Falls back to a proportional cushion until a few
-    games are logged. Scales to each token's magnitude automatically."""
+    """AI-recommended safe spread = 75th percentile of recent closing spreads.
+
+    This threshold is FIXED (doesn't chase current spread) but adapts to volatility:
+    • Above threshold (top 25% of recent spreads) → Scanner (historically safe, wide)
+    • Below threshold (bottom 75% of recent spreads) → Lotto (historically tight, risky)
+
+    Avoids the earlier circular problem where avg+1.5σ trapped us in Lotto ~93% of
+    the time because current spread IS drawn from that same distribution.
+
+    Computed from the last 16 games (4h). Scales to each token's magnitude automatically."""
     vals = _recent_game_spreads(symbol, _GAMES_4H)
     if len(vals) < 3:
         # Not enough games yet — cushion proportional to the live spread (25% over).
@@ -2384,12 +2389,15 @@ def _calculate_safe_spread(symbol: str, current_spread: float) -> float:
         # tokens both get a sane starting threshold.
         return _round_spread(current_spread * 1.25)
 
-    # Volatility-based: average + 1.5×std dev widens the cushion for choppy tokens
-    # and tightens it for calm ones. Never recommend below 80% of the current
-    # spread (so a momentary spike can't strand us in Lotto).
-    avg = sum(vals) / len(vals)
-    std_dev = (sum((x - avg) ** 2 for x in vals) / len(vals)) ** 0.5
-    return _round_spread(max(avg + 1.5 * std_dev, current_spread * 0.8))
+    # Use 75th percentile as the safe threshold. Spreads above this are in the
+    # safest top 25% of recent history, giving confidence against flips.
+    vals_sorted = sorted(vals)
+    idx = int(len(vals_sorted) * 0.75)
+    if idx >= len(vals_sorted):
+        idx = len(vals_sorted) - 1
+    safe = vals_sorted[idx]
+
+    return _round_spread(safe)
 
 _safe_spread_cache = {"data": {}, "ts": 0.0}
 
