@@ -2286,36 +2286,16 @@ def _compute_token_spreads():
     result.sort(key=lambda t: order.index(t.get("symbol")) if t.get("symbol") in order else 999)
     return result
 
-# ── Safe spread recommendations: dynamic thresholds based on token characteristics ──
-_token_spread_history = {sym: [] for sym in _SMART_TOKENS}  # rolling window of spreads
-_MAX_HISTORY = 30  # keep last 30 measurements for volatility calc
-
-# Timestamped spread log per token, pruned to the last 4h, so we can show the
-# user "average spread (last 4h)" as a reference when they set a manual threshold.
-_token_spread_log = {sym: [] for sym in _SMART_TOKENS}  # [(ts, spread), ...]
-_SPREAD_LOG_WINDOW = 4 * 3600  # 4 hours in seconds
-
-def _record_spread_sample(symbol: str, spread: float):
-    """Append a timestamped spread sample and prune anything older than the window."""
-    log = _token_spread_log.setdefault(symbol, [])
-    now = time.time()
-    log.append((now, spread))
-    cutoff = now - _SPREAD_LOG_WINDOW
-    # Drop old samples from the front (list is chronological).
-    while log and log[0][0] < cutoff:
-        log.pop(0)
-
-def _avg_spread_window(symbol: str):
-    """Return (avg_spread, span_minutes, count) over the logged window for a token,
-    or (None, 0, 0) if no samples yet. span_minutes is how much real time the
-    samples actually cover — so the UI can say '4h' or honestly '12m' on a fresh start."""
-    log = _token_spread_log.get(symbol, [])
-    if not log:
-        return (None, 0, 0)
-    vals = [s for _ts, s in log]
-    avg = sum(vals) / len(vals)
-    span_mins = round((log[-1][0] - log[0][0]) / 60)
-    return (_round_spread(avg), span_mins, len(vals))
+# ── Per-GAME spread history ─────────────────────────────────────────────────
+# Every crypto market is a fresh 15-min GAME. We keep ONE representative spread
+# per game (the latest reading in that 15-min window — i.e. closest to its close,
+# which is when the bot actually buys), then compare the live spread to the
+# trailing average ACROSS games. 4h = 16 games, 24h = 96 games. This is the
+# reference the user reasons in: "current spread vs the last 16 spreads".
+_GAME_SECS  = 900    # 15-minute game
+_MAX_GAMES  = 96     # keep 24h of games
+_GAMES_4H   = 16     # 4 hours = 16 games
+_token_game_spreads = {sym: {} for sym in _SMART_TOKENS}  # {game_bucket: spread}
 
 def _round_spread(v: float) -> float:
     """Round a spread to a sensible precision for its MAGNITUDE — not by token
@@ -2326,29 +2306,66 @@ def _round_spread(v: float) -> float:
     if v < 100:   return round(v, 2)
     return round(v)
 
-def _calculate_safe_spread(symbol: str, current_spread: float) -> float:
-    """AI-recommended safe spread for a token, derived from its own recent
-    volatility. Above this distance-from-strike the position has enough cushion
-    to be a Scanner play (less likely to flip); below it, it's a Lotto (cheap,
-    flip-risk). Scales to the token's price magnitude automatically."""
-    hist = _token_spread_history.setdefault(symbol, [])
-    hist.append(current_spread)
-    if len(hist) > _MAX_HISTORY:
-        hist.pop(0)
+def _record_spread_sample(symbol: str, spread: float):
+    """Record the live spread against its 15-min game bucket. The last reading in
+    a game overwrites earlier ones, so each game contributes ONE spread (the one
+    nearest its close — the moment that matters for flip risk)."""
+    buckets = _token_game_spreads.setdefault(symbol, {})
+    b = int(time.time() // _GAME_SECS)
+    buckets[b] = spread
+    if len(buckets) > _MAX_GAMES:                      # prune oldest games
+        for old in sorted(buckets)[:-_MAX_GAMES]:
+            del buckets[old]
 
-    if len(hist) < 3:
-        # Not enough history yet — cushion proportional to the live spread (25%
-        # over current). No absolute floor, so cent-scale tokens (DOGE/XRP) and
-        # dollar-scale tokens (BTC/ETH) both get a sane starting threshold.
+def _recent_game_spreads(symbol: str, games: int):
+    """The last `games` per-game spreads, oldest→newest."""
+    buckets = _token_game_spreads.get(symbol, {})
+    return [buckets[k] for k in sorted(buckets)[-games:]]
+
+def _avg_spread_games(symbol: str, games: int = _GAMES_4H):
+    """(avg_spread, games_counted) over the last `games` games, or (None, 0)."""
+    vals = _recent_game_spreads(symbol, games)
+    if not vals:
+        return (None, 0)
+    return (_round_spread(sum(vals) / len(vals)), len(vals))
+
+def _spread_volatility(symbol: str, games: int = _GAMES_4H):
+    """(std, cv, elevated) over the last `games` games — how much the spread is
+    bouncing around. cv = std/avg, which is comparable across tokens of different
+    price magnitude (a 30% swing means the same for BTC and DOGE). 'elevated' is a
+    heads-up that the token is jumping more than normal, so a position could flip
+    faster than usual. (None, None, False) until enough games are logged."""
+    vals = _recent_game_spreads(symbol, games)
+    if len(vals) < 3:
+        return (None, None, False)
+    avg = sum(vals) / len(vals)
+    std = (sum((x - avg) ** 2 for x in vals) / len(vals)) ** 0.5
+    cv = (std / avg) if avg else 0.0
+    latest = vals[-1]
+    # Elevated when swings are large vs the average (>25%) OR the latest game
+    # jumped more than 2 std away from the recent norm.
+    elevated = cv > 0.25 or (std > 0 and abs(latest - avg) > 2 * std)
+    return (_round_spread(std), round(cv, 3), elevated)
+
+def _calculate_safe_spread(symbol: str, current_spread: float) -> float:
+    """AI-recommended safe spread = the trailing per-GAME average plus a volatility
+    cushion, so it sits a bit above the typical spread to reduce flip risk. Computed
+    from the last 16 games (4h). Above this distance-from-strike → Scanner (safe);
+    below → Lotto (flip-risk). Falls back to a proportional cushion until a few
+    games are logged. Scales to each token's magnitude automatically."""
+    vals = _recent_game_spreads(symbol, _GAMES_4H)
+    if len(vals) < 3:
+        # Not enough games yet — cushion proportional to the live spread (25% over).
+        # No absolute floor, so cent-scale (DOGE/XRP) and dollar-scale (BTC/ETH)
+        # tokens both get a sane starting threshold.
         return _round_spread(current_spread * 1.25)
 
-    # Enough history — volatility-based: average + 1.5×std dev gives a cushion that
-    # widens for choppy tokens and tightens for calm ones. Never recommend below
-    # 80% of the current spread (so a momentary spike can't strand us in Lotto).
-    avg = sum(hist) / len(hist)
-    std_dev = (sum((x - avg) ** 2 for x in hist) / len(hist)) ** 0.5
-    safe_spread = max(avg + 1.5 * std_dev, current_spread * 0.8)
-    return _round_spread(safe_spread)
+    # Volatility-based: average + 1.5×std dev widens the cushion for choppy tokens
+    # and tightens it for calm ones. Never recommend below 80% of the current
+    # spread (so a momentary spike can't strand us in Lotto).
+    avg = sum(vals) / len(vals)
+    std_dev = (sum((x - avg) ** 2 for x in vals) / len(vals)) ** 0.5
+    return _round_spread(max(avg + 1.5 * std_dev, current_spread * 0.8))
 
 _safe_spread_cache = {"data": {}, "ts": 0.0}
 
@@ -4425,6 +4442,26 @@ def api_smart_strategy_status():
     })
 
 
+def _per_token_payload(token, recommendations):
+    """One token's settings + live AI recommendation + per-GAME averages + volatility."""
+    cfg = per_token_settings[token]
+    avg4h, n4h = _avg_spread_games(token, _GAMES_4H)
+    avg24h, n24h = _avg_spread_games(token, _MAX_GAMES)
+    vol, vol_pct, vol_elevated = _spread_volatility(token, _GAMES_4H)
+    return {
+        "enabled": cfg.get("enabled", False),
+        "buy_last_min": cfg.get("buy_last_min", 1),
+        "threshold": cfg.get("threshold", 100),
+        "mode": cfg.get("mode", "both"),
+        "order_type": cfg.get("order_type", "market"),
+        "ai_choice": cfg.get("ai_choice", True),
+        "ai_recommended_spread": recommendations.get(token, 100),
+        "avg_spread_4h": avg4h,   "avg_games_4h": n4h,    # last 16 games
+        "avg_spread_24h": avg24h, "avg_games_24h": n24h,  # last 96 games
+        "volatility": vol, "volatility_pct": vol_pct, "vol_elevated": vol_elevated,
+    }
+
+
 @app.route("/api/smart-strategy/per-token", methods=["GET", "POST"])
 def api_per_token_settings():
     """Per-token Smart Strategy configuration and AI recommendations.
@@ -4437,21 +4474,7 @@ def api_per_token_settings():
         recommendations = _compute_safe_spread_recommendations(token_spreads)
 
         # Build response with current settings + recommendations
-        result = {}
-        for token in per_token_settings:
-            cfg = per_token_settings[token]
-            avg, span_mins, n = _avg_spread_window(token)
-            result[token] = {
-                "enabled": cfg.get("enabled", False),
-                "buy_last_min": cfg.get("buy_last_min", 1),
-                "threshold": cfg.get("threshold", 100),
-                "mode": cfg.get("mode", "both"),
-                "order_type": cfg.get("order_type", "market"),
-                "ai_choice": cfg.get("ai_choice", True),
-                "ai_recommended_spread": recommendations.get(token, 100),
-                "avg_spread_4h": avg,
-                "avg_spread_span_mins": span_mins,
-            }
+        result = {token: _per_token_payload(token, recommendations) for token in per_token_settings}
         return jsonify({"settings": result})
 
     # POST: update per-token settings
@@ -4484,21 +4507,7 @@ def api_per_token_settings():
     # Return updated state + recommendations
     token_spreads = _token_spread_cache.get("data", [])
     recommendations = _compute_safe_spread_recommendations(token_spreads)
-    result = {}
-    for token in per_token_settings:
-        cfg = per_token_settings[token]
-        avg, span_mins, n = _avg_spread_window(token)
-        result[token] = {
-            "enabled": cfg.get("enabled", False),
-            "buy_last_min": cfg.get("buy_last_min", 1),
-            "threshold": cfg.get("threshold", 100),
-            "mode": cfg.get("mode", "both"),
-            "order_type": cfg.get("order_type", "market"),
-            "ai_choice": cfg.get("ai_choice", True),
-            "ai_recommended_spread": recommendations.get(token, 100),
-            "avg_spread_4h": avg,
-            "avg_spread_span_mins": span_mins,
-        }
+    result = {token: _per_token_payload(token, recommendations) for token in per_token_settings}
     return jsonify({"settings": result})
 
 
