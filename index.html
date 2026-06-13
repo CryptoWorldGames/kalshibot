@@ -6719,11 +6719,15 @@ function saveSmartStrategySettings(settings) {
 
 async function loadSmartStrategyTokens() {
   try {
-    const resp = await fetchWithTimeout("/api/smart-strategy/tokens");
+    console.log("[loadSmartStrategyTokens] Starting token load...");
+    const resp = await fetchWithTimeout("/api/smart-strategy/tokens", 25000);
+    console.log("[loadSmartStrategyTokens] Response received:", resp.status);
     const data = await resp.json();
+    console.log("[loadSmartStrategyTokens] Data parsed, tokens:", data.tokens?.length);
     renderSmartStrategyTokenCards(data.tokens || []);
+    console.log("[loadSmartStrategyTokens] Rendering complete");
   } catch(e) {
-    console.error("[smart-strategy] token load failed:", e);
+    console.error("[loadSmartStrategyTokens] FAILED:", e.message, e);
     const container = document.getElementById("smartStrategyTokens");
     if (container) {
       container.innerHTML = '<div style="grid-column:1/-1;color:#f55;padding:20px;text-align:center">Failed to load tokens: ' + e.message + '</div>';
