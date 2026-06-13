@@ -760,7 +760,10 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 <!-- Filters -->
 <div class="card">
   <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
-    <span onclick="document.getElementById('filterBody').style.display = document.getElementById('filterBody').style.display === 'none' ? 'block' : 'none'" style="cursor:pointer;user-select:none">Filters <span style="font-size:11px;color:#666;margin-left:10px">◀ click to collapse</span></span>
+    <span onclick="toggleSection('filterBody')" style="cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px">
+      <span id="filterBody-toggle" style="font-size:16px;color:var(--green)">▼</span>
+      <span>📊 FILTERS</span>
+    </span>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <button id="saveSettingsBtn" onclick="saveBtnClick(this).catch(e => console.error('Save failed:', e))" class="sm ghost" style="font-size:13px;padding:6px 18px;font-weight:700"><span class="save-text-pc">Save Settings</span><span class="save-text-mobile">Save</span></button>
       <button class="sm ghost" style="font-size:12px;padding:6px 14px" onclick="document.getElementById('strategySlots').style.display=document.getElementById('strategySlots').style.display==='none'?'block':'none'">⭐ Saved Strategies</button>
@@ -6647,15 +6650,19 @@ updateMarketTimer();
 
 async function loadSmartStrategyTokens() {
   try {
-    const resp = await fetch("/api/smart-strategy/tokens", {cache: "no-store"});
-    const data = await resp.json();
-    renderSmartStrategyTokens(data.tokens || []);
+    const [tokensResp, statusResp] = await Promise.all([
+      fetch("/api/smart-strategy/tokens", {cache: "no-store"}),
+      fetch("/api/smart-strategy/status", {cache: "no-store"})
+    ]);
+    const tokensData = await tokensResp.json();
+    const statusData = await statusResp.json();
+    renderSmartStrategyTokens(tokensData.tokens || [], statusData);
   } catch(e) {
     console.error("[smart-strategy] token load failed:", e);
   }
 }
 
-function renderSmartStrategyTokens(tokens) {
+function renderSmartStrategyTokens(tokens, scanState = {}) {
   const container = document.getElementById("tokenCardsContainer");
   if (!container) return;
 
@@ -6668,11 +6675,25 @@ function renderSmartStrategyTokens(tokens) {
   container.innerHTML = '';
   container.style.gridTemplateColumns = isMobile ? '1fr' : 'repeat(auto-fit,minmax(160px,1fr))';
 
+  // Get active token for each profile
+  const activeT1 = scanState?.T1?.token;
+  const activeT2 = scanState?.T2?.token;
+  const activeProfiles = scanState?.active_profiles || [];
+  const isT1Active = activeProfiles.includes("T1");
+  const isT2Active = activeProfiles.includes("T2");
+
   tokens.forEach((t, idx) => {
+    const isActive = (isT1Active && t.symbol === activeT1) || (isT2Active && t.symbol === activeT2);
+    const activeMode = isT1Active && t.symbol === activeT1 ? "T1" : isT2Active && t.symbol === activeT2 ? "T2" : null;
+
     const card = document.createElement("div");
+    const borderColor = isActive ? "var(--green)" : "#2a5a2a";
+    const borderWidth = isActive ? "2px" : "1px";
+    const bgColor = isActive ? "#0f3d0f" : "#0f2b0f";
+
     card.style.cssText = `
-      background:#0f2b0f;
-      border:1px solid #2a5a2a;
+      background:${bgColor};
+      border:${borderWidth} solid ${borderColor};
       border-radius:6px;
       padding:12px;
       display:flex;
@@ -6682,13 +6703,18 @@ function renderSmartStrategyTokens(tokens) {
       animation:slideIn 0.3s ease forwards;
       animation-delay:${idx * 50}ms;
       opacity:0;
+      box-shadow:${isActive ? "0 0 12px rgba(0,217,126,0.3)" : "none"};
+      transition:all 0.2s;
     `;
 
     const spreadColor = t.spread > t.to_beat ? "var(--green)" : "#f5c542";
     const winRateColor = t.win_rate > 50 ? "var(--green)" : t.win_rate > 40 ? "#f5c542" : "var(--red)";
 
     card.innerHTML = `
-      <div style="font-weight:700;color:var(--green);font-size:13px">${t.symbol}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="font-weight:700;color:var(--green);font-size:13px">${t.symbol}</div>
+        ${isActive ? `<div style="background:${activeMode === "T1" ? "#ff9416" : "#00d97e"};color:#000;padding:2px 6px;border-radius:3px;font-weight:700;font-size:10px">${activeMode === "T1" ? "SCANNER" : "LOTTO"}</div>` : ""}
+      </div>
       <div style="font-size:11px;color:#aaa">
         <div>Spread: <span style="color:${spreadColor};font-weight:700">$${t.spread.toFixed(2)}</span></div>
         <div>Price: <span style="color:#0f9">$${t.price.toFixed(2)}</span></div>
@@ -6722,6 +6748,40 @@ function renderSmartStrategyTokens(tokens) {
 
 // Load token data on page load
 loadSmartStrategyTokens();
+
+// ── Collapsible Section Helper ────────────────────────────────────────────
+function toggleSection(sectionId) {
+  const section = document.getElementById(sectionId);
+  const toggle = document.getElementById(sectionId + "-toggle");
+  if (!section) return;
+
+  const isHidden = section.style.display === "none";
+  section.style.display = isHidden ? "block" : "none";
+  if (toggle) {
+    toggle.textContent = isHidden ? "▼" : "▶";
+  }
+  localStorage.setItem("section-" + sectionId, isHidden ? "open" : "closed");
+}
+
+function initCollapsibleSection(sectionId, defaultOpen = true) {
+  const saved = localStorage.getItem("section-" + sectionId);
+  const shouldBeOpen = saved ? (saved === "open") : defaultOpen;
+  const section = document.getElementById(sectionId);
+  const toggle = document.getElementById(sectionId + "-toggle");
+
+  if (section) section.style.display = shouldBeOpen ? "block" : "none";
+  if (toggle) toggle.textContent = shouldBeOpen ? "▼" : "▶";
+}
+
+// Initialize all collapsible sections when page loads
+document.addEventListener("DOMContentLoaded", () => {
+  initCollapsibleSection("filterBody", true);
+  initCollapsibleSection("strategyBody", true);
+  initCollapsibleSection("autoModeBody", true);
+  initCollapsibleSection("L_filterBody", true);
+  initCollapsibleSection("L_strategyBody", true);
+  initCollapsibleSection("L_autoModeBody", true);
+});
 
 // ── Lotto (T2) settings: independent form, posts to profile T2 ────────────
 function setLottoEndsWithin(mins) {
