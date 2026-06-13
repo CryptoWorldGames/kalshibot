@@ -2,6 +2,16 @@
 
 A Flask-based prediction market trading bot for Kalshi with real-time scanning, automated buying/selling, and intelligent strategy optimization.
 
+## ⚠️ Security First
+
+**IMPORTANT:** This bot requires your Kalshi API key to trade on your account.
+
+- 🔒 **Never share your API key** - it's like your password
+- 🔒 **Never commit it to GitHub** - we have .gitignore protection
+- 🔒 **Save it only locally** - in a `kalshi_api_key` file (git-ignored)
+
+→ **See [SETUP.md](SETUP.md) for secure installation instructions**
+
 ## Quick Start
 
 1. **Start the bot:**
