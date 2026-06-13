@@ -3983,6 +3983,160 @@ def api_smart_strategy():
     })
 
 
+@app.route("/api/smart-strategy/tokens")
+def api_smart_strategy_tokens():
+    """Per-token spread analysis with backtesting stats for the 7 main 15-min cryptos.
+    Returns: {tokens: [{symbol, spread, to_beat, price, wins, losses, win_rate, avg_spread_25/50/100}, ...]}"""
+
+    # The 7 main 15-min crypto markets
+    CRYPTO_7 = [
+        ("BTC", "KXBTC15M"),
+        ("ETH", "KXETH15M"),
+        ("SOL", "KXSOL15M"),
+        ("XRP", "KXXRP15M"),
+        ("DOGE", "KXDOGE15M"),
+        ("BNB", "KXBNB15M"),
+        ("HYPE", "KXHYPE15M"),
+    ]
+
+    tokens = []
+
+    # Get live spot prices and spreads for each token
+    spot_prices = {}
+    for symbol, series in CRYPTO_7:
+        try:
+            spot, _src = _spot_price(symbol)
+            spot_prices[symbol] = spot or 0
+        except:
+            spot_prices[symbol] = 0
+
+    # Get backtesting stats from activity log (last 30 days)
+    since = time.time() - 30 * 86400
+    activity = _read_activity(since)
+
+    # Group activity by ticker to calculate per-token stats
+    token_trades = {}
+    for e in activity:
+        ticker = e.get("ticker", "")
+        kind = e.get("kind", "")
+        if kind not in ("buy", "sell"):
+            continue
+        if ticker not in token_trades:
+            token_trades[ticker] = {"buys": [], "sells": []}
+        if kind == "buy":
+            token_trades[ticker]["buys"].append(e)
+        else:
+            token_trades[ticker]["sells"].append(e)
+
+    # Calculate per-token stats
+    for symbol, series in CRYPTO_7:
+        try:
+            # Get current market data
+            markets = kalshi_get("/markets", {
+                "series_ticker": series,
+                "status": "open",
+                "limit": 10
+            }).get("markets", [])
+
+            if not markets:
+                tokens.append({
+                    "symbol": symbol,
+                    "spread": 0,
+                    "to_beat": 0,
+                    "price": spot_prices[symbol],
+                    "wins": 0,
+                    "losses": 0,
+                    "win_rate": 0,
+                    "avg_spread_25": 0,
+                    "avg_spread_50": 0,
+                    "avg_spread_100": 0,
+                })
+                continue
+
+            # Calculate spread from current markets
+            spreads = []
+            for m in markets:
+                strike = _strike_from_market(m)
+                if strike and spot_prices[symbol] > 0:
+                    spreads.append(abs(spot_prices[symbol] - strike))
+
+            current_spread = round(sum(spreads) / len(spreads), 2) if spreads else 0
+            to_beat = current_spread  # What the strategy needs to beat
+
+            # Backtesting stats: calculate win rate and average spreads from settlements
+            wins = losses = 0
+            spreads_25 = spreads_50 = spreads_100 = []
+
+            try:
+                settlements = _cached_settlements(hours=24 * 30)
+                for s in settlements:
+                    ticker = s.get("ticker", "")
+                    # Match by ticker prefix (e.g., "KXBTC15M" matches any KXBTC15M trade)
+                    if not ticker.startswith(series):
+                        continue
+
+                    pnl = float(s.get("pnl") or 0)
+                    if pnl > 0.001:
+                        wins += 1
+                    elif pnl < -0.001:
+                        losses += 1
+
+                    # Track spreads for averaging
+                    cost = float(s.get("cost") or 0)
+                    count = float(s.get("count") or 0)
+                    if count > 0 and cost > 0:
+                        spread_at_entry = (cost / count)
+                        spreads_100.append(spread_at_entry)
+                        if len(spreads_100) <= 50:
+                            spreads_50.append(spread_at_entry)
+                        if len(spreads_100) <= 25:
+                            spreads_25.append(spread_at_entry)
+            except:
+                pass
+
+            win_rate = round(100 * wins / (wins + losses), 1) if (wins + losses) > 0 else 0
+            avg_spread_25 = round(sum(spreads_25) / len(spreads_25), 2) if spreads_25 else 0
+            avg_spread_50 = round(sum(spreads_50) / len(spreads_50), 2) if spreads_50 else 0
+            avg_spread_100 = round(sum(spreads_100) / len(spreads_100), 2) if spreads_100 else 0
+
+            tokens.append({
+                "symbol": symbol,
+                "spread": current_spread,
+                "to_beat": to_beat,
+                "price": spot_prices[symbol],
+                "wins": wins,
+                "losses": losses,
+                "win_rate": win_rate,
+                "avg_spread_25": avg_spread_25,
+                "avg_spread_50": avg_spread_50,
+                "avg_spread_100": avg_spread_100,
+            })
+        except Exception as e:
+            print(f"[smart-strategy] token {symbol} error: {e}")
+            tokens.append({
+                "symbol": symbol,
+                "spread": 0,
+                "to_beat": 0,
+                "price": spot_prices[symbol],
+                "wins": 0,
+                "losses": 0,
+                "win_rate": 0,
+                "avg_spread_25": 0,
+                "avg_spread_50": 0,
+                "avg_spread_100": 0,
+            })
+
+    # Sort by: BTC first, then by highest spread
+    def token_sort_key(t):
+        if t["symbol"] == "BTC":
+            return (0, -t["spread"])
+        return (1, -t["spread"])
+
+    tokens.sort(key=token_sort_key)
+
+    return jsonify({"tokens": tokens})
+
+
 @app.route("/api/audit")
 def api_audit():
     """Full trading audit over the past N days: where the money actually went.
