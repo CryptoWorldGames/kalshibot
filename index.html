@@ -829,6 +829,25 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     </div>
 
     <div class="settings-section">
+      <div class="settings-section-title">💚 Support the Developer</div>
+      <div style="text-align:center;padding:16px 8px">
+        <div style="font-size:13px;color:#ddd;line-height:1.6;margin-bottom:14px">
+          Like KalshiBot? Consider tipping the developer <b style="color:#fff">Shadow</b> 🙏
+        </div>
+        <!-- QR code — replace src with your actual QR image path once uploaded -->
+        <div id="donateQrWrap" style="margin:0 auto 14px;width:160px;height:160px;background:#111;border:2px dashed #333;border-radius:10px;display:flex;align-items:center;justify-content:center">
+          <span style="font-size:11px;color:#555;text-align:center;line-height:1.5">QR code<br/>coming soon</span>
+        </div>
+        <div style="font-size:14px;font-weight:800;color:#00d64f;letter-spacing:.5px;margin-bottom:6px">$hadowDefense</div>
+        <div style="font-size:11px;color:#888;margin-bottom:14px">CashApp</div>
+        <button onclick="copyDonateTag()" style="background:#00d64f;border:none;color:#000;padding:8px 20px;border-radius:7px;font-weight:800;font-size:13px;cursor:pointer;width:100%;transition:all .2s">
+          📋 Copy $hadowDefense
+        </button>
+        <div id="donatecopied" style="font-size:11px;color:var(--green);margin-top:6px;opacity:0;transition:opacity .3s">Copied!</div>
+      </div>
+    </div>
+
+    <div class="settings-section">
       <div class="settings-section-title">ℹ️ About</div>
       <div style="font-size:13px;color:#ddd;line-height:1.6">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)">
@@ -6072,6 +6091,13 @@ async function saveApiKey() {
 }
 
 // ── Re-open wizard from Settings ──────────────────────────────────────────
+function copyDonateTag() {
+  navigator.clipboard.writeText("$hadowDefense").then(() => {
+    const el = document.getElementById("donatecopied");
+    if (el) { el.style.opacity = "1"; setTimeout(() => el.style.opacity = "0", 2000); }
+  }).catch(() => toast("$hadowDefense", "ok"));
+}
+
 function reopenWizard() {
   document.getElementById("settingsModal").classList.remove("open");
   localStorage.removeItem("kalshibot_wizard_done");
