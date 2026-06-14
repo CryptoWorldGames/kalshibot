@@ -16,7 +16,7 @@ REM ============================================================================
 set BRANCH=claude/practical-hawking-0faq18
 
 :loop
-cd /d C:\Users\mycry\bots\kalshibot
+cd /d "%USERPROFILE%\bots\kalshibot"
 
 echo [%date% %time%] Fetching latest from GitHub...
 git fetch origin

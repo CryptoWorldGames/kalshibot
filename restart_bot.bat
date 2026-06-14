@@ -1,22 +1,25 @@
 @echo off
-REM Auto-pull and restart KalshiBot
-REM Run once, bot stays updated forever
+REM ============================================================================
+REM  KalshiBot launcher + auto-updater  (same logic as run_bot.bat)
+REM  Use this if you need to manually restart the bot.
+REM ============================================================================
+set BRANCH=claude/practical-hawking-0faq18
 
 :loop
-cd C:\Users\mycry\bots\kalshibot
+cd /d "%USERPROFILE%\bots\kalshibot"
 
-REM Kill any running bot
-taskkill /F /IM python.exe 2>nul
+echo [%date% %time%] Fetching latest from GitHub...
+git fetch origin
 
-REM Pull latest
-git pull origin main
+echo [%date% %time%] Switching to %BRANCH% ...
+git checkout %BRANCH% 2>nul || git checkout -b %BRANCH% origin/%BRANCH%
 
-REM Wait a moment
-timeout /t 2 /nobreak
+echo [%date% %time%] Hard-syncing to origin/%BRANCH% ...
+git reset --hard origin/%BRANCH%
 
-REM Restart bot
+echo [%date% %time%] Starting bot on branch %BRANCH% ...
 python kalshibot_app.py
 
-REM If it crashes, restart in 5 seconds
+echo [%date% %time%] Bot exited. Restarting in 5 seconds...
 timeout /t 5 /nobreak
 goto loop
