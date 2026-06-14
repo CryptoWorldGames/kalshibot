@@ -965,6 +965,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <!-- Per-trade list -->
     <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-weight:700">Buys &amp; Sells <span id="summaryTradesMeta" style="color:#666;text-transform:none;font-weight:400"></span></div>
     <div id="settleDebugLine" style="display:none;font-size:11px;color:#aaa;background:#160c0c;border:1px solid #4a2020;border-radius:6px;padding:8px 10px;margin-bottom:10px;line-height:1.6"></div>
+    <div id="aiSyncNotice" style="display:none;align-items:center;gap:8px;background:#0d1a2e;border:1px solid #1e4a8a;border-radius:7px;padding:9px 13px;margin-bottom:10px;font-size:12px;color:#7fb3f5;font-weight:600"></div>
     <div id="summaryTrades"></div>
   </div>
 </div><!-- /tab-summary -->
@@ -6520,7 +6521,36 @@ async function loadSummary() {
         allGrouped.push({ buy, close: match || null });
       });
       // Unpaired closes (orphan settlements — no buy found in the window)
-      _allCloses.forEach(c => { if (!_usedC.has(c)) allGrouped.push({ buy: null, close: c }); });
+      const _orphanCloses = [];
+      _allCloses.forEach(c => {
+        if (!_usedC.has(c)) {
+          allGrouped.push({ buy: null, close: c });
+          _orphanCloses.push(c);
+        }
+      });
+
+      // If there are recent orphans (settled within last 5 min), the fills API
+      // likely hasn't synced yet. Schedule a silent re-fetch in 2.5 min.
+      const _nowTs = Date.now() / 1000;
+      const _recentOrphans = _orphanCloses.filter(c => c.kind === "settlement" && (_nowTs - c.ts) < 5 * 60);
+      if (_recentOrphans.length > 0 && !window._orphanRetryPending) {
+        window._orphanRetryPending = true;
+        const _aiNotice = document.getElementById("aiSyncNotice");
+        if (_aiNotice) {
+          _aiNotice.style.display = "flex";
+          _aiNotice.textContent = `🤖 AI detected ${_recentOrphans.length} position${_recentOrphans.length > 1 ? "s" : ""} with reporting delay — rechecking fill data in ~2 min...`;
+        }
+        setTimeout(() => {
+          window._orphanRetryPending = false;
+          const _n = document.getElementById("aiSyncNotice");
+          if (_n) _n.style.display = "none";
+          loadSummary();
+        }, 2.5 * 60 * 1000);
+      } else if (_orphanCloses.length === 0) {
+        window._orphanRetryPending = false;
+        const _n = document.getElementById("aiSyncNotice");
+        if (_n) _n.style.display = "none";
+      }
 
       // Sort: most recent event (close time if available, else buy time) at top
       allGrouped.sort((a, b) => {
