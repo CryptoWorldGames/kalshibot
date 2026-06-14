@@ -6492,7 +6492,12 @@ async function loadSummary() {
       // GROUP FIRST across the full list, THEN paginate the pairs.
       // This ensures a BUY and its SETTLED are always in the same card
       // even if they are 15+ minutes apart in the sorted list.
-      const _allBuys   = trades.filter(x => x.kind === "buy");
+
+      // Dedup buys: same ticker + count + price within 2s = duplicate fill page overlap
+      const _rawBuys = trades.filter(x => x.kind === "buy");
+      const _allBuys = _rawBuys.filter((b, i, arr) =>
+        arr.findIndex(x => x.ticker === b.ticker && x.count === b.count && x.price === b.price && Math.abs(x.ts - b.ts) < 2) === i
+      );
       const _allCloses = trades.filter(x => x.kind === "sell" || x.kind === "settlement");
       const _cByTicker = {};
       _allCloses.forEach(c => { (_cByTicker[c.ticker] = _cByTicker[c.ticker] || []).push(c); });
@@ -6508,7 +6513,7 @@ async function loadSummary() {
         const pool = (_cByTicker[buy.ticker] || []).filter(c =>
           !_usedC.has(c) &&
           c.ts >= buy.ts - 60 &&            // allow tiny clock skew
-          (c.ts - buy.ts) < 30 * 60          // sanity cap: same 15-min cycle, not a later reuse
+          (c.ts - buy.ts) < 60 * 60          // sanity cap: within 1h (15-min markets settle ~15-45 min after buy)
         );
         const match = pool.length ? pool.reduce((a, b) => (a.ts < b.ts ? a : b)) : null;
         if (match) _usedC.add(match);
@@ -6542,14 +6547,22 @@ async function loadSummary() {
         const paidDol = buy ? (buy.spent != null ? Number(buy.spent) : (Number(buy.count||0) * Number(buy.price||0) / 100)) : null;
         const recvDol = close ? (Number(close.count||0) * Number(close.price||0) / 100) : null;
 
-        // For settlements paired with a buy, recalculate profit from actual payout vs what was paid.
-        // Kalshi's yes_total_cost_dollars in settlement records is NOT the original purchase cost —
-        // it's a net basis figure that gives wrong small P&L. Using paidDol (from fills) is exact.
+        // Profit calculation — two cases:
+        // A) Paired buy + settlement: recalculate from actual payout vs what was paid.
+        //    Kalshi's yes_total_cost_dollars in settlement records is NOT the original
+        //    purchase cost, so backend pnl is wrong. Using paidDol (from fills) is exact.
+        // B) Orphan settlement (no buy fill found): backend pnl ≈ 0 because the cost
+        //    field is unreliable. Show null ("?") for lost orphans instead of fake $0.00.
         let profit;
         if (hasClose && isSettled && buy && paidDol != null) {
           const settleCount = Number(close.count || 0);
-          const settleReceived = close.won ? settleCount * 1.00 : 0; // $1 per contract if won
+          const settleReceived = close.won ? settleCount * 1.00 : 0;
           profit = Math.round((settleReceived - paidDol) * 100) / 100;
+        } else if (hasClose && isSettled && !buy) {
+          // Orphan: no buy paired, so we can't compute real cost. Use backend pnl only
+          // when it's clearly non-zero (won and got paid). Otherwise show unknown.
+          const backendPnl = close.profit != null ? Number(close.profit) : null;
+          profit = (backendPnl != null && Math.abs(backendPnl) > 0.01) ? backendPnl : null;
         } else {
           profit = hasClose && close.profit != null ? Number(close.profit) : null;
         }
@@ -6565,13 +6578,16 @@ async function loadSummary() {
           const tagBg    = profit > 0 ? "#0d2b14" : profit < 0 ? "#2b0d0d" : "#111";
           // Right-side reads as a sentence: "Sold NO ×1 @ 100¢ = received $1.00 = +$0.18 profit"
           const verb     = isSettled ? "Settled" : "Sold";
-          const pnlStr   = profit == null ? "" : `<span style="font-weight:900;font-size:14px;color:${profitCls}">= ${profit >= 0 ? "+" : "-"}$${Math.abs(profit).toFixed(2)} ${profit >= 0 ? "profit" : "loss"}</span>`;
+          const pnlStr   = profit == null
+            ? (!buy && isSettled && !close.won ? `<span style="color:#ff6b6b;font-size:13px;font-weight:700">= LOSS (no fill data)</span>` : "")
+            : `<span style="font-weight:900;font-size:14px;color:${profitCls}">= ${profit >= 0 ? "+" : "-"}$${Math.abs(profit).toFixed(2)} ${profit >= 0 ? "profit" : "loss"}</span>`;
           const recvStr  = recvDol != null && recvDol > 0 ? `<span style="color:#fff;font-size:12px">= received $${recvDol.toFixed(2)}</span>` : "";
+          const cntStr   = close.count > 0 ? ` ×${close.count}` : "";
           closeRow = `<div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:${tagBg};border-bottom:1px solid #252525;flex-wrap:wrap">
             <span style="color:${tagColor};font-weight:900;font-size:13px;min-width:62px">${tag}</span>
             ${profile ? `<span style="color:#888;font-size:10px;padding:1px 4px;background:#1a1a1a;border-radius:2px;font-weight:600">${esc(profile)}</span>` : ""}
             <span style="color:#fff;font-weight:700;font-size:13px;flex:1;min-width:80px">${title}</span>
-            <span style="color:#fff;font-size:11px;font-weight:600">${verb} ${side}${close.count ? ` ×${close.count}` : ""}${close.price != null ? ` @ ${close.price}¢` : ""}</span>
+            <span style="color:#fff;font-size:11px;font-weight:600">${verb} ${side}${cntStr}${close.price != null ? ` @ ${close.price}¢` : ""}</span>
             ${recvStr}
             ${pnlStr}
             <span style="color:#e8e8e8;font-size:11px;white-space:nowrap">${fmtTime(close.ts, true)}</span>
