@@ -2551,6 +2551,17 @@ async function loadPositionsFast() {
       window._haveApiPositions = true;
       renderBotPositions(np);
     }
+    // Fill blanks fast: immediately enrich any position still missing a live price
+    // (just-bought, or non-crypto markets the scan loop doesn't cache) so CURRENT /
+    // VALUE NOW / PROFIT NOW don't sit on "—" for up to a minute. Throttled to once
+    // per 12s so a permanently-unpriced row can't refetch every cycle.
+    try {
+      const _blank = np.filter(p => p.ticker && p.current_yes == null && p.current_no == null).map(p => p.ticker);
+      if (_blank.length && (Date.now() - (window._lastBlankEnrich || 0) > 12000)) {
+        window._lastBlankEnrich = Date.now();
+        enrichPositionMarkets(_blank);
+      }
+    } catch(e) {}
     // Settlements come back from cache even on the fast path — show them if present.
     if (d.recent_settlements && d.recent_settlements.length) {
       window._lastSettlements = d.recent_settlements;
@@ -6641,7 +6652,7 @@ function switchTab(name) {
     // list stale forever if the tab was opened while backgrounded). Browsers throttle
     // background timers but resume on focus, and the window 'focus' handler force-refreshes.
     window._posTabRefresh = setInterval(loadPositionsFast, 15000);       // keep list current
-    window._posEnrich     = setInterval(enrichPositionMarkets, 60000);   // refresh prices
+    window._posEnrich     = setInterval(enrichPositionMarkets, 30000);   // refresh live prices
     window._posSettle     = setInterval(loadSettlements, 60000);         // refresh settlements
   } else {
     if (window._posTabRefresh) { clearInterval(window._posTabRefresh); window._posTabRefresh = null; }
