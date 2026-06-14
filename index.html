@@ -6334,22 +6334,18 @@ async function loadSummary() {
       const _usedC = new Set();
       const allGrouped = [];
 
-      // Pair each buy with its settlement at the next 15-min boundary.
-      // For Kalshi 15-min crypto markets, a buy at T settles at ceil(T/900)*900.
-      // We find the settlement whose timestamp is closest to that expected time (±3 min tolerance).
-      function nextQuarter(ts) { return Math.ceil(ts / 900) * 900; }
+      // Pair each buy with the ONE close (settlement/sell) for its ticker.
+      // Each Kalshi 15-min market has a unique ticker (the settle time is baked in),
+      // so there's at most one settlement per ticker. We don't need quarter-hour math —
+      // just take the earliest unused close for this ticker at/after the buy. This is
+      // robust no matter how late Kalshi records the settlement after the increment.
       _allBuys.forEach(buy => {
-        const expected = nextQuarter(buy.ts);   // expected settlement epoch
-        const pool = (_cByTicker[buy.ticker] || []).filter(c => !_usedC.has(c) && c.ts > buy.ts && (c.ts - buy.ts) < 30 * 60);
-        // Prefer settlement closest to expected quarter-hour; fall back to earliest after buy
-        let match = null;
-        let bestDelta = Infinity;
-        for (const c of pool) {
-          const delta = Math.abs(c.ts - expected);
-          if (delta < bestDelta) { bestDelta = delta; match = c; }
-        }
-        // Only accept if within 6 minutes of expected quarter-hour (prevents cross-window mismatch)
-        if (match && bestDelta > 6 * 60) match = null;
+        const pool = (_cByTicker[buy.ticker] || []).filter(c =>
+          !_usedC.has(c) &&
+          c.ts >= buy.ts - 60 &&            // allow tiny clock skew
+          (c.ts - buy.ts) < 30 * 60          // sanity cap: same 15-min cycle, not a later reuse
+        );
+        const match = pool.length ? pool.reduce((a, b) => (a.ts < b.ts ? a : b)) : null;
         if (match) _usedC.add(match);
         allGrouped.push({ buy, close: match || null });
       });
