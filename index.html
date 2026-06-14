@@ -4480,7 +4480,12 @@ function filterPos() {
   };
   filtered.sort((a, b) => {
     if (sort === "recent") {
-      return (b.bought_at || "").localeCompare(a.bought_at || "");
+      // Use best available timestamp; fall back through created_time → 0
+      const tsA = Date.parse(a.bought_at || a.created_time || "") || 0;
+      const tsB = Date.parse(b.bought_at || b.created_time || "") || 0;
+      if (tsB !== tsA) return tsB - tsA;
+      // Tie-break: bot-bought positions first
+      return (b.bot_bought ? 1 : 0) - (a.bot_bought ? 1 : 0);
     } else if (sort === "profit_desc") {
       return (getPnl(b) ?? -999) - (getPnl(a) ?? -999);
     } else if (sort === "profit_asc") {

@@ -3049,7 +3049,7 @@ def portfolio():
                 "buy_price":      buy_price,
                 "strategy":       bot_info.get("strategy") if bot_info else None,
                 "target_pct":     bot_info.get("target_pct") if bot_info else None,
-                "bought_at":      (bot_info.get("bought_at") if bot_info else None) or _buy_ts_by_ticker.get(ticker),
+                "bought_at":      (bot_info.get("bought_at") if bot_info else None) or _buy_ts_by_ticker.get(ticker) or p.get("created_time"),
                 "status":         bot_info.get("status", "open") if bot_info else "open",
                 "profile":        bot_info.get("profile") if bot_info else None,
             })
