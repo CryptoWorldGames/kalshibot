@@ -5964,6 +5964,33 @@ def _git_cmd(*args, timeout=30):
     return subprocess.run(["git", "-C", str(HERE), *args],
                           capture_output=True, text=True, timeout=timeout)
 
+def _tailscale_ip():
+    """Return this machine's Tailscale IPv4 (100.x.y.z) if Tailscale is installed
+    and connected, else None. Used to print the URL for reaching the bot's web UI
+    from any other device on your tailnet (laptop/phone, anywhere in the world)."""
+    # 1) Ask the Tailscale CLI directly (most reliable on Windows/Mac/Linux)
+    for exe in ("tailscale", r"C:\Program Files\Tailscale\tailscale.exe"):
+        try:
+            out = subprocess.run([exe, "ip", "-4"], capture_output=True, text=True, timeout=5)
+            lines = (out.stdout or "").strip().splitlines()
+            if lines and lines[0].strip().startswith("100."):
+                return lines[0].strip()
+        except (FileNotFoundError, OSError, subprocess.SubprocessError):
+            continue
+    # 2) Fallback: scan local interfaces for the Tailscale CGNAT range 100.64.0.0/10
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None):
+            addr = info[4][0]
+            if addr.startswith("100."):
+                try:
+                    if 64 <= int(addr.split(".")[1]) <= 127:
+                        return addr
+                except (ValueError, IndexError):
+                    continue
+    except Exception:
+        pass
+    return None
+
 def _auto_update_loop():
     try:
         branch = _git_cmd("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
@@ -6001,6 +6028,12 @@ if __name__ == "__main__":
             pass
         sys.exit(0)
     print("Open http://localhost:5003")
+    _ts_ip = _tailscale_ip()
+    if _ts_ip:
+        print(f"📱 Remote (Tailscale): http://{_ts_ip}:5003")
+        print("   ^ Open this from your laptop/phone anywhere — see TAILSCALE_SETUP.md")
+    else:
+        print("   (Tailscale not detected — see TAILSCALE_SETUP.md to control the bot remotely)")
 
     # Health check: attempt Kalshi API connection, but don't block startup if it fails
     try:
