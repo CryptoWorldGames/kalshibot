@@ -825,7 +825,20 @@ def _recent_fills(hours: int = 24 * 30) -> list:
         cursor = d.get("cursor")
         if not cursor or not fills:
             break
-    return out
+    # Dedup: Kalshi (or cursor-page overlap at the min_ts boundary) can return the
+    # SAME fill more than once, which showed up as phantom duplicate BUY rows in the
+    # Summary (e.g. one 3-contract ETH buy appearing 3×). trade_id is the unique fill
+    # id — real distinct fills keep their own id, so this only removes true repeats.
+    seen, deduped = set(), []
+    for f in out:
+        key = f.get("trade_id") or f.get("fill_id") or (
+            f.get("ticker"), f.get("created_time"), f.get("side"),
+            f.get("action"), f.get("count"), f.get("yes_price"), f.get("no_price"))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(f)
+    return deduped
 
 def _cached_fills_nonblocking() -> list:
     """NEVER blocks: serve the cached fills and refresh in a background thread
