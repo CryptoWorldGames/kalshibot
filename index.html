@@ -720,6 +720,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   <div style="display:flex;flex-direction:column;gap:2px;margin-right:32px">
     <span class="nav-logo">Kalshi<span>Bot</span></span>
     <span id="navVersion" style="font-size:14px;color:#fff;font-weight:700;letter-spacing:0">v—</span>
+    <span id="navHost" style="font-size:11px;color:#7fd1ff;font-weight:700;letter-spacing:.3px" title="The machine actually running this bot">🖥 —</span>
   </div>
   <div class="nav-funds">
     <div class="fund-block">
@@ -1936,6 +1937,12 @@ function loadVersionInfo() {
       if (sv) sv.textContent = `v${v}`;
       const fv = document.getElementById("footerVersion");
       if (fv) fv.textContent = `v${v}`;
+      // Which MACHINE is running this bot — so on the laptop you can tell at a
+      // glance whether you're viewing the home PC (over Tailscale) or a local copy.
+      const host = data.hostname || "?";
+      const hv = document.getElementById("navHost");
+      if (hv) hv.textContent = `🖥 ${host}`;
+      document.title = `KalshiBot @ ${host}`;
     })
     .catch(() => {});
 }

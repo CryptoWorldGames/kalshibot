@@ -4764,6 +4764,7 @@ def api_version():
         "running": running,
         "uptime_secs": int(uptime),
         "server_time": time.time(),  # epoch; frontend formats in the user's timezone
+        "hostname": socket.gethostname(),   # which machine is actually running this bot
     })
 
 
