@@ -62,3 +62,30 @@ Total time: ~5 minutes. You do this once per machine.
   the home PC, or it was installed after the bot started — restart `run_bot.bat`.
 - **Want it locked down further:** Tailscale ACLs (admin console) can restrict which
   devices may reach port 5003.
+
+---
+
+## Running the laptop as a BACKUP (and not double-trading)
+
+**Only ONE bot may trade a Kalshi account at a time.** Normally the home PC is
+the single bot and the laptop just *views* it over Tailscale. The laptop should
+only *run* a bot if the home PC has died.
+
+To make that safe, set the laptop's bot to "know about" the home PC so it can warn
+you. On the **laptop**, before launching, set this environment variable to the home
+PC's Tailscale URL (nothing is hardcoded — you fill in your own address):
+
+```bat
+set KALSHIBOT_PEER_URL=http://100.x.y.z:5003
+```
+
+(Put that line at the top of the laptop's `run_bot.bat`, above `:loop`.)
+
+With it set, the laptop's UI will:
+- **Warn before you start** a bot if the home PC is already trading — you can Cancel
+  and leave the home PC running.
+- **Prompt you to stop** the laptop bot if the home PC comes back online and resumes
+  trading, so you can hand control back and manage it remotely over Tailscale.
+
+The **home PC leaves `KALSHIBOT_PEER_URL` unset**, so it never prompts — no one needs
+to be sitting at it to click anything.

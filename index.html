@@ -3645,7 +3645,63 @@ function toggleAutoMode() {
   autoModeOn ? stopAutoMode("Stopped manually") : startAutoMode();
 }
 
+// ── Multi-instance peer awareness ───────────────────────────────────────────
+// checkPeer() asks OUR backend whether the configured peer (the other machine,
+// set via KALSHIBOT_PEER_URL) is up and trading. The primary/home PC has no peer
+// configured, so it returns {configured:false} and none of this fires there.
+async function checkPeer() {
+  try {
+    const r = await fetch("/api/peer-status", {cache: "no-store"});
+    return await r.json();
+  } catch(e) { return {configured: false}; }
+}
+
+// Background watcher (secondary/laptop only): if the home PC comes back online and
+// starts trading while THIS instance is also running, prompt to hand control back.
+let _peerConflictPrompted = false;
+async function _peerWatch() {
+  const peer = await checkPeer();
+  if (!peer.configured) return;            // primary / single instance — nothing to do
+  if (peer.running && autoModeOn) {
+    if (!_peerConflictPrompted) {
+      _peerConflictPrompted = true;
+      const who = peer.hostname || "Your home PC";
+      const stopHere = confirm(
+        `"${who}" is back online and trading this Kalshi account again.\n\n` +
+        `To avoid two bots trading the same account, it's recommended to stop this ` +
+        `instance and manage "${who}" remotely over Tailscale instead.\n\n` +
+        `Stop the bot on THIS machine now?`
+      );
+      if (stopHere) stopAutoMode(`Handed back to ${who}`);
+    }
+  } else {
+    _peerConflictPrompted = false;          // conflict cleared — re-arm for next time
+  }
+}
+if (!window._peerWatchTimer) window._peerWatchTimer = setInterval(_peerWatch, 60000);
+
 async function startAutoMode() {
+  // ── Multi-instance safety guard ──────────────────────────────────────────
+  // If another machine (e.g. the home PC) is already running a bot on this same
+  // Kalshi account, warn before starting a SECOND one. Only triggers when a peer
+  // is configured (KALSHIBOT_PEER_URL) — the always-on primary has none, so it
+  // never sees this and keeps running untouched.
+  try {
+    const peer = await checkPeer();
+    if (peer.configured && peer.running) {
+      const who = peer.hostname || "another machine";
+      const ok = confirm(
+        `⚠️ WARNING: KalshiBot is ALREADY running on "${who}" and trading this same Kalshi account.\n\n` +
+        `Running a second bot at once will double your orders and can blow past your limits.\n\n` +
+        `Start this second instance anyway?`
+      );
+      if (!ok) {
+        toast(`Start cancelled — "${who}" keeps running.`, "");
+        return;
+      }
+    }
+  } catch(e) { /* peer check is best-effort; never block starting on its failure */ }
+
   // Tell the backend to start its headless trading loop
   try {
     const r = await fetch("/api/bot/start", {method: "POST"});
