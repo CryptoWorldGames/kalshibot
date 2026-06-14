@@ -2546,6 +2546,103 @@ def _maybe_seed_game_spreads():
 
 _maybe_seed_game_spreads()
 
+# ── Trade-outcome learning: tune aggressiveness from the user's OWN results ──
+# Each user's bot learns from their own settled win/loss outcomes (derived from
+# the local activity log — never shared, never anyone else's). A poor recent
+# win-rate nudges that token MORE conservative (favor Scanner/safe); a strong
+# win-rate nudges it slightly MORE aggressive (allow Lotto a bit more). The nudge
+# is a small, capped multiplier on the safe-spread threshold and stays NEUTRAL
+# until there are enough of the user's own outcomes — so a fresh install is
+# unaffected and nothing drastic can ever happen (downloaders can't edit code).
+TRADE_LEARNING_NAME = "trade_learning.json"
+_LEARN_MIN_SAMPLES = 5      # need at least this many of the user's outcomes first
+_LEARN_WINDOW      = 20     # judge on the last N outcomes per token
+_LEARN_MAX_ADJ     = 0.15   # threshold nudge capped at ±15% — safe by design
+_trade_learning = {"by_token": {}, "saved_at": 0.0}
+_learn_refresh_state = {"ts": 0.0}
+_LEARN_REFRESH_EVERY = 120  # seconds
+
+def _trade_learning_paths():
+    return [BACKTEST_DIR / TRADE_LEARNING_NAME, HOME_BACKTEST_DIR / TRADE_LEARNING_NAME]
+
+def _save_trade_learning():
+    blob = json.dumps({"by_token": _trade_learning["by_token"],
+                       "saved_at": time.time()}, indent=2)
+    for p in _trade_learning_paths():
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(blob, encoding="utf-8")
+        except Exception as e:
+            print(f"[learning] save to {p} failed: {e}")
+
+def _load_trade_learning():
+    best = None
+    for p in _trade_learning_paths():
+        try:
+            if p.exists():
+                d = json.loads(p.read_text(encoding="utf-8"))
+                ts = float(d.get("saved_at", 0))
+                if best is None or ts > best[0]:
+                    best = (ts, d)
+        except Exception as e:
+            print(f"[learning] load from {p} failed: {e}")
+    if best:
+        _trade_learning["by_token"] = best[1].get("by_token", {}) or {}
+        _trade_learning["saved_at"] = best[0]
+
+def _ticker_token(ticker: str):
+    """Map a Kalshi ticker (e.g. KXBTC15M-...) back to its token symbol."""
+    for tok, prefix in _SMART_TOKENS.items():
+        if ticker.startswith(prefix):
+            return tok
+    return None
+
+def _refresh_trade_learning(force: bool = False):
+    """Recompute per-token recent win-rate from the user's OWN settled sells in the
+    activity log. Cheap, local-only, throttled. Never touches the trading path."""
+    now = time.time()
+    if not force and (now - _learn_refresh_state["ts"]) < _LEARN_REFRESH_EVERY:
+        return
+    _learn_refresh_state["ts"] = now
+    try:
+        events = _read_activity(now - 30 * 24 * 3600)
+    except Exception:
+        return
+    per = {}  # token → list of 1(win)/0(loss), oldest→newest
+    for e in events:
+        if e.get("kind") != "sell":
+            continue
+        tok = _ticker_token(e.get("ticker", "") or "")
+        profit = e.get("profit")
+        if not tok or profit is None:
+            continue
+        try:
+            per.setdefault(tok, []).append(1 if float(profit) > 0 else 0)
+        except (TypeError, ValueError):
+            continue
+    out = {}
+    for tok, wl in per.items():
+        recent = wl[-_LEARN_WINDOW:]
+        n = len(recent); wins = sum(recent)
+        out[tok] = {"n": n, "wins": wins, "losses": n - wins,
+                    "rate": round(wins / n, 3) if n else None}
+    _trade_learning["by_token"] = out
+    _save_trade_learning()
+
+def _learning_multiplier(symbol: str) -> float:
+    """Bounded threshold nudge from this user's own results, in
+    [1-_LEARN_MAX_ADJ, 1+_LEARN_MAX_ADJ]. 1.0 (neutral) until enough samples.
+    Higher safe line → Lotto used a bit more (aggressive); lower → Scanner favored
+    (conservative). Win-rate 0.50 = neutral, 0.60 = max aggressive, 0.40 = max
+    conservative."""
+    rec = _trade_learning.get("by_token", {}).get(symbol)
+    if not rec or rec.get("rate") is None or rec.get("n", 0) < _LEARN_MIN_SAMPLES:
+        return 1.0
+    adj = (rec["rate"] - 0.50) / 0.10 * _LEARN_MAX_ADJ
+    return 1.0 + max(-_LEARN_MAX_ADJ, min(_LEARN_MAX_ADJ, adj))
+
+_load_trade_learning()
+
 def _calculate_safe_spread(symbol: str, current_spread: float, exclude_bucket=None) -> float:
     """AI-recommended safe spread = 75th percentile of recent closing spreads.
 
@@ -2559,12 +2656,14 @@ def _calculate_safe_spread(symbol: str, current_spread: float, exclude_bucket=No
     Computed from the last 16 COMPLETED games (4h) — the current in-progress game
     is excluded (see exclude_bucket) so the line holds steady for the whole game.
     Scales to each token's magnitude automatically."""
+    # Bounded nudge from the user's own win/loss history (1.0 until enough data).
+    learn = _learning_multiplier(symbol)
     vals = _recent_game_spreads(symbol, _GAMES_4H, exclude_bucket=exclude_bucket)
     if len(vals) < 3:
         # Not enough games yet — cushion proportional to the live spread (25% over).
         # No absolute floor, so cent-scale (DOGE/XRP) and dollar-scale (BTC/ETH)
         # tokens both get a sane starting threshold.
-        return _round_spread(current_spread * 1.25)
+        return _round_spread(current_spread * 1.25 * learn)
 
     # Use 75th percentile as the safe threshold. Spreads above this are in the
     # safest top 25% of recent history, giving confidence against flips.
@@ -2574,13 +2673,14 @@ def _calculate_safe_spread(symbol: str, current_spread: float, exclude_bucket=No
         idx = len(vals_sorted) - 1
     safe = vals_sorted[idx]
 
-    return _round_spread(safe)
+    return _round_spread(safe * learn)
 
 _safe_spread_cache = {"data": {}, "ts": 0.0}
 
 def _compute_safe_spread_recommendations(token_spreads):
     """Given current token spreads, compute safe spread recommendations for each.
     Returns dict: {BTC: rec_spread, ETH: rec_spread, ...}"""
+    _refresh_trade_learning()  # throttled; keeps the per-token win-rate nudge current
     recommendations = {}
     for token_data in token_spreads:
         symbol = token_data.get("symbol")
@@ -2606,6 +2706,29 @@ def _compute_safe_spread_recommendations(token_spreads):
         _safe_spread_cache["data"] = recommendations
         _safe_spread_cache["ts"] = time.time()
     return recommendations
+
+
+@app.route("/api/learning")
+def learning_status():
+    """Transparency: this user's own per-token win-rate and the resulting bounded
+    threshold nudge. All local — never shared. Lets the UI show why a token is
+    being played a little more/less aggressively."""
+    _refresh_trade_learning()
+    out = {}
+    for tok in _SMART_TOKENS:
+        rec = _trade_learning.get("by_token", {}).get(tok, {})
+        mult = _learning_multiplier(tok)
+        if mult > 1.001:
+            tilt = "more aggressive"
+        elif mult < 0.999:
+            tilt = "more conservative"
+        else:
+            tilt = "neutral"
+        out[tok] = {"n": rec.get("n", 0), "wins": rec.get("wins", 0),
+                    "losses": rec.get("losses", 0), "win_rate": rec.get("rate"),
+                    "threshold_multiplier": round(mult, 3), "tilt": tilt}
+    return jsonify({"min_samples": _LEARN_MIN_SAMPLES, "window": _LEARN_WINDOW,
+                    "max_adjust_pct": int(_LEARN_MAX_ADJ * 100), "tokens": out})
 
 
 @app.route("/api/smart-strategy/tokens")
