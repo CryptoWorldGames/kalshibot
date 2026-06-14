@@ -10,6 +10,7 @@ import json
 import socket
 import math
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -3371,14 +3372,15 @@ def _recent_settlements(hours: int = 24) -> list:
 
                 ticker = s.get("ticker", "")
                 evt    = s.get("event_ticker", "")
-                title  = _event_title(evt) or ticker
+                # CHEAP title only — NO per-settlement API calls. _event_title and
+                # _get_market each hit Kalshi (uncached = one call EACH, per settlement).
+                # For 70+ settlements through a rate limiter the bot is already saturating,
+                # that made the whole fetch take minutes — and since the cache is only
+                # stored when the fetch FINISHES, the Summary showed 0 settled rows the
+                # entire time. _pretty_title uses the on-disk title cache (the bot already
+                # cached these titles when it BOUGHT them) or humanizes the ticker. Instant.
+                title    = _pretty_title(ticker, "")
                 category = ""
-                try:
-                    mkt = _get_market(ticker)
-                    title    = title or mkt.get("title", ticker)
-                    category = mkt.get("category", "")
-                except Exception:
-                    pass
 
                 yes_cnt, no_cnt, yes_cost, no_cost = _settle_counts(s)
                 revenue  = float(s.get("revenue") or 0) / 100   # cents → dollars
@@ -5940,6 +5942,43 @@ def _print_banner():
     print(f"╚{bar}╝")
 
 
+# ── Hands-off auto-updater ───────────────────────────────────────────────────
+# Polls GitHub for new commits on the CURRENT branch and, when it finds any,
+# exits the process. run_bot.bat's loop then does `git reset --hard` + relaunch,
+# so the home PC updates itself with ZERO interaction — push from anywhere
+# (e.g. a laptop while travelling) and the bot is current within a few minutes.
+# Disable with KALSHIBOT_AUTOUPDATE=0; tune the interval with
+# KALSHIBOT_AUTOUPDATE_SECS (default 300).
+_AUTOUPDATE_ENABLED  = os.environ.get("KALSHIBOT_AUTOUPDATE", "1") != "0"
+_AUTOUPDATE_INTERVAL = int(os.environ.get("KALSHIBOT_AUTOUPDATE_SECS", "300"))
+
+def _git_cmd(*args, timeout=30):
+    return subprocess.run(["git", "-C", str(HERE), *args],
+                          capture_output=True, text=True, timeout=timeout)
+
+def _auto_update_loop():
+    try:
+        branch = _git_cmd("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    except Exception as e:
+        print(f"[auto-update] could not detect branch ({e}) — disabled this run")
+        return
+    if not branch or branch == "HEAD":
+        print("[auto-update] detached HEAD / no branch — auto-update disabled this run")
+        return
+    print(f"[auto-update] watching origin/{branch} every {_AUTOUPDATE_INTERVAL}s")
+    while True:
+        time.sleep(_AUTOUPDATE_INTERVAL)
+        try:
+            if _git_cmd("fetch", "origin", branch).returncode != 0:
+                continue
+            behind = _git_cmd("rev-list", "--count", f"HEAD..origin/{branch}").stdout.strip()
+            if behind.isdigit() and int(behind) > 0:
+                print(f"[auto-update] {behind} new commit(s) on origin/{branch} — restarting to apply")
+                os._exit(0)   # run_bot.bat resets --hard to origin/branch and relaunches
+        except Exception as e:
+            print(f"[auto-update] check failed: {e}")
+
+
 if __name__ == "__main__":
     _print_banner()
     if _already_running(5003):
@@ -5965,6 +6004,10 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n⚠️  WARNING: Cannot reach Kalshi API: {e}")
         print("Bot will start, but will be unable to trade until the connection is restored.\n")
+
+    # Start the hands-off auto-updater (no-op if KALSHIBOT_AUTOUPDATE=0)
+    if _AUTOUPDATE_ENABLED:
+        threading.Thread(target=_auto_update_loop, daemon=True).start()
 
     # threaded=True is critical: the scan loop and slow Kalshi API calls can each
     # tie up a worker for seconds at a time. Single-threaded (the Werkzeug default)
