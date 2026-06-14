@@ -1476,7 +1476,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
             <button type="button" onclick="setLottoEndsWithin(20160)" class="pill">2w</button>
             <button type="button" onclick="setLottoEndsWithin(525600)" class="pill">Show all</button>
           </div>
-          <input type="hidden" id="L_minutes" value="15">
+          <input type="hidden" id="L_minutes" value="525600">
           <div style="margin-top:10px;display:flex;gap:6px;align-items:center">
             <input type="number" id="L_customMinutes" placeholder="0.25–5" min="0.25" max="5" step="0.25" style="flex:0 0 80px;padding:6px;font-size:12px;background:#1a1f26;color:#fff;border:1px solid var(--border);border-radius:4px;text-align:center;font-weight:600" oninput="this.style.background='#1a1f26';this.style.color='#fff'">
             <span style="color:#888;font-size:12px">min</span>
@@ -7107,6 +7107,9 @@ function saveSettings() {
 // every cycle, so editing them from any device changes what the bot buys within ~15s.
 let _pushBuyTimer = null;
 function pushBuySettings(immediate=false) {
+  // Guard: never push until this device's settings are known (see _settingsPushAllowed)
+  // — stops a fresh laptop from clobbering the backend with default form values.
+  if (!window._settingsPushAllowed) return;
   const run = () => {
     const chk = id => { const el = document.getElementById(id); return el ? el.checked : false; };
     const num = (id, d) => { const el = document.getElementById(id); const v = parseFloat(el?.value); return isNaN(v) ? d : v; };
@@ -7990,6 +7993,7 @@ function reflectLottoTime(mins) {
 
 let _pushLottoTimer = null;
 function pushLottoSettings() {
+  if (!window._settingsPushAllowed) return;   // see pushBuySettings guard
   try { checkBudgetWarning("lotto"); } catch(e) {}
   saveSettings(); // persist Lotto inputs to localStorage too
   const chk = id => { const el = document.getElementById(id); return el ? el.checked : false; };
@@ -8054,6 +8058,10 @@ async function loadScannerSettings() {
     if (s.auto_mins) set("autoMins", s.auto_mins);
     if (s.auto_buys_max) set("autoBuysMax", s.auto_buys_max);
   } catch(e) {}
+  finally {
+    window._pendingSettingsLoads = Math.max(0, (window._pendingSettingsLoads || 0) - 1);
+    if (window._pendingSettingsLoads === 0) window._settingsPushAllowed = true;
+  }
 }
 
 async function loadLottoSettings() {
@@ -8076,6 +8084,10 @@ async function loadLottoSettings() {
     updateLottoMinsHint();
     try { checkBudgetWarning("lotto"); } catch(e) {}
   } catch(e) {}
+  finally {
+    window._pendingSettingsLoads = Math.max(0, (window._pendingSettingsLoads || 0) - 1);
+    if (window._pendingSettingsLoads === 0) window._settingsPushAllowed = true;
+  }
 }
 
 // ── Lotto (T2) SELL strategy: independent, posts to profile T2 ─────────────
@@ -8585,12 +8597,22 @@ async function applyCoachSettings() {
   });
 })();
 
+// Only allow PUSHING settings to the backend once this device's settings are known:
+// either restored from localStorage (a previously-configured device) or fetched from
+// the backend (a fresh device like the laptop). Without this, a fresh laptop over a
+// slow Tailscale link would POST its HTML-default form values to the backend ~1s after
+// load — overwriting the home PC's real settings before the backend fetch resolved.
+window._settingsPushAllowed = !!localStorage.getItem(SETTINGS_KEY);
+// On a fresh device, only enable pushing after BOTH backend profiles (T1+T2) load.
+window._pendingSettingsLoads = window._settingsPushAllowed ? 0 : 2;
 loadSettings();
 renderStratSlots();
 syncFabButtons();
-// Always push current sell strategy + BUY filters to Flask on page load so the
-// headless bot trades the UI's settings (survives Flask restarts / device switches).
-setTimeout(() => { pushStrategy(); pushSellSettings(); pushBuySettings(true); pushLottoSettings(); }, 1000);
+// Push current settings to Flask on load so the headless bot trades the UI's settings
+// (survives Flask restarts) — but ONLY on a device that already had saved settings.
+if (window._settingsPushAllowed) {
+  setTimeout(() => { pushStrategy(); pushSellSettings(); pushBuySettings(true); pushLottoSettings(); }, 1000);
+}
 
 // ── Flask crash recovery (page reload DISABLED) ───────────────────────────
 // Previously this polled every 5s and reloaded the page when Flask recovered,
