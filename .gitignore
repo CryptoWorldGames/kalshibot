@@ -38,6 +38,7 @@ updates.json
 .DS_Store
 Thumbs.db
 positions_cache.json
+settlements_cache.json
 title_cache.json
 profiles.json
 buy_settings.json
