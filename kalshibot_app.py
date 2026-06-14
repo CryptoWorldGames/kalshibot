@@ -3260,6 +3260,23 @@ def api_settlements():
         return jsonify({"settlements": (_c["data"] if _c else []), "ok": False, "error": str(e)})
 
 
+@app.route("/api/debug-settle")
+def api_debug_settle():
+    """Return raw first page of Kalshi /portfolio/settlements for debugging field names."""
+    raw = kalshi_get("/portfolio/settlements", {"limit": 5})
+    batch = raw.get("settlements", [])
+    result = []
+    for s in batch:
+        yes_cnt, no_cnt, yc, nc = _settle_counts(s)
+        result.append({
+            "keys": list(s.keys()),
+            "raw": {k: s[k] for k in s},
+            "parsed": {"yes_cnt": yes_cnt, "no_cnt": no_cnt, "yes_cost": yc, "no_cost": nc,
+                       "revenue": s.get("revenue"), "market_result": s.get("market_result")}
+        })
+    return jsonify({"count": len(batch), "settlements": result})
+
+
 def _recent_settlements(hours: int = 24) -> list:
     """Fetch Kalshi settlements from the past `hours` hours, enriched with title/category."""
     cutoff_ts = datetime.now(timezone.utc) - timedelta(hours=hours)
