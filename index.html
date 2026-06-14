@@ -2386,6 +2386,13 @@ async function loadBalance(enrich=true) {
       el.textContent = "$" + d.portfolio_value.toFixed(2);
       el.className = "fund-amount port-val";
     }
+    // Cache last-known live price for each position — needed for accurate P&L
+    // when a position disappears before we can read its final market price.
+    if (!window._lastKnownPos) window._lastKnownPos = {};
+    (d.positions || []).forEach(p => {
+      if (p.ticker) window._lastKnownPos[p.ticker] = p;
+    });
+
     // Detect auto-sells: bot-bought positions that disappeared and were in profit
     const prev = allPositions.slice();  // snapshot — allPositions gets replaced by renderBotPositions below
     const nextTickers = new Set((d.positions || []).map(p => p.ticker));
@@ -2399,26 +2406,51 @@ async function loadBalance(enrich=true) {
 
         if (!alreadyAnnounced && p.buy_price != null) {
           const side   = (p.quantity ?? 0) > 0 ? "yes" : "no";
-          const cur    = side === "yes" ? p.current_yes : p.current_no;
+          // Use last-known cached position data for the price (more reliable than current p)
+          const cached = window._lastKnownPos[p.ticker] || p;
+          const cur    = side === "yes" ? (cached.current_yes ?? p.current_yes) : (cached.current_no ?? p.current_no);
           const qty    = Math.abs(p.quantity ?? 0);
-          // If current price not cached, try to infer from recent settlements
+
+          // Try to infer settlement result from recent settlements cache
           let resolvedPrice = null;
           let wasResolution = cur != null && (cur <= 1 || cur >= 99);
-          if (cur == null) {
-            const matchedS = (window._lastSettlements || []).find(s => s.ticker === p.ticker);
-            if (matchedS) {
-              const res = (matchedS.market_result || matchedS.result || '').toLowerCase();
-              resolvedPrice = res === 'yes' ? 100 : res === 'no' ? 0 : null;
-              wasResolution = true;
-            }
+          const matchedS = (window._lastSettlements || []).find(s => s.ticker === p.ticker);
+          if (matchedS) {
+            const res = (matchedS.market_result || matchedS.result || '').toLowerCase();
+            resolvedPrice = res === 'yes' ? 100 : res === 'no' ? 0 : null;
+            wasResolution = true;
+          } else if (cur == null) {
+            // Settlement cache hasn't refreshed yet — schedule a re-check in 20s
+            setTimeout(() => {
+              const s2 = (window._lastSettlements || []).find(s => s.ticker === p.ticker);
+              if (s2) {
+                const res2 = (s2.market_result || s2.result || '').toLowerCase();
+                const rPrice = res2 === 'yes' ? 100 : res2 === 'no' ? 0 : null;
+                if (rPrice != null) {
+                  const rProfit = qty * (rPrice - p.buy_price) / 100;
+                  announceSell(qty, rProfit, rPrice, qty * rPrice / 100, p.category, p.ticker, true);
+                }
+              }
+            }, 20000);
           }
+
           const effectiveCur = cur ?? resolvedPrice;
-          const profit = effectiveCur != null ? qty * (effectiveCur - p.buy_price) / 100 : null;
-          const totalReceived = effectiveCur != null ? qty * effectiveCur / 100 : null;
-          setTimeout(() => announceSell(qty, profit, effectiveCur, totalReceived, p.category, p.ticker, wasResolution), announceDelay);
-          announceDelay += 4000;
-          showSellPopup(p.title || p.ticker, profit, wasResolution ? "resolved" : "sold");
-          addToSaleTicker(p.title || p.ticker, profit, side);
+          // Use settlement result for exact payout ($1/contract wins, $0 loses) rather than
+          // last market price which may be stale or mid-market, not the settlement value.
+          let profit, totalReceived;
+          if (wasResolution && resolvedPrice != null) {
+            totalReceived = resolvedPrice === 100 ? qty * 1.00 : 0;
+            profit = Math.round((totalReceived - qty * p.buy_price / 100) * 100) / 100;
+          } else {
+            profit = effectiveCur != null ? qty * (effectiveCur - p.buy_price) / 100 : null;
+            totalReceived = effectiveCur != null ? qty * effectiveCur / 100 : null;
+          }
+          if (effectiveCur != null) {
+            setTimeout(() => announceSell(qty, profit, effectiveCur, totalReceived, p.category, p.ticker, wasResolution), announceDelay);
+            announceDelay += 4000;
+            showSellPopup(p.title || p.ticker, profit, wasResolution ? "resolved" : "sold");
+            addToSaleTicker(p.title || p.ticker, profit, side);
+          }
         }
         // Keep in recently-sold list for 2 min (always update, even if already announced)
         const side = (p.quantity ?? 0) > 0 ? "yes" : "no";
@@ -6501,9 +6533,6 @@ async function loadSummary() {
       function _tradeRow(buy, close) {
         const hasClose  = !!close;
         const isSettled = close && close.kind === "settlement";
-        const profit    = hasClose && close.profit != null ? Number(close.profit) : null;
-        const profitCls = profit == null ? "#aaa" : profit > 0 ? "var(--green)" : profit < 0 ? "var(--red)" : "#aaa";
-        const borderColor = !hasClose ? "var(--blue)" : profit > 0 ? "var(--green)" : profit < 0 ? "var(--red)" : "#555";
 
         const ref     = close || buy;
         const title   = esc(ref.title || ref.ticker || "");
@@ -6512,6 +6541,21 @@ async function loadSummary() {
 
         const paidDol = buy ? (buy.spent != null ? Number(buy.spent) : (Number(buy.count||0) * Number(buy.price||0) / 100)) : null;
         const recvDol = close ? (Number(close.count||0) * Number(close.price||0) / 100) : null;
+
+        // For settlements paired with a buy, recalculate profit from actual payout vs what was paid.
+        // Kalshi's yes_total_cost_dollars in settlement records is NOT the original purchase cost —
+        // it's a net basis figure that gives wrong small P&L. Using paidDol (from fills) is exact.
+        let profit;
+        if (hasClose && isSettled && buy && paidDol != null) {
+          const settleCount = Number(close.count || 0);
+          const settleReceived = close.won ? settleCount * 1.00 : 0; // $1 per contract if won
+          profit = Math.round((settleReceived - paidDol) * 100) / 100;
+        } else {
+          profit = hasClose && close.profit != null ? Number(close.profit) : null;
+        }
+
+        const profitCls = profit == null ? "#aaa" : profit > 0 ? "var(--green)" : profit < 0 ? "var(--red)" : "#aaa";
+        const borderColor = !hasClose ? "var(--blue)" : profit > 0 ? "var(--green)" : profit < 0 ? "var(--red)" : "#555";
 
         // SETTLED / SELL row
         let closeRow = "";
