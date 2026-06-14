@@ -4658,7 +4658,18 @@ def api_summary():
                     continue
                 kind = "buy" if str(f.get("action", "")).lower() == "buy" else "sell"
                 side = str(f.get("side", "")).lower()
-                cnt = float(f.get("count") or 0)
+                # Try multiple field names — Kalshi API has used different names across versions
+                def _cnt(fill):
+                    for k in ("count", "contracts", "quantity", "number_of_contracts", "taker_fill_count"):
+                        v = fill.get(k)
+                        try:
+                            fv = float(v)
+                            if fv > 0:
+                                return fv
+                        except (TypeError, ValueError):
+                            continue
+                    return 0.0
+                cnt = _cnt(f)
                 # Kalshi fills usually carry yes_price/no_price (cents). Some fills
                 # (e.g. market orders) report the executed price under different keys
                 # or in dollars — try every known field so we never show "0¢".
@@ -4667,6 +4678,7 @@ def api_summary():
                         fill.get("yes_price") if sd == "yes" else fill.get("no_price"),
                         fill.get("price"), fill.get("avg_price"),
                         fill.get("execution_price"),
+                        fill.get("taker_fill_cost"),
                     ]
                     for v in cand:
                         try:
@@ -4674,25 +4686,41 @@ def api_summary():
                         except (TypeError, ValueError):
                             continue
                         if fv > 0:
+                            # taker_fill_cost is total cents (divide by count to get per-contract)
+                            if v is fill.get("taker_fill_cost") and cnt > 0:
+                                return round(fv / cnt)
                             return fv if fv >= 1 else round(fv * 100)  # dollars→cents
                     return 0.0
                 price = _price_cents(f, side)
                 t = {"kind": kind, "ts": ts_epoch, "ticker": f.get("ticker", ""),
                      "side": side, "count": cnt, "price": price}
-                # Attach profile/title/profit from the matching activity-log entry
-                for e in idx.get((t["ticker"], side, kind), []):
-                    if abs(float(e.get("ts") or 0) - ts_epoch) < 30:
-                        t["profile"] = e.get("profile")
-                        t["title"] = e.get("title") or t["ticker"]
-                        # Backfill count/price from the activity log when the fill
-                        # is missing them — keeps the Summary from showing ×0 @ 0¢.
-                        if cnt <= 0 and float(e.get("count") or 0) > 0:
-                            cnt = float(e.get("count")); t["count"] = cnt
-                        if price <= 0 and float(e.get("price") or 0) > 0:
-                            price = float(e.get("price")); t["price"] = price
-                        if kind == "sell" and e.get("profit") is not None:
-                            t["profit"] = e.get("profit")
-                        break
+                # Attach profile/title/profit from the matching activity-log entry.
+                # Try exact (ticker+side+kind) first, then ticker+kind only as fallback.
+                def _find_act_match(candidates, ts_ref, window=300):
+                    best = None
+                    best_dt = window + 1
+                    for e in candidates:
+                        dt = abs(float(e.get("ts") or 0) - ts_ref)
+                        if dt < best_dt:
+                            best_dt = dt
+                            best = e
+                    return best if best_dt <= window else None
+
+                act_match = _find_act_match(idx.get((t["ticker"], side, kind), []), ts_epoch) or \
+                            _find_act_match(idx.get((t["ticker"], "yes", kind), []), ts_epoch) or \
+                            _find_act_match(idx.get((t["ticker"], "no",  kind), []), ts_epoch)
+                if act_match:
+                    e = act_match
+                    t["profile"] = e.get("profile")
+                    t["title"] = e.get("title") or t["ticker"]
+                    # Backfill count/price from the activity log when the fill
+                    # is missing them — keeps the Summary from showing ×0 @ 0¢.
+                    if cnt <= 0 and float(e.get("count") or 0) > 0:
+                        cnt = float(e.get("count")); t["count"] = cnt
+                    if price <= 0 and float(e.get("price") or 0) > 0:
+                        price = float(e.get("price")); t["price"] = price
+                    if kind == "sell" and e.get("profit") is not None:
+                        t["profit"] = e.get("profit")
 
                 # Fallback: if SELL without profit, try to calculate from matching BUY
                 if kind == "sell" and t.get("profit") is None:
@@ -4705,6 +4733,11 @@ def api_summary():
                             # Profit = (sell_price - buy_price) × count / 100
                             profit = round((price - buy_price) * cnt / 100, 2)
                             t["profit"] = profit
+
+                # Skip fills that still have no count — they're zero-quantity settlement
+                # artifacts from Kalshi and produce junk "Qty: 0" rows in the summary.
+                if t.get("count", 0) <= 0:
+                    continue
 
                 t.setdefault("title", _pretty_title(t["ticker"], ""))
                 if kind == "buy":
