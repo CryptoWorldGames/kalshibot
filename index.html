@@ -2947,10 +2947,17 @@ document.addEventListener("visibilitychange", () => {
 // Forcing an immediate refresh on focus guarantees you see the latest settled
 // rows the moment you click back to the browser.
 window.addEventListener("focus", () => {
+  // Always refresh the header balance on return, then the active tab's data.
+  try { loadCash(); } catch(e) {}
   const activeBtn = document.querySelector(".tab-btn.active");
   const tab = activeBtn?.getAttribute("onclick")?.match(/'(\w+)'/)?.[1];
-  if (tab === "summary") loadSummary();
-  else if (tab === "positions") loadPositionsFast();
+  const refreshers = {
+    summary: loadSummary, positions: loadPositionsFast, debug: loadStats,
+    coach: loadCoach, apilog: loadApiLog, polling: renderPollingMonitor,
+    settlements: loadSettlements, lottostats: loadLottoHistory,
+  };
+  const fn = refreshers[tab];
+  if (fn) { try { fn(); } catch(e) {} }
 });
 
 
@@ -6585,28 +6592,28 @@ function switchTab(name) {
   if (name === "debug") {
     loadStats();
     if (window._statsRefresh) clearInterval(window._statsRefresh);
-    if (!document.hidden) window._statsRefresh = setInterval(loadStats, 60000);
+    window._statsRefresh = setInterval(loadStats, 60000);   // always create; focus handler also refreshes
   } else {
     if (window._statsRefresh) { clearInterval(window._statsRefresh); window._statsRefresh = null; }
   }
   if (name === "coach") {
     loadCoach();
     if (window._coachRefresh) clearInterval(window._coachRefresh);
-    if (!document.hidden) window._coachRefresh = setInterval(loadCoach, 60000);
+    window._coachRefresh = setInterval(loadCoach, 60000);
   } else {
     if (window._coachRefresh) { clearInterval(window._coachRefresh); window._coachRefresh = null; }
   }
   if (name === "apilog") {
     loadApiLog();
     if (window._apiLogRefresh) clearInterval(window._apiLogRefresh);
-    if (!document.hidden) window._apiLogRefresh = setInterval(loadApiLog, 10000);  // reduced from 2s to 10s
+    window._apiLogRefresh = setInterval(loadApiLog, 10000);
   } else {
     if (window._apiLogRefresh) { clearInterval(window._apiLogRefresh); window._apiLogRefresh = null; }
   }
   if (name === "polling") {
     renderPollingMonitor();
     if (window._pollingRefresh) clearInterval(window._pollingRefresh);
-    if (!document.hidden) window._pollingRefresh = setInterval(renderPollingMonitor, 1000);
+    window._pollingRefresh = setInterval(renderPollingMonitor, 1000);
   } else {
     if (window._pollingRefresh) { clearInterval(window._pollingRefresh); window._pollingRefresh = null; }
   }
@@ -6644,7 +6651,7 @@ function switchTab(name) {
   if (name === "settlements") {
     loadSettlements();
     if (window._settleRefresh) clearInterval(window._settleRefresh);
-    if (!document.hidden) window._settleRefresh = setInterval(loadSettlements, 30000);
+    window._settleRefresh = setInterval(loadSettlements, 30000);
   } else {
     if (window._settleRefresh) { clearInterval(window._settleRefresh); window._settleRefresh = null; }
   }
@@ -6669,7 +6676,7 @@ function switchTab(name) {
     setTimeout(renderLottoStats, 1500);  // re-render once data lands
     setTimeout(renderLottoStats, 3000);  // again after prices enrich
     if (window._lottoStatsRefresh) clearInterval(window._lottoStatsRefresh);
-    if (!document.hidden) window._lottoStatsRefresh = setInterval(() => { loadLottoHistory(); }, 30000);
+    window._lottoStatsRefresh = setInterval(() => { loadLottoHistory(); }, 30000);
   } else {
     if (window._lottoStatsRefresh) { clearInterval(window._lottoStatsRefresh); window._lottoStatsRefresh = null; }
   }
