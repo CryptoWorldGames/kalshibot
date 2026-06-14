@@ -6304,12 +6304,22 @@ async function loadSummary() {
       const _usedC = new Set();
       const allGrouped = [];
 
-      // Pair each buy with the closest close for the same ticker (within 25 min for 15-min markets)
+      // Pair each buy with its settlement at the next 15-min boundary.
+      // For Kalshi 15-min crypto markets, a buy at T settles at ceil(T/900)*900.
+      // We find the settlement whose timestamp is closest to that expected time (±3 min tolerance).
+      function nextQuarter(ts) { return Math.ceil(ts / 900) * 900; }
       _allBuys.forEach(buy => {
-        const candidates = (_cByTicker[buy.ticker] || []).filter(c => !_usedC.has(c) && c.ts > buy.ts && (c.ts - buy.ts) < 25 * 60);
-        const match = candidates.length
-          ? candidates.reduce((a, b) => (a.ts - buy.ts) < (b.ts - buy.ts) ? a : b)
-          : null;
+        const expected = nextQuarter(buy.ts);   // expected settlement epoch
+        const pool = (_cByTicker[buy.ticker] || []).filter(c => !_usedC.has(c) && c.ts > buy.ts && (c.ts - buy.ts) < 30 * 60);
+        // Prefer settlement closest to expected quarter-hour; fall back to earliest after buy
+        let match = null;
+        let bestDelta = Infinity;
+        for (const c of pool) {
+          const delta = Math.abs(c.ts - expected);
+          if (delta < bestDelta) { bestDelta = delta; match = c; }
+        }
+        // Only accept if within 3 minutes of expected quarter-hour (prevents cross-window mismatch)
+        if (match && bestDelta > 3 * 60) match = null;
         if (match) _usedC.add(match);
         allGrouped.push({ buy, close: match || null });
       });
