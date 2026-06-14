@@ -515,6 +515,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 
 <!-- ── SPLASH PAGE (First Load) ──────────────────────────────────── -->
 <!-- ── SETUP WIZARD (first-time only, multi-step) ──────────────────────── -->
+<script>fetch("/api/version").then(r=>r.json()).then(d=>{var e=document.getElementById("splashVersion");if(e)e.textContent="v"+(d.version||"?");});</script>
 <div id="setupWizard" style="position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto">
   <div style="width:100%;max-width:560px;margin:auto">
 
@@ -530,7 +531,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <div id="wStep1" class="wcard">
       <div style="text-align:center;margin-bottom:20px">
         <div style="font-size:52px;font-weight:900;letter-spacing:-2px"><span style="color:#fff">Kalshi</span><span style="color:var(--green)">Bot</span></div>
-        <div id="splashVersion" style="font-size:12px;color:#555;margin-top:4px">v—</div>
+        <div id="splashVersion" style="font-size:13px;color:var(--green);margin-top:4px;font-weight:700">v—</div>
       </div>
 
       <div style="background:#1a1a00;border:1px solid #ffcc00;border-radius:8px;padding:16px;margin-bottom:16px">
@@ -550,7 +551,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
       </div>
 
       <label style="display:flex;align-items:flex-start;gap:10px;font-size:13px;color:#ccc;cursor:pointer;margin-bottom:20px;line-height:1.5">
-        <input type="checkbox" id="riskAck" style="margin-top:2px;width:16px;height:16px;flex-shrink:0;accent-color:var(--green)">
+        <input type="checkbox" id="riskAck" onchange="(function(c){var b=document.getElementById('wBtn1');b.disabled=!c.checked;b.style.background=c.checked?'var(--green)':'#333';b.style.color=c.checked?'#000':'#666';b.style.cursor=c.checked?'pointer':'not-allowed';})(this)" style="margin-top:2px;width:16px;height:16px;flex-shrink:0;accent-color:var(--green)">
         I am 18 or older, trading is legal where I live, and I understand I may lose money using this bot.
       </label>
 
