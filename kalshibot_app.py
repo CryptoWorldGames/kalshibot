@@ -2320,7 +2320,7 @@ def _get_balance(force: bool = False):
         pos_dollars = round(float(bal_data.get("portfolio_value") or 0) / 100, 2)
 
         # Debug log the response if cash is unexpectedly zero
-        if cash_dollars == 0 and "balance" in bal_data or "balance_dollars" in bal_data:
+        if cash_dollars == 0 and ("balance" in bal_data or "balance_dollars" in bal_data):
             print(f"[balance] API response: {bal_data}")
 
         data = {
