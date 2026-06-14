@@ -4768,6 +4768,33 @@ def api_version():
     })
 
 
+# Multi-instance safety: only ever ONE bot should trade a given Kalshi account.
+# Set KALSHIBOT_PEER_URL on a SECONDARY machine (e.g. on the laptop, point it at
+# the home PC's Tailscale URL: http://100.x.y.z:5003). The primary/always-on
+# machine leaves it UNSET. Nothing is hardcoded — each user configures their own,
+# and unset (the default) means "single instance, no checks" for everyone.
+_PEER_URL = os.environ.get("KALSHIBOT_PEER_URL", "").strip().rstrip("/")
+
+@app.route("/api/peer-status")
+def api_peer_status():
+    """Report whether the OTHER configured instance is up and trading, so the UI can
+    warn before running two bots on one account. Unset peer → not configured."""
+    if not _PEER_URL:
+        return jsonify({"configured": False})
+    out = {"configured": True, "url": _PEER_URL,
+           "reachable": False, "running": False, "hostname": None}
+    try:
+        r = req.get(f"{_PEER_URL}/api/version", timeout=4)
+        if r.ok:
+            d = r.json()
+            out["reachable"] = True
+            out["running"]   = bool(d.get("running"))
+            out["hostname"]  = d.get("hostname")
+    except Exception:
+        pass  # unreachable peer = treat as down; never block on a network blip
+    return jsonify(out)
+
+
 @app.route("/api/summary")
 def api_summary():
     """Aggregate activity (scans / buys / sells / profit) over the past N minutes,
