@@ -681,6 +681,40 @@ _settle_debug: dict = {
     "ran_at": 0.0,        # epoch of last run
 }
 
+# Persist the settlements cache to disk so a restart/Update doesn't wipe it. The
+# fetch is non-blocking and the bot's heavy API traffic can starve the background
+# refresh for minutes — without this, the Summary tab shows ONLY buys (no settled
+# rows) for a long time after every restart. Loading the disk copy on startup makes
+# settled rows appear instantly while the fresh fetch warms up behind the scenes.
+SETTLEMENTS_CACHE_FILE = HERE / "settlements_cache.json"
+
+def _save_settlements_cache():
+    try:
+        # Keys are ints (hours) → JSON-stringify them; restore on load.
+        blob = {str(k): v for k, v in _settlements_cache.items()}
+        SETTLEMENTS_CACHE_FILE.write_text(json.dumps(blob, default=str), encoding="utf-8")
+    except Exception as e:
+        print(f"[settlements-cache] save failed: {e}")
+
+def _load_settlements_cache():
+    global _settlements_cache
+    try:
+        if SETTLEMENTS_CACHE_FILE.exists():
+            d = json.loads(SETTLEMENTS_CACHE_FILE.read_text(encoding="utf-8"))
+            if isinstance(d, dict):
+                restored = {}
+                for k, v in d.items():
+                    try:
+                        restored[int(k)] = v
+                    except (TypeError, ValueError):
+                        continue
+                if restored:
+                    _settlements_cache = restored
+                    total = sum(len(v.get("data", [])) for v in restored.values())
+                    print(f"[settlements-cache] loaded {total} settlements from disk")
+    except Exception as e:
+        print(f"[settlements-cache] load failed: {e}")
+
 def _cached_settlements(hours: int = 24) -> list:
     """Return settlements from cache if fresh, otherwise fetch and cache."""
     now = time.time()
@@ -689,6 +723,7 @@ def _cached_settlements(hours: int = 24) -> list:
         return cached["data"]
     data = _recent_settlements(hours=hours)
     _settlements_cache[hours] = {"data": data, "ts": now}
+    _save_settlements_cache()
     return data
 
 _settle_refresh_inflight: set = set()
@@ -705,12 +740,17 @@ def _cached_settlements_nonblocking(hours: int = 24) -> list:
             try:
                 data = _recent_settlements(hours=hours)
                 _settlements_cache[hours] = {"data": data, "ts": time.time()}
+                _save_settlements_cache()   # survive the next restart
             except Exception as e:
                 print(f"[settlements] background refresh failed: {e}")
             finally:
                 _settle_refresh_inflight.discard(hours)
         threading.Thread(target=_refresh, daemon=True).start()
     return cached["data"] if cached else []
+
+# Warm the settlements cache from disk immediately at import so the very first
+# Summary request after a restart already has settled rows to show.
+_load_settlements_cache()
 
 # ── Order fills — Kalshi's authoritative trade history ──────────────────────
 # /portfolio/fills is the record of EVERY buy and sell on the account, kept by
