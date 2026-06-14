@@ -709,8 +709,7 @@ _fills_refresh_inflight = threading.Event()
 
 def _settle_counts(s: dict):
     """Extract (yes_cnt, no_cnt, yes_cost_dollars, no_cost_dollars) from a Kalshi
-    settlement object, trying multiple known field-name variants across API versions.
-    yes_count/no_count may be integers or _fp floats; costs may be in cents or dollars."""
+    settlement object, trying multiple known field-name variants across API versions."""
     def _fv(*keys):
         for k in keys:
             v = s.get(k)
@@ -721,25 +720,31 @@ def _settle_counts(s: dict):
             except (TypeError, ValueError):
                 continue
         return 0.0
-    yes_cnt  = _fv("yes_count_fp", "yes_count")
-    no_cnt   = _fv("no_count_fp",  "no_count")
-    # Cost fields: dollars variant is direct; cents variant needs /100
-    yes_cost = s.get("yes_total_cost_dollars") or s.get("yes_total_cost")
-    no_cost  = s.get("no_total_cost_dollars")  or s.get("no_total_cost")
-    try:
-        yc = float(yes_cost or 0)
-        # if the value looks like cents (e.g. 75 for 75¢ when we have 1 contract at 75¢)
-        # and yes_cnt > 0, a per-contract value >1 means it's in cents
-        if yc > 1 and yes_cnt > 0 and (yc / yes_cnt) > 1.5:
-            yc /= 100
-    except (TypeError, ValueError):
-        yc = 0.0
-    try:
-        nc = float(no_cost or 0)
-        if nc > 1 and no_cnt > 0 and (nc / no_cnt) > 1.5:
-            nc /= 100
-    except (TypeError, ValueError):
-        nc = 0.0
+    yes_cnt = _fv("yes_count_fp", "yes_count", "yes_contracts", "yes_position")
+    no_cnt  = _fv("no_count_fp",  "no_count",  "no_contracts",  "no_position")
+
+    # If counts still zero, try generic count field + market_result to assign side
+    if yes_cnt < 0.001 and no_cnt < 0.001:
+        generic = _fv("count", "contracts", "quantity", "position", "number_of_contracts")
+        if generic > 0.001:
+            result = str(s.get("market_result", "")).lower()
+            if result == "yes":
+                yes_cnt = generic
+            else:
+                no_cnt = generic
+
+    def _cost_dollars(cost_raw, cnt):
+        try:
+            v = float(cost_raw or 0)
+            # If per-contract value > $1.50 when expressed as-is, it's in cents
+            if v > 1 and cnt > 0.001 and (v / cnt) > 1.5:
+                v /= 100
+            return round(v, 4)
+        except (TypeError, ValueError):
+            return 0.0
+
+    yc = _cost_dollars(s.get("yes_total_cost_dollars") or s.get("yes_total_cost"), yes_cnt)
+    nc = _cost_dollars(s.get("no_total_cost_dollars")  or s.get("no_total_cost"),  no_cnt)
     return yes_cnt, no_cnt, yc, nc
 
 
@@ -3301,8 +3306,9 @@ def _recent_settlements(hours: int = 24) -> list:
                     print(f"[settle-debug] yes_cnt={yes_cnt} no_cnt={no_cnt} yes_cost={yes_cost} no_cost={no_cost} revenue={revenue} result={result}")
                     _recent_settlements._logged_sample = True
 
-                # Skip entries with truly no position data — require at least count or cost or revenue
-                if yes_cnt < 0.001 and no_cnt < 0.001 and yes_cost < 0.001 and no_cost < 0.001 and revenue < 0.001:
+                # Skip entries with no position data AND no market result (truly empty placeholders)
+                has_result = bool(result)  # market_result = "yes"/"no" means it's a real settlement
+                if not has_result and yes_cnt < 0.001 and no_cnt < 0.001 and revenue < 0.001:
                     continue
 
                 # Skip hedged positions (bought both sides → net zero, closed pre-settlement).
@@ -3313,8 +3319,14 @@ def _recent_settlements(hours: int = 24) -> list:
 
                 if yes_cnt > 0.001:
                     side, count, cost = "yes", yes_cnt, yes_cost
-                else:
+                elif no_cnt > 0.001:
                     side, count, cost = "no", no_cnt, no_cost
+                else:
+                    # Counts still unknown — infer side from market_result + revenue
+                    # (losing side gets 0 revenue; winning side gets paid out)
+                    side = result if result in ("yes", "no") else "yes"
+                    count = 0  # unknown; display will show "?"
+                    cost  = 0
 
                 # Real Kalshi fee: ceil(0.07 × C × P × (1−P)) charged at the BUY,
                 # win or lose — the old flat "1¢/contract on wins only" both
