@@ -2182,7 +2182,11 @@ let _waitingForCash = false;
 // Persistent last-20 sales for the ticker. Loaded from localStorage so the
 // strip survives page refreshes (previously it was wiped on every reload).
 let _saleHistory = (() => {
-  try { return JSON.parse(localStorage.getItem("kb_sale_history") || "[]"); }
+  try {
+    const h = JSON.parse(localStorage.getItem("kb_sale_history") || "[]");
+    // Strip stale entries where profit was never resolved (null) — these show as "—"
+    return h.filter(s => s.profit != null);
+  }
   catch(e) { return []; }
 })();
 
@@ -2196,7 +2200,8 @@ let _saleHistory = (() => {
     const existingTs = new Set(_saleHistory.map(s => s.at));
     let added = 0;
     for (const t of trades) {
-      if ((t.kind === "settlement" || t.kind === "sell") && t.profit != null && added < 20) {
+      // Skip null profit and skip $0.00 orphans (no matched buy = backend pnl is fake zero)
+      if ((t.kind === "settlement" || t.kind === "sell") && t.profit != null && Math.abs(Number(t.profit)) >= 0.005 && added < 20) {
         const atMs = Math.round((t.ts || 0) * 1000);
         if (!existingTs.has(atMs)) {
           _saleHistory.push({ short: t.ticker || "", profit: Number(t.profit), side: t.side || "yes", at: atMs });
@@ -2216,6 +2221,7 @@ let _saleHistory = (() => {
 })();
 
 function addToSaleTicker(title, profitDol, side) {
+  if (profitDol == null) return; // don't add unknown-profit entries that render as "—"
   const short = title.length > 22 ? title.slice(0,22)+'…' : title;
   _saleHistory.unshift({short, profit: profitDol, side, at: Date.now()});
   if (_saleHistory.length > 20) _saleHistory = _saleHistory.slice(0,20);
