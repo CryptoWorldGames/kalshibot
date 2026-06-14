@@ -30,7 +30,23 @@ to the data-driven 75th-percentile threshold once it has logged enough games
 (16 games = 4h per token). Writes are throttled (~20s) so they don't hammer the
 disk.
 
+## Learning from your own trades
+
+The bot also learns from **your own** settled win/loss results (read from your
+local activity log — never shared, never anyone else's). For each token it tracks
+your recent win-rate and applies a small, **capped (±15%)** nudge to that token's
+threshold:
+
+- Poor recent win-rate → **more conservative** (favor Scanner / safe).
+- Strong recent win-rate → **slightly more aggressive** (allow Lotto a bit more).
+
+It stays **neutral** until you have at least 5 of your own settled trades for a
+token, so a fresh install is unaffected and nothing drastic can happen. See your
+current numbers any time at `/api/learning`.
+
 ## Files
 
 - `game_spread_history.json` — per-token, per-game closing spreads
   (`{symbol: {game_bucket: spread}}`), capped at the last 96 games (24h).
+- `trade_learning.json` — your per-token recent win/loss summary used for the
+  bounded aggressiveness nudge. Local-only (git-ignored), like the spread data.
