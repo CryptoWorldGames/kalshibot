@@ -3024,6 +3024,30 @@ def portfolio():
         except Exception as e:
             print(f"[portfolio] fills bought_at fallback failed: {e}")
 
+        # PERF: warm the market cache for every held ticker in ONE batched call
+        # (GET /markets?tickers=A,B,C, ≤100 each) instead of a serialized
+        # /markets/{ticker} per position below. The per-position _get_market() then
+        # just hits this warm cache — no per-position API calls monopolizing the
+        # rate limiter. Fully additive: if the batch fails, the per-position path
+        # still works exactly as before.
+        if enrich and len(raw_positions) < 100:
+            _now_w = time.time()
+            _need = []
+            for _p in raw_positions:
+                _tk = _p.get("market_id") or _p.get("ticker", "")
+                _c = _market_cache.get(_tk) if _tk else None
+                if _tk and not (_c and (_now_w - _c["ts"]) < _MARKET_CACHE_TTL):
+                    _need.append(_tk)
+            for _i in range(0, len(_need), 100):
+                try:
+                    _d = kalshi_get("/markets", {"tickers": ",".join(_need[_i:_i + 100]), "limit": 100})
+                    for _m in _d.get("markets", []):
+                        _mt = _m.get("ticker", "")
+                        if _mt:
+                            _market_cache[_mt] = {"data": _m, "ts": time.time()}
+                except Exception as e:
+                    print(f"[portfolio] batch market warm failed: {e}")
+
         for p in raw_positions:
             ticker = p.get("market_id") or p.get("ticker", "")
             # Kalshi switched to `position_fp` (string float, signed: +yes / -no).
