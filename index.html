@@ -1109,6 +1109,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
       <div style="border:2px solid #fff;border-radius:8px;padding:12px 14px">
       <span class="label-sm">Ends Within</span>
       <div class="btn-group" id="timeGroup">
+        <button class="pill" onclick="setTime(1)">1 min</button>
         <button class="pill" onclick="setTime(5)">5 min</button>
         <button class="pill" onclick="setTime(10)">10 min</button>
         <button class="pill active" onclick="setTime(15)">15 min</button>
@@ -1474,6 +1475,12 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
             <button type="button" onclick="setLottoEndsWithin(525600)" class="pill">Show all</button>
           </div>
           <input type="hidden" id="L_minutes" value="15">
+          <div style="margin-top:10px;display:flex;gap:6px;align-items:center">
+            <input type="number" id="L_customMinutes" placeholder="0.25–5" min="0.25" max="5" step="0.25" style="flex:0 0 80px;padding:6px;font-size:12px;background:#1a1f26;color:#fff;border:1px solid var(--border);border-radius:4px;text-align:center;font-weight:600" oninput="this.style.background='#1a1f26';this.style.color='#fff'">
+            <span style="color:#888;font-size:12px">min</span>
+            <button type="button" class="pill" onclick="setLottoCustomMinutes()" style="padding:6px 14px;font-size:12px;background:var(--green);color:#000;font-weight:600">Set</button>
+            <span id="L_customMinutesStatus" style="color:var(--green);font-size:12px;font-weight:600;min-width:60px"></span>
+          </div>
         </div>
       </div>
     </div>
@@ -3024,21 +3031,45 @@ function onProbDownInput() {
 // Removed duplicate/broken handlers — HTML already has oninput="onProbInput()" and onProbDownInput()
 
 function setTime(val, label) {
-  selTime = val === "custom" ? parseInt(document.getElementById("timeCustom")?.value) : val;
-  activatePills("timeGroup", val === "custom" ? "Custom" : (label || val + " min"));
-  const c = val === "custom";
-  const tcEl = document.getElementById("timeCustom");
-  const tlEl = document.getElementById("timeCustomLabel");
-  if (tcEl) tcEl.style.display = c ? "inline-block" : "none";
-  if (tlEl) tlEl.style.display = c ? "inline" : "none";
-  if (c && tcEl) tcEl.oninput = () => { selTime = parseInt(tcEl.value) || 15; saveSettings(); };
-  saveSettings();
+  selTime = val;
+  activatePills("timeGroup", label || val + " min");
+  // Clicking a preset clears the custom-box highlight so only one selection shows.
+  _clearCustomMinutesHighlight();
+  saveSettings();   // master save: localStorage + pushBuySettings() to the backend
 
   // If we're on the Summary tab, also update _summaryMins and reload
   if (document.getElementById("summaryCards")) {
     _summaryMins = selTime;
     localStorage.setItem("summaryMins", _summaryMins);
     loadSummary();  // Reload summary with new time window
+  }
+}
+
+function _clearCustomMinutesHighlight() {
+  const cb = document.getElementById("customMinutes");
+  if (cb) { cb.style.background = "#1a1f26"; cb.style.color = "#fff"; cb.style.fontWeight = "normal"; }
+}
+
+// Restore the scanner "Ends Within" selection visually on load: highlight the
+// matching preset, OR if it's a custom sub-5 value with no preset, fill + green
+// the custom box. Uses parseFloat so 0.25/0.5/1.5 survive (parseInt truncated them).
+function reflectScanTime(mins) {
+  mins = parseFloat(mins);
+  if (!mins || isNaN(mins)) mins = 15;
+  selTime = mins;
+  const labels = {1:"1 min",5:"5 min",10:"10 min",15:"15 min",20:"20 min",30:"30 min",
+    60:"1h",120:"2h",180:"3h",240:"4h",360:"6h",720:"12h",1440:"24h",
+    2880:"2d",4320:"3d",10080:"1w",20160:"2w",43200:"1mo",525600:"Show all"};
+  const cb = document.getElementById("customMinutes");
+  if (labels[mins]) {
+    activatePills("timeGroup", labels[mins]);
+    _clearCustomMinutesHighlight();
+  } else {
+    document.querySelectorAll("#timeGroup .pill").forEach(p => p.classList.remove("active"));
+    if (cb) {
+      cb.value = mins;
+      cb.style.background = "var(--green)"; cb.style.color = "#000"; cb.style.fontWeight = "600";
+    }
   }
 }
 
@@ -3054,8 +3085,10 @@ function setCustomMinutes() {
     return;
   }
   selTime = value;
+  // Custom value: clear all preset highlights (activatePills only matches exact
+  // labels, so a fractional value naturally deactivates them all).
   activatePills("timeGroup", `${value} min`);
-  saveSettings();
+  saveSettings();   // master save: localStorage + backend (no separate Save needed)
   // Show visual feedback - turn input green
   customInput.style.background = "var(--green)";
   customInput.style.color = "#000";
@@ -7781,7 +7814,55 @@ function setLottoEndsWithin(mins) {
   document.querySelectorAll('button[onclick^="setLottoEndsWithin"]').forEach(btn => {
     btn.classList.toggle("active", btn.getAttribute("onclick") === `setLottoEndsWithin(${mins})`);
   });
+  _clearLottoCustomHighlight();
   pushLottoSettings();
+}
+
+function _clearLottoCustomHighlight() {
+  const cb = document.getElementById("L_customMinutes");
+  if (cb) { cb.style.background = "#1a1f26"; cb.style.color = "#fff"; cb.style.fontWeight = "normal"; }
+}
+
+// Lotto custom "ends within" (0.25–5 min). Hitting Set is a master save: it writes
+// L_minutes, clears the preset buttons, and pushes to the backend T2 profile.
+function setLottoCustomMinutes() {
+  const input = document.getElementById("L_customMinutes");
+  const statusEl = document.getElementById("L_customMinutesStatus");
+  const value = parseFloat(input?.value);
+  if (!value || value < 0.25 || value > 5) {
+    if (statusEl) { statusEl.textContent = "Invalid"; statusEl.style.color = "var(--red)"; }
+    return;
+  }
+  document.getElementById("L_minutes").value = value;
+  document.querySelectorAll('button[onclick^="setLottoEndsWithin"]').forEach(b => b.classList.remove("active"));
+  input.style.background = "var(--green)"; input.style.color = "#000"; input.style.fontWeight = "600";
+  if (statusEl) {
+    statusEl.textContent = "✓ Saved"; statusEl.style.color = "var(--green)";
+    setTimeout(() => { statusEl.textContent = ""; }, 1500);
+  }
+  pushLottoSettings();   // master save → backend T2 + localStorage
+}
+
+// Restore the lotto "Ends Within" visual on load: highlight the matching button,
+// or fill + green the custom box for a fractional value with no button.
+function reflectLottoTime(mins) {
+  mins = parseFloat(mins);
+  if (!mins || isNaN(mins)) mins = 15;
+  document.getElementById("L_minutes").value = mins;
+  let matched = false;
+  document.querySelectorAll('button[onclick^="setLottoEndsWithin"]').forEach(btn => {
+    const on = btn.getAttribute("onclick") === `setLottoEndsWithin(${mins})`;
+    btn.classList.toggle("active", on);
+    if (on) matched = true;
+  });
+  const cb = document.getElementById("L_customMinutes");
+  if (cb) {
+    if (!matched) {
+      cb.value = mins; cb.style.background = "var(--green)"; cb.style.color = "#000"; cb.style.fontWeight = "600";
+    } else {
+      cb.style.background = "#1a1f26"; cb.style.color = "#fff"; cb.style.fontWeight = "normal";
+    }
+  }
 }
 
 let _pushLottoTimer = null;
@@ -7859,7 +7940,7 @@ async function loadLottoSettings() {
     const chk = (id,v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
     chk("L_enableBuyUp", s.enable_buy_up);   set("L_minProb", s.up_min);   set("L_maxProb", s.up_max);
     chk("L_enableBuyDown", s.enable_buy_down); set("L_minProbDown", s.down_min); set("L_maxProbDown", s.down_max);
-    set("L_minutes", s.minutes); set("L_buyAmount", s.buy_amount);
+    reflectLottoTime(s.minutes); set("L_buyAmount", s.buy_amount);
     set("L_autoMaxPerScan", s.max_per_scan); set("L_autoMaxConcurrent", s.max_concurrent); set("L_maxBuysPerMarket", s.max_per_market);
     chk("L_showCrypto", s.show_crypto); chk("L_showCombo", s.show_combo); chk("L_showSports", s.show_sports);
     chk("L_showPolitics", s.show_politics); chk("L_showEconomics", s.show_economics);
@@ -8299,7 +8380,7 @@ function loadSettings() {
     activatePills("probGroupDown", downLabel);
   }
 
-  if (s.selTime) { selTime = parseInt(s.selTime); activatePills("timeGroup", selTime < 60 ? selTime + " min" : (selTime/60)+"h"); }
+  if (s.selTime != null) reflectScanTime(s.selTime);
   if (s.autoRunMode) setRunMode(s.autoRunMode);
 
   // Ensure visual state matches actual state (prevent both buttons appearing selected)

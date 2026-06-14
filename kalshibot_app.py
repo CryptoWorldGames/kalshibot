@@ -551,6 +551,14 @@ def _apply_buy_edits(target: dict, data: dict):
     def _posint(v, default, lo=0):
         try:    return max(lo, int(float(v)))
         except (TypeError, ValueError): return default
+    def _posfloat(v, default, lo=0.0):
+        # Like _posint but keeps fractional values (the "ends within" custom box
+        # allows 0.25–5 min, e.g. 0.5 = last 30 seconds). Round to 2dp to avoid
+        # float noise. Drop the trailing .0 so whole minutes stay clean ints.
+        try:
+            f = max(lo, round(float(v), 2))
+            return int(f) if f == int(f) else f
+        except (TypeError, ValueError): return default
     def _optfloat(v):
         if v in (None, "", "any", "off"): return None
         try:    return float(v)
@@ -564,7 +572,7 @@ def _apply_buy_edits(target: dict, data: dict):
         if k in data:
             target[k] = _pct(data[k], target.get(k, 80.0))
     if "minutes" in data:
-        target["minutes"] = _posint(data["minutes"], target.get("minutes", 15), lo=1)
+        target["minutes"] = _posfloat(data["minutes"], target.get("minutes", 15), lo=0.25)
     if "buy_amount" in data:
         try:    target["buy_amount"] = max(0.01, float(data["buy_amount"]))
         except (TypeError, ValueError): pass
@@ -1846,7 +1854,7 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
 
     up_min,   up_max   = float(bs.get("up_min", 80)),   float(bs.get("up_max", 96))
     down_min, down_max = float(bs.get("down_min", 80)), float(bs.get("down_max", 96))
-    minutes  = int(bs.get("minutes", 15))
+    minutes  = float(bs.get("minutes", 15))   # may be fractional (0.25–5 custom)
     buy_amt  = float(bs.get("buy_amount", 0.50))
     max_scan = int(bs.get("max_per_scan", 3))
     max_conc = int(bs.get("max_concurrent", 999))
@@ -3889,7 +3897,7 @@ def scan():
     try:
         min_thr        = float(request.args.get("min_thr", 85))
         max_thr        = float(request.args.get("max_thr", 96))
-        minutes        = int(request.args.get("minutes", 15))
+        minutes        = float(request.args.get("minutes", 15))   # fractional ok (0.25–5 custom)
         show_crypto    = request.args.get("show_crypto", "false").lower() == "true"
         show_combo     = request.args.get("show_combo", "false").lower() == "true"
         show_sports    = request.args.get("show_sports", "false").lower() == "true"
