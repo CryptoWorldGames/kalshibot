@@ -3290,11 +3290,18 @@ def _recent_settlements(hours: int = 24) -> list:
                 params["cursor"] = cursor
             data = kalshi_get("/portfolio/settlements", params)
             batch = data.get("settlements", [])
+            # --- DEBUG: print first batch info unconditionally ---
+            if pages == 0:
+                print(f"[settle] /portfolio/settlements returned {len(batch)} items (cutoff={cutoff_ts.isoformat()[:19]})")
+                if batch:
+                    s0 = batch[0]
+                    print(f"[settle] first item keys: {list(s0.keys())}")
+                    print(f"[settle] first item: { {k: s0[k] for k in list(s0.keys())[:12]} }")
             if not batch:
                 break
             stop = False
             for s in batch:
-                ts_str = s.get("settled_time", "")
+                ts_str = s.get("settled_time", "") or s.get("settlement_time", "") or s.get("created_time", "")
                 try:
                     ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
                 except ValueError:
