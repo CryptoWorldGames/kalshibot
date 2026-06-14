@@ -3150,7 +3150,6 @@ function setTime(val, label) {
   // If we're on the Summary tab, also update _summaryMins and reload
   if (document.getElementById("summaryCards")) {
     _summaryMins = selTime;
-    localStorage.setItem("summaryMins", _summaryMins);
     loadSummary();  // Reload summary with new time window
   }
 }
@@ -6462,7 +6461,7 @@ const SUMMARY_RANGES = [
   {label:"2d", mins:2880}, {label:"3d", mins:4320},
   {label:"7d", mins:10080}, {label:"14d", mins:20160}, {label:"30d", mins:43200},
 ];
-let _summaryMins = parseInt(localStorage.getItem("summaryMins") || "240");
+let _summaryMins = 240;
 
 function renderSummaryRanges() {
   const el = document.getElementById("summaryRanges");
@@ -6481,7 +6480,6 @@ function renderSummaryRanges() {
 }
 function setSummaryRange(mins) {
   _summaryMins = mins;
-  localStorage.setItem("summaryMins", String(mins));
   renderSummaryRanges();
   summaryPage = 0; // Reset to first page
   loadSummary();
