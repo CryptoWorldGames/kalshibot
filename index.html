@@ -2186,6 +2186,35 @@ let _saleHistory = (() => {
   catch(e) { return []; }
 })();
 
+// On load, backfill _saleHistory from recent settlements so the ticker shows
+// real data immediately — not just sells detected during this browser session.
+(async function _backfillSaleTicker() {
+  try {
+    const d = await fetch("/api/summary?minutes=120").then(r => r.json());
+    const trades = d.trades || [];
+    // settlements/sells newest-first from backend; add any not already in history
+    const existingTs = new Set(_saleHistory.map(s => s.at));
+    let added = 0;
+    for (const t of trades) {
+      if ((t.kind === "settlement" || t.kind === "sell") && t.profit != null && added < 20) {
+        const atMs = Math.round((t.ts || 0) * 1000);
+        if (!existingTs.has(atMs)) {
+          _saleHistory.push({ short: t.ticker || "", profit: Number(t.profit), side: t.side || "yes", at: atMs });
+          existingTs.add(atMs);
+          added++;
+        }
+      }
+    }
+    if (added) {
+      // Sort newest first, keep 20
+      _saleHistory.sort((a, b) => b.at - a.at);
+      _saleHistory = _saleHistory.slice(0, 20);
+      try { localStorage.setItem("kb_sale_history", JSON.stringify(_saleHistory)); } catch(e) {}
+      renderSaleTicker();
+    }
+  } catch(e) {}
+})();
+
 function addToSaleTicker(title, profitDol, side) {
   const short = title.length > 22 ? title.slice(0,22)+'…' : title;
   _saleHistory.unshift({short, profit: profitDol, side, at: Date.now()});
