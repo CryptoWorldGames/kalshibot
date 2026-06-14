@@ -22,7 +22,7 @@ Total time: ~5 minutes. You do this once per machine.
    New-NetFirewallRule -DisplayName "KalshiBot 5003" -Direction Inbound -Protocol TCP -LocalPort 5003 -Action Allow
    ```
    (Without this, Windows may block the laptop from reaching port 5003.)
-5. Start the bot with `C:\Users\your-username\bots\kalshibot\run_bot.bat`. In the CMD window
+5. Start the bot with `run_bot.bat` (located in your bot folder, e.g. `%USERPROFILE%\bots\kalshibot\run_bot.bat`). In the CMD window
    you'll now see a line like:
    ```
    📱 Remote (Tailscale): http://100.x.y.z:5003
