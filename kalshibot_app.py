@@ -668,6 +668,19 @@ _load_title_cache()
 _settlements_cache: dict = {}  # hours → {"data": [...], "ts": float}
 _SETTLEMENTS_CACHE_TTL = 120.0  # 2 minutes
 
+# Self-diagnostic record — surfaced in /api/summary so we never debug settlements blind.
+# Populated on every _recent_settlements run (incl. the background refresh thread).
+_settle_debug: dict = {
+    "raw": 0,             # rows Kalshi /portfolio/settlements returned (all pages)
+    "in_window": 0,       # rows inside the requested time cutoff
+    "skipped_empty": 0,   # dropped: no market_result AND no counts AND no revenue
+    "skipped_hedged": 0,  # dropped: held both yes+no (net-zero hedge)
+    "kept": 0,            # rows that became settlement entries
+    "last_error": "",     # exception text from the last run, if any
+    "sample_keys": [],    # field names of the first raw row (to verify API shape)
+    "ran_at": 0.0,        # epoch of last run
+}
+
 def _cached_settlements(hours: int = 24) -> list:
     """Return settlements from cache if fresh, otherwise fetch and cache."""
     now = time.time()
@@ -3283,6 +3296,10 @@ def _recent_settlements(hours: int = 24) -> list:
     out = []
     cursor = None
     pages = 0
+    # Reset the self-diagnostic for this run
+    _settle_debug.update({"raw": 0, "in_window": 0, "skipped_empty": 0,
+                          "skipped_hedged": 0, "kept": 0, "last_error": "",
+                          "sample_keys": [], "ran_at": time.time()})
     try:
         while pages < 10:
             params = {"limit": 100}
@@ -3290,11 +3307,12 @@ def _recent_settlements(hours: int = 24) -> list:
                 params["cursor"] = cursor
             data = kalshi_get("/portfolio/settlements", params)
             batch = data.get("settlements", [])
-            # --- DEBUG: print first batch info unconditionally ---
+            _settle_debug["raw"] += len(batch)
             if pages == 0:
                 print(f"[settle] /portfolio/settlements returned {len(batch)} items (cutoff={cutoff_ts.isoformat()[:19]})")
                 if batch:
                     s0 = batch[0]
+                    _settle_debug["sample_keys"] = list(s0.keys())
                     print(f"[settle] first item keys: {list(s0.keys())}")
                     print(f"[settle] first item: { {k: s0[k] for k in list(s0.keys())[:12]} }")
             if not batch:
@@ -3309,6 +3327,7 @@ def _recent_settlements(hours: int = 24) -> list:
                 if ts < cutoff_ts:
                     stop = True
                     break
+                _settle_debug["in_window"] += 1
 
                 ticker = s.get("ticker", "")
                 evt    = s.get("event_ticker", "")
@@ -3333,12 +3352,14 @@ def _recent_settlements(hours: int = 24) -> list:
                 # Skip entries with no position data AND no market result (truly empty placeholders)
                 has_result = bool(result)  # market_result = "yes"/"no" means it's a real settlement
                 if not has_result and yes_cnt < 0.001 and no_cnt < 0.001 and revenue < 0.001:
+                    _settle_debug["skipped_empty"] += 1
                     continue
 
                 # Skip hedged positions (bought both sides → net zero, closed pre-settlement).
                 # Kalshi records these as settlements with revenue=0; the realized PnL was
                 # taken when the offsetting trade was made, not at settlement.
                 if yes_cnt > 0.001 and no_cnt > 0.001:
+                    _settle_debug["skipped_hedged"] += 1
                     continue
 
                 if yes_cnt > 0.001:
@@ -3377,6 +3398,7 @@ def _recent_settlements(hours: int = 24) -> list:
                     "sold_by":      _get_sold_by(ticker),
                     "profile":      (tracked.get(ticker) or {}).get("profile"),
                 })
+                _settle_debug["kept"] += 1
             if stop:
                 break
             cursor = data.get("cursor")
@@ -3384,7 +3406,10 @@ def _recent_settlements(hours: int = 24) -> list:
                 break
             pages += 1
     except Exception as e:
+        _settle_debug["last_error"] = f"{type(e).__name__}: {e}"
         print(f"[settlements] error: {e}")
+        import traceback
+        traceback.print_exc()
 
     # Also include bot-sold positions (early exits) not in Kalshi settlements
     kalshi_tickers = {r["ticker"] for r in out}
@@ -4945,6 +4970,9 @@ def api_summary():
             "settlement_pnl": round(settlement_pnl, 2) if settlement_pnl != 0 else None,
         },
         "trades": trades[:2000],  # cap payload (full history can be 800+ fills)
+        # Self-diagnostic for the settlements pipeline — lets the UI show WHY
+        # settlements are (or aren't) appearing without needing terminal access.
+        "settle_debug": dict(_settle_debug),
     })
 
 

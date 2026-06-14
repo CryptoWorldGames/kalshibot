@@ -960,6 +960,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 
     <!-- Per-trade list -->
     <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-weight:700">Buys &amp; Sells <span id="summaryTradesMeta" style="color:#666;text-transform:none;font-weight:400"></span></div>
+    <div id="settleDebugLine" style="display:none;font-size:11px;color:#aaa;background:#160c0c;border:1px solid #4a2020;border-radius:6px;padding:8px 10px;margin-bottom:10px;line-height:1.6"></div>
     <div id="summaryTrades"></div>
   </div>
 </div><!-- /tab-summary -->
@@ -6297,6 +6298,29 @@ async function loadSummary() {
     // Per-trade list with pagination (include buy/sell/settlement)
     const trades = (d.trades || []).filter(x => x.kind === "buy" || x.kind === "sell" || x.kind === "settlement");
     metaEl.textContent = `(${trades.length} in last ${_rangeLabel(_summaryMins)}, ${tzAbbr()})`;
+
+    // Settlements self-diagnostic: if 0 settled showed up, surface WHY (so we never
+    // debug this blind again). Reads the pipeline counters from the backend.
+    const _dbg = d.settle_debug || {};
+    const _settledCount = (d.totals || {}).settlements || 0;
+    const _dbgEl = document.getElementById("settleDebugLine");
+    if (_dbgEl) {
+      if (_settledCount === 0) {
+        const ranAgo = _dbg.ran_at ? Math.round((Date.now()/1000 - _dbg.ran_at)) : null;
+        _dbgEl.style.display = "block";
+        _dbgEl.innerHTML =
+          `<b style="color:var(--red)">⚠ 0 settlements shown.</b> Pipeline: ` +
+          `Kalshi returned <b>${_dbg.raw ?? "?"}</b> rows · ` +
+          `<b>${_dbg.in_window ?? "?"}</b> in window · ` +
+          `dropped <b>${_dbg.skipped_empty ?? "?"}</b> empty, <b>${_dbg.skipped_hedged ?? "?"}</b> hedged · ` +
+          `kept <b>${_dbg.kept ?? "?"}</b>` +
+          (_dbg.last_error ? ` · <span style="color:var(--red)">err: ${esc(_dbg.last_error)}</span>` : "") +
+          (ranAgo != null ? ` · ran ${ranAgo}s ago` : " · not run yet") +
+          (_dbg.sample_keys && _dbg.sample_keys.length ? `<br><span style="color:#777">fields: ${esc(_dbg.sample_keys.join(", "))}</span>` : "");
+      } else {
+        _dbgEl.style.display = "none";
+      }
+    }
     if (!trades.length) {
       tradesEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:10px 0">No activity in this window.</div>`;
     } else {
