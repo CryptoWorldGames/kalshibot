@@ -6282,91 +6282,86 @@ async function loadSummary() {
       const pag = paginate(trades, pageSize, summaryPage);
       summaryPage = pag.page; // Ensure page is within bounds
 
-      // Group buys with their matching sell/settlement by ticker (same page items)
+      // Build strictly 1:1 buy+close pairs. Algorithm:
+      // 1. Pair each buy with its closest unmatched close (sell/settlement) by ticker
+      // 2. Remaining unpaired closes shown standalone
+      // 3. Sort pairs by most recent event (close time if available, else buy time)
+      const _buys   = pag.items.filter(x => x.kind === "buy");
+      const _closes = pag.items.filter(x => x.kind === "sell" || x.kind === "settlement");
+      const _closesByTicker = {};
+      _closes.forEach(c => { (_closesByTicker[c.ticker] = _closesByTicker[c.ticker] || []).push(c); });
+      const _usedCloses = new Set();
       const grouped = [];
-      const usedSells = new Set();
-      const sellMap = {}; // ticker -> [sell/settlement trades]
-      pag.items.forEach(x => {
-        if (x.kind === "sell" || x.kind === "settlement") {
-          if (!sellMap[x.ticker]) sellMap[x.ticker] = [];
-          sellMap[x.ticker].push(x);
-        }
+
+      _buys.forEach(buy => {
+        const candidates = (_closesByTicker[buy.ticker] || []).filter(c => !_usedCloses.has(c));
+        const match = candidates.length
+          ? candidates.reduce((a, b) => Math.abs(a.ts - buy.ts) < Math.abs(b.ts - buy.ts) ? a : b)
+          : null;
+        if (match) _usedCloses.add(match);
+        grouped.push({ buy, close: match || null });
       });
-      pag.items.forEach(x => {
-        if (x.kind === "buy") {
-          // Find closest sell/settlement for this ticker
-          const candidates = (sellMap[x.ticker] || []).filter(s => !usedSells.has(s));
-          const match = candidates.length ? candidates.reduce((a, b) =>
-            Math.abs(a.ts - x.ts) < Math.abs(b.ts - x.ts) ? a : b) : null;
-          if (match) usedSells.add(match);
-          grouped.push({ buy: x, close: match || null });
-        } else if (!usedSells.has(x)) {
-          grouped.push({ buy: null, close: x });
-        }
+      _closes.forEach(c => { if (!_usedCloses.has(c)) grouped.push({ buy: null, close: c }); });
+
+      // Sort: most recent event at top
+      grouped.sort((a, b) => {
+        const aTs = Math.max(a.close ? a.close.ts : 0, a.buy ? a.buy.ts : 0);
+        const bTs = Math.max(b.close ? b.close.ts : 0, b.buy ? b.buy.ts : 0);
+        return bTs - aTs;
       });
 
       function _tradeRow(buy, close) {
-        const hasClose = close && (close.kind === "sell" || close.kind === "settlement");
+        const hasClose  = !!close;
         const isSettled = close && close.kind === "settlement";
-        const profit = hasClose && close.profit != null ? Number(close.profit) : null;
-        const profitCls = profit == null ? "" : profit > 0 ? "var(--green)" : profit < 0 ? "var(--red)" : "#aaa";
-        const profitStr = profit == null ? "—" : `${profit >= 0 ? "+" : ""}$${profit.toFixed(2)}`;
-        const borderColor = !hasClose ? "var(--blue)" : profit > 0 ? "var(--green)" : profit < 0 ? "var(--red)" : "#aaa";
+        const profit    = hasClose && close.profit != null ? Number(close.profit) : null;
+        const profitCls = profit == null ? "#aaa" : profit > 0 ? "var(--green)" : profit < 0 ? "var(--red)" : "#aaa";
+        const borderColor = !hasClose ? "var(--blue)" : profit > 0 ? "var(--green)" : profit < 0 ? "var(--red)" : "#555";
 
-        const buyQty   = buy  ? Number(buy.count  || 0) : null;
-        const buyPrice = buy  ? Number(buy.price   || 0) : null;
-        const sellQty  = close ? Number(close.count || 0) : null;
-        const sellPrice= close ? Number(close.price || 0) : null;
-        const title    = esc((close || buy).title || (close || buy).ticker || "");
-        const profile  = (close || buy).profile || buy?.profile || "";
-        const side     = ((close || buy).side || "").toUpperCase();
+        const ref    = close || buy;
+        const title  = esc(ref.title || ref.ticker || "");
+        const profile= (close && close.profile) || (buy && buy.profile) || "";
+        const side   = (ref.side || "").toUpperCase();
 
-        // SELL / SETTLED row
+        // Dollar amounts
+        const paidDol     = buy  ? (buy.spent != null ? Number(buy.spent) : (Number(buy.count||0) * Number(buy.price||0) / 100)) : null;
+        const recvDol     = close ? (Number(close.count||0) * Number(close.price||0) / 100) : null;
+        const profitDol   = profit;
+
+        // SETTLE / SELL row
         let closeRow = "";
         if (hasClose) {
-          const tag = isSettled ? "SETTLED" : "SELL";
+          const tag      = isSettled ? "SETTLED" : "SELL";
           const tagColor = profit > 0 ? "var(--green)" : profit < 0 ? "var(--red)" : "#aaa";
-          closeRow = `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid #1a1a1a">
-            <span style="color:${tagColor};font-weight:900;font-size:13px;min-width:58px">${tag}</span>
-            <span style="color:#fff;font-weight:700;font-size:13px;flex:1">${title}</span>
-            <span style="color:#aaa;font-size:12px">${side}${sellQty ? ` ×${sellQty}` : ""}${sellPrice ? ` @ ${sellPrice}¢` : ""}</span>
-            <span style="font-weight:900;font-size:14px;color:${profitCls};white-space:nowrap">${profitStr}</span>
-            <span style="color:#555;font-size:11px;white-space:nowrap">${fmtTime(close.ts, true)}</span>
+          const pnlStr   = profitDol == null ? "" :
+            `<span style="font-weight:900;font-size:15px;color:${profitCls}">${profitDol >= 0 ? "+" : ""}$${Math.abs(profitDol).toFixed(2)}</span>`;
+          const recvStr  = recvDol != null && recvDol > 0 ? `<span style="color:#aaa;font-size:12px">rcvd $${recvDol.toFixed(2)}</span>` : "";
+          closeRow = `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #1a1a1a;flex-wrap:wrap">
+            <span style="color:${tagColor};font-weight:900;font-size:13px;min-width:56px">${tag}</span>
+            ${profile ? `<span style="color:#888;font-size:10px;padding:1px 4px;background:#1a1a1a;border-radius:2px;font-weight:600">${esc(profile)}</span>` : ""}
+            <span style="color:#fff;font-weight:700;font-size:13px;flex:1;min-width:80px">${title}</span>
+            <span style="color:#666;font-size:11px">${side}${close.count ? ` ×${close.count}` : ""}${close.price ? ` @ ${close.price}¢` : ""}</span>
+            ${recvStr}
+            ${pnlStr}
+            <span style="color:#444;font-size:11px;white-space:nowrap">${fmtTime(close.ts, true)}</span>
           </div>`;
         }
 
         // BUY row
         let buyRow = "";
         if (buy) {
-          const spent = buy.spent != null ? `-$${Number(buy.spent).toFixed(2)}` : (buyQty && buyPrice ? `-$${(buyQty * buyPrice / 100).toFixed(2)}` : "");
-          buyRow = `<div style="display:flex;align-items:center;gap:10px;padding:7px 12px;background:#0a0a0c">
-            <span style="color:#4a9eff;font-weight:900;font-size:13px;min-width:58px">BUY</span>
-            <span style="color:#fff;font-size:12px;flex:1">${hasClose ? "" : esc(buy.title || buy.ticker || "")}</span>
-            <span style="color:#aaa;font-size:12px">${(buy.side||"").toUpperCase()}${buyQty ? ` ×${buyQty}` : ""}${buyPrice ? ` @ ${buyPrice}¢` : ""}</span>
-            <span style="color:#aaa;font-size:13px;white-space:nowrap">${spent}</span>
-            <span style="color:#555;font-size:11px;white-space:nowrap">${fmtTime(buy.ts, true)}</span>
+          const paidStr = paidDol != null && paidDol > 0
+            ? `<span style="color:#aaa;font-size:12px">paid $${paidDol.toFixed(2)}</span>` : "";
+          buyRow = `<div style="display:flex;align-items:center;gap:8px;padding:7px 12px;background:#090909;flex-wrap:wrap">
+            <span style="color:#4a9eff;font-weight:900;font-size:13px;min-width:56px">BUY</span>
+            <span style="color:#fff;font-size:12px;flex:1;min-width:80px">${hasClose ? "" : esc(buy.title || buy.ticker || "")}</span>
+            <span style="color:#666;font-size:11px">${(buy.side||"").toUpperCase()}${buy.count ? ` ×${buy.count}` : ""}${buy.price ? ` @ ${buy.price}¢` : ""}</span>
+            ${paidStr}
+            <span style="color:#444;font-size:11px;white-space:nowrap">${fmtTime(buy.ts, true)}</span>
           </div>`;
         }
 
-        // Standalone sell (no matching buy on this page)
-        if (!buy && hasClose) {
-          const tag = isSettled ? "SETTLED" : "SELL";
-          const tagColor = profit > 0 ? "var(--green)" : profit < 0 ? "var(--red)" : "#aaa";
-          return `<div style="border-left:3px solid ${borderColor};border-radius:4px;overflow:hidden;background:#0c0c0e">
-            <div style="display:flex;align-items:center;gap:10px;padding:8px 12px">
-              <span style="color:${tagColor};font-weight:900;font-size:13px;min-width:58px">${tag}</span>
-              ${profile ? `<span style="color:#888;font-size:10px;padding:1px 4px;background:#1a1a1a;border-radius:2px;font-weight:600">${esc(profile)}</span>` : ""}
-              <span style="color:#fff;font-weight:700;font-size:13px;flex:1">${title}</span>
-              <span style="color:#aaa;font-size:12px">${side}${sellQty ? ` ×${sellQty}` : ""}${sellPrice ? ` @ ${sellPrice}¢` : ""}</span>
-              <span style="font-weight:900;font-size:14px;color:${profitCls};white-space:nowrap">${profitStr}</span>
-              <span style="color:#555;font-size:11px;white-space:nowrap">${fmtTime(close.ts, true)}</span>
-            </div>
-          </div>`;
-        }
-
-        return `<div style="border-left:3px solid ${borderColor};border-radius:4px;overflow:hidden;background:#0c0c0e;margin-bottom:0">
-          ${closeRow}
-          ${buyRow}
+        return `<div style="border-left:3px solid ${borderColor};border-radius:4px;overflow:hidden;background:#0c0c0e">
+          ${closeRow}${buyRow}
         </div>`;
       }
 
