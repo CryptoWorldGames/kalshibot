@@ -59,3 +59,9 @@ smart_strategy.json
 spread_guard.json
 CONTEXT.md
 per_token_settings.json
+
+# Backtest data is each user's OWN — built locally from Kalshi market data as
+# their bot runs. Never ship it: keeps downloads clean, avoids merge conflicts on
+# pull, and means nobody inherits anyone else's data. (backtest_data/README.md is
+# kept; only the live .json data is ignored.)
+backtest_data/*.json
