@@ -1751,15 +1751,22 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
         <button class="sm ghost" style="font-size:12px;padding:4px 14px" onclick="loadCoach()">Refresh</button>
       </div>
     </div>
-    <div id="coachTotals" style="font-size:13px;color:#bbb;margin-bottom:14px"></div>
+    <div id="coachTotals" style="font-size:13px;color:#bbb;margin-bottom:10px"></div>
+
+    <!-- Loss streak warning -->
+    <div id="coachStreakWarn" style="display:none;align-items:center;gap:12px;background:#2b0a0a;border:1px solid #8b2020;border-radius:8px;padding:12px 16px;margin-bottom:14px"></div>
+
+    <!-- AI Trend panel -->
+    <div id="coachTrend" style="display:none;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px"></div>
+
     <div id="coachRecs" style="margin-bottom:18px"></div>
-    <!-- Lotto (T2) advice — analyzes the long-shot odds, links to the Lotto Stats tab -->
+    <!-- Lotto (T2) advice -->
     <div id="coachLotto" style="margin-bottom:18px"></div>
     <div style="margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--border)">
       <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px;font-weight:700">Ranked Strategy Recommendations</div>
       <div id="coachStrategies" style="display:flex;flex-direction:column;gap:10px"></div>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:16px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px">
       <div>
         <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">By Category</div>
         <div id="coachCats"></div>
@@ -1769,11 +1776,15 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
         <div id="coachBands"></div>
       </div>
       <div>
+        <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">By Token (Crypto)</div>
+        <div id="coachTokens"></div>
+      </div>
+      <div>
         <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">By Side</div>
         <div id="coachSides"></div>
       </div>
       <div>
-        <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">By Hour (UTC)</div>
+        <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">By Hour (local time)</div>
         <div id="coachHours"></div>
       </div>
     </div>
@@ -5625,14 +5636,22 @@ function renderPollingMonitor() {
   body.innerHTML = rows || '<tr><td colspan="4" style="padding:14px;color:var(--muted)">No polls yet.</td></tr>';
 }
 
+// Convert a UTC hour (0-23) to the browser's local hour label
+function _utcHourToLocal(utcH) {
+  const offsetMin = new Date().getTimezoneOffset(); // minutes behind UTC (CDT = 300)
+  const localH = ((utcH * 60 - offsetMin) / 60 + 24) % 24;
+  const h = Math.floor(localH) % 12 || 12;
+  const ampm = Math.floor(localH) < 12 ? "AM" : "PM";
+  return `${h}${ampm}`;
+}
+
 async function loadCoach() {
   recordPollTime('loadCoach');
   try {
-    // Send current filter settings to Coach for analysis
     const filters = {
       buyMin: parseFloat(document.getElementById("minProb")?.value) || 80,
       buyMax: parseFloat(document.getElementById("maxProb")?.value) || 96,
-      timeWindow: selTime || 15,  // Use global selTime, not timeCustom input
+      timeWindow: selTime || 15,
       showCrypto: document.getElementById("showCrypto")?.checked || false,
       showSports: document.getElementById("showSports")?.checked || false,
       showPolitics: document.getElementById("showPolitics")?.checked || false,
@@ -5640,14 +5659,14 @@ async function loadCoach() {
       buyAmount: parseFloat(document.getElementById("buyAmount")?.value) || 1.0,
       maxPerScan: parseInt(document.getElementById("autoMaxPerScan")?.value) || 5,
     };
-    // Coach aggregates 30 days of Kalshi settlements server-side and can be slow.
-    // Without an abort timeout a hung request leaves the tab stuck on "Loading…".
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 20000);
     const r = await fetch("/api/coach?filters=" + encodeURIComponent(JSON.stringify(filters)), {signal: ctrl.signal});
     clearTimeout(to);
     const d = await r.json();
     const t = d.totals || {};
+
+    // ── 1. Totals ────────────────────────────────────────────────────────────
     const totalsEl = document.getElementById("coachTotals");
     const wr = t.win_rate != null ? `${t.win_rate}%` : "—";
     const pnlCls = (t.total_pnl || 0) > 0 ? "pos" : (t.total_pnl || 0) < 0 ? "neg" : "neu";
@@ -5658,6 +5677,57 @@ async function loadCoach() {
       · total <span class="${pnlCls}" style="font-weight:700">${(t.total_pnl||0) >= 0 ? "+" : ""}$${(t.total_pnl||0).toFixed(2)}</span>
     `;
 
+    // ── 2. Loss-streak warning ────────────────────────────────────────────────
+    const streak = d.loss_streak || 0;
+    const streakEl = document.getElementById("coachStreakWarn");
+    if (streakEl) {
+      if (streak >= 3) {
+        const intensity = streak >= 7 ? "#ff3333" : streak >= 5 ? "#ff6b35" : "#e0a44a";
+        const advice = streak >= 7 ? "Consider pausing the bot and reviewing your price range settings."
+                     : streak >= 5 ? "Consider tightening your buy range or reducing bet size."
+                     : "Monitor closely — could be a temporary market drift.";
+        streakEl.style.display = "flex";
+        streakEl.innerHTML = `<span style="font-size:18px">⚠️</span>
+          <div>
+            <div style="font-weight:800;font-size:14px;color:${intensity}">AI Alert: ${streak} losses in a row</div>
+            <div style="font-size:12px;color:#ddd;margin-top:3px">${advice}</div>
+          </div>`;
+      } else {
+        streakEl.style.display = "none";
+      }
+    }
+
+    // ── 3. Trend: last 24h vs prior 24h ──────────────────────────────────────
+    const trend = d.trend || {};
+    const t24 = trend.last_24h || {}; const tp = trend.prior_24h || {};
+    const trendEl = document.getElementById("coachTrend");
+    if (trendEl && (t24.n > 0 || tp.n > 0)) {
+      const pnlDelta = (t24.pnl || 0) - (tp.pnl || 0);
+      const arrow = pnlDelta > 0.01 ? "↑" : pnlDelta < -0.01 ? "↓" : "→";
+      const arrowCls = pnlDelta > 0.01 ? "var(--green)" : pnlDelta < -0.01 ? "var(--red)" : "#aaa";
+      const fmt = (x) => x == null ? "—" : `${x >= 0 ? "+" : ""}$${x.toFixed(2)}`;
+      const fmtWR = (x) => x == null ? "—" : `${x}%`;
+      trendEl.style.display = "grid";
+      trendEl.innerHTML = `
+        <div style="grid-column:1/-1;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.6px;font-weight:700;margin-bottom:8px">
+          AI Trend Analysis <span style="color:${arrowCls};font-size:14px;font-weight:900">${arrow}</span>
+          <span style="color:${arrowCls};font-weight:700"> ${pnlDelta >= 0 ? "+" : ""}$${pnlDelta.toFixed(2)} vs yesterday</span>
+        </div>
+        <div style="background:#0c0c0e;border:1px solid var(--border);border-radius:6px;padding:10px 14px">
+          <div style="font-size:11px;color:#888;margin-bottom:4px">Last 24 hours</div>
+          <div style="font-size:15px;font-weight:800;color:${(t24.pnl||0)>=0?'var(--green)':'var(--red)'}">${fmt(t24.pnl)}</div>
+          <div style="font-size:12px;color:#bbb;margin-top:2px">${t24.n||0} trades · ${fmtWR(t24.win_rate)} WR · ${t24.wins||0}W / ${t24.losses||0}L</div>
+        </div>
+        <div style="background:#0c0c0e;border:1px solid var(--border);border-radius:6px;padding:10px 14px">
+          <div style="font-size:11px;color:#888;margin-bottom:4px">Prior 24 hours</div>
+          <div style="font-size:15px;font-weight:800;color:${(tp.pnl||0)>=0?'var(--green)':'var(--red)'}">${fmt(tp.pnl)}</div>
+          <div style="font-size:12px;color:#bbb;margin-top:2px">${tp.n||0} trades · ${fmtWR(tp.win_rate)} WR · ${tp.wins||0}W / ${tp.losses||0}L</div>
+        </div>`;
+    } else if (trendEl) {
+      trendEl.style.display = "none";
+    }
+
+    // ── 4. Recommendations ───────────────────────────────────────────────────
     const recsEl = document.getElementById("coachRecs");
     const recs = d.recommendations || [];
     if (!recs.length) {
@@ -5673,6 +5743,7 @@ async function loadCoach() {
 
     renderCoachLotto(d);
 
+    // ── 5. Strategies ────────────────────────────────────────────────────────
     const stratEl = document.getElementById("coachStrategies");
     const strats = d.strategies || [];
     if (!strats.length) {
@@ -5697,31 +5768,34 @@ async function loadCoach() {
       }).join("");
     }
 
+    // ── 6. Data tables (with local timezone for hours + per-token) ───────────
     coachBucketTable("coachCats",   d.by_category   || [], "Category");
     coachBucketTable("coachBands",  d.by_price_band || [], "Band");
     coachBucketTable("coachSides",  d.by_side       || [], "Side");
-    coachBucketTable("coachHours",  d.by_hour_utc   || [], "Hour");
+    coachBucketTable("coachHours",  d.by_hour_utc   || [], "Hour (local)", r => _utcHourToLocal(Number(r.key)));
+    coachBucketTable("coachTokens", d.by_token      || [], "Token");
+
+    // Store coach data for Smart Apply
+    window._lastCoachData = d;
   } catch(e) {
-    // Ignore AbortErrors (happens when tab switches or timeout fires)
     if (e.name === 'AbortError') return;
-    // For other errors, show a clear message
-    const msg = e.message || "Unknown error";
     const ct = document.getElementById("coachTotals");
     const cr = document.getElementById("coachRecs");
     if (ct) ct.textContent = "Coach unavailable";
-    if (cr) cr.textContent = "Error: " + msg;
+    if (cr) cr.textContent = "Error: " + (e.message || "Unknown error");
     console.error("[Coach] Error:", e);
   }
 }
 
-function coachBucketTable(elId, rows, label) {
+function coachBucketTable(elId, rows, label, keyFn) {
   const el = document.getElementById(elId);
   if (!el) return;
   if (!rows.length) { el.innerHTML = '<div style="color:#555;font-size:12px;padding:8px 0">No data</div>'; return; }
   const body = rows.map(r => {
     const pnlCls = r.total_pnl > 0 ? "pos" : r.total_pnl < 0 ? "neg" : "neu";
+    const keyLabel = keyFn ? keyFn(r) : esc(String(r.key));
     return `<tr>
-      <td>${esc(String(r.key))}</td>
+      <td>${keyLabel}</td>
       <td>${r.n}</td>
       <td>${r.win_rate}%</td>
       <td class="${pnlCls}" style="font-weight:600">${r.total_pnl >= 0 ? "+" : ""}$${r.total_pnl.toFixed(2)}</td>
@@ -8639,57 +8713,79 @@ async function applyCoachSettings() {
   const btn = document.getElementById("coachApplyBtn");
   if (btn) { btn.textContent = "Applying…"; btn.disabled = true; }
   try {
-    // Send current filter settings to Coach for analysis
-    const filters = {
-      buyMin: parseFloat(document.getElementById("minProb")?.value) || 80,
-      buyMax: parseFloat(document.getElementById("maxProb")?.value) || 96,
-      timeWindow: selTime || 15,  // Use global selTime, not timeCustom input
-      showCrypto: document.getElementById("showCrypto")?.checked || false,
-      showSports: document.getElementById("showSports")?.checked || false,
-      showPolitics: document.getElementById("showPolitics")?.checked || false,
-      showEconomics: document.getElementById("showEconomics")?.checked || false,
-      buyAmount: parseFloat(document.getElementById("buyAmount")?.value) || 1.0,
-      maxPerScan: parseInt(document.getElementById("autoMaxPerScan")?.value) || 5,
-    };
-    const d = await fetch("/api/coach?filters=" + encodeURIComponent(JSON.stringify(filters))).then(r => r.json());
-
-    // Best price band by win rate (need ≥3 trades)
-    const bands = (d.by_price_band || []).filter(b => b.n >= 3).sort((a,b) => b.win_rate - a.win_rate);
-    if (bands.length) {
-      const best = bands[0].key; // e.g. "90-95¢"
-      const m = best.match(/(\d+)[–\-](\d+)/);
-      if (m) { selMin = parseInt(m[1]); selMax = parseInt(m[2]); document.getElementById("minProb").value = selMin; document.getElementById("maxProb").value = selMax; activatePills("probGroup","Custom"); }
-    } else {
-      // Default safe range
-      setRange(85, 96);
+    // Use cached coach data if available (avoids a second slow API call)
+    let d = window._lastCoachData;
+    if (!d) {
+      const filters = {
+        buyMin: parseFloat(document.getElementById("minProb")?.value) || 80,
+        buyMax: parseFloat(document.getElementById("maxProb")?.value) || 96,
+        timeWindow: selTime || 15,
+        showCrypto: document.getElementById("showCrypto")?.checked || false,
+        showSports: document.getElementById("showSports")?.checked || false,
+        showPolitics: document.getElementById("showPolitics")?.checked || false,
+        showEconomics: document.getElementById("showEconomics")?.checked || false,
+        buyAmount: parseFloat(document.getElementById("buyAmount")?.value) || 1.0,
+        maxPerScan: parseInt(document.getElementById("autoMaxPerScan")?.value) || 5,
+      };
+      d = await fetch("/api/coach?filters=" + encodeURIComponent(JSON.stringify(filters))).then(r => r.json());
     }
 
-    // 24h window to capture most opportunities
-    setTime(1440, "24h");
+    const changes = [];
 
-    // Cap at $1 per bet
-    document.getElementById("buyAmount").value = "1.00";
+    // ── Price band: use best band by P&L with ≥3 trades ──────────────────────
+    const bands = (d.by_price_band || []).filter(b => b.n >= 3 && b.total_pnl > 0).sort((a,b) => b.total_pnl - a.total_pnl);
+    if (bands.length) {
+      const best = bands[0].key;
+      const m = best.match(/(\d+)[–\-](\d+)/);
+      if (m) {
+        selMin = parseInt(m[1]); selMax = parseInt(m[2]);
+        document.getElementById("minProb").value = selMin;
+        document.getElementById("maxProb").value = selMax;
+        activatePills("probGroup", "Custom");
+        changes.push(`price range → ${best}`);
+      }
+    } else {
+      setRange(80, 96);
+      changes.push("price range → 80-96% (default, not enough data)");
+    }
 
-    // All categories on
-    ["showCrypto","showSports","showPolitics","showEconomics","showCombo"].forEach(id => {
-      const el = document.getElementById(id); if (el) el.checked = true;
+    // ── Categories: enable profitable ones, disable chronic losers (≥5 trades, always losing) ─
+    const catPnl = {};
+    (d.by_category || []).forEach(r => { catPnl[r.key.toLowerCase()] = {pnl: r.total_pnl, n: r.n}; });
+    const catMap = {crypto: "showCrypto", sports: "showSports", politics: "showPolitics", economics: "showEconomics"};
+    let anyEnabled = false;
+    Object.entries(catMap).forEach(([cat, id]) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const info = catPnl[cat];
+      if (info && info.n >= 5 && info.pnl < -2.0) {
+        el.checked = false;
+        changes.push(`disabled ${cat} (chronic loser: $${info.pnl.toFixed(2)})`);
+      } else {
+        el.checked = true;
+        anyEnabled = true;
+      }
     });
+    if (!anyEnabled) { document.getElementById("showCrypto").checked = true; } // always keep at least one
 
-    // Keep goodLiq on
-    document.getElementById("goodLiq").checked = true;
+    // ── Scan window: use best performing local hour block to suggest window ──
+    // (We don't auto-restrict to hours — just make window wide enough to catch them)
+    setTime(1440, "24h");
+    changes.push("scan window → 24h (catches all your best hours)");
+
+    // ── Keep goodLiq on, cap at $1 ────────────────────────────────────────────
+    const goodLiq = document.getElementById("goodLiq"); if (goodLiq) goodLiq.checked = true;
+    document.getElementById("buyAmount").value = "1.00";
+    changes.push("buy amount → $1.00 max");
 
     saveSettings();
-    if (autoModeOn) {
-      toast("✓ Coach settings applied — bot will use them on next scan", "ok");
-      if (btn) { btn.textContent = "✓ Settings Applied"; btn.style.background = "var(--green)"; btn.style.color = "#000"; }
-    } else {
-      toast("✓ Coach settings applied! Hit Start Bot when ready.", "ok");
-      if (btn) { btn.textContent = "✓ Applied — hit Start Bot!"; btn.style.background = "var(--green)"; btn.style.color = "#000"; }
-    }
+    const summary = changes.length ? changes.join(" · ") : "no changes needed";
+    toast(`✓ AI applied: ${summary}`, "ok");
+    if (btn) { btn.textContent = "✓ AI Applied"; btn.style.background = "var(--green)"; btn.style.color = "#000"; setTimeout(() => { btn.textContent = "⚡ Apply Coach Settings"; btn.disabled = false; }, 4000); }
     switchTab("scanner");
   } catch(e) {
     toast("Coach settings error: " + e.message, "err");
-    if (btn) { btn.textContent = "Apply Coach Settings"; btn.disabled = false; }
+    if (btn) { btn.textContent = "⚡ Apply Coach Settings"; btn.disabled = false; }
   }
 }
 
