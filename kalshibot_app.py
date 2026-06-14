@@ -2340,11 +2340,19 @@ def _record_closing_spread(symbol: str, close_ts: float, spread: float):
     if len(buckets) > _MAX_GAMES:                      # prune oldest games
         for old in sorted(buckets)[:-_MAX_GAMES]:
             del buckets[old]
+    _save_game_spreads()                               # persist (throttled)
 
-def _recent_game_spreads(symbol: str, games: int):
-    """The last `games` per-game spreads, oldest→newest."""
+def _recent_game_spreads(symbol: str, games: int, exclude_bucket=None):
+    """The last `games` per-game spreads, oldest→newest.
+
+    Pass exclude_bucket to drop the CURRENT (still-open) game's bucket. We record
+    a game's spread in its final 90s, so without this the in-progress game would
+    fold into its OWN threshold right at buy/trigger time — making the line move
+    during the game. Excluding it keeps the threshold FIXED for the whole 15-min
+    game, so the live spread can actually cross it and trigger a mode switch."""
     buckets = _token_game_spreads.get(symbol, {})
-    return [buckets[k] for k in sorted(buckets)[-games:]]
+    keys = [k for k in sorted(buckets) if k != exclude_bucket]
+    return [buckets[k] for k in keys[-games:]]
 
 def _avg_spread_games(symbol: str, games: int = _GAMES_4H):
     """(avg_spread, games_counted) over the last `games` games, or (None, 0)."""
@@ -2371,7 +2379,81 @@ def _spread_volatility(symbol: str, games: int = _GAMES_4H):
     elevated = cv > 0.25 or (std > 0 and abs(latest - avg) > 2 * std)
     return (_round_spread(std), round(cv, 3), elevated)
 
-def _calculate_safe_spread(symbol: str, current_spread: float) -> float:
+# ── Persistence: never lose backtest data across restarts ──────────────────
+# The per-game spread history IS our backtest dataset, so we keep it on disk in
+# TWO places — if one is wiped, the other survives:
+#   1) backtest_data/ inside the repo   → committed to GitHub (off-site backup)
+#   2) ~/KalshiBots/backtest_data/      → on THIS pc but OUTSIDE the repo, so a
+#      re-clone / git clean can't take it. Path.home() resolves to whoever is
+#      running the bot (C:\Users\<you> on Windows, /home/<you> on Linux/Mac) —
+#      never a hard-coded machine name or username.
+BACKTEST_DIR         = HERE / "backtest_data"
+HOME_BACKTEST_DIR    = Path.home() / "KalshiBots" / "backtest_data"
+_SPREAD_HISTORY_NAME = "game_spread_history.json"
+_SPREAD_SAVE_EVERY   = 20          # seconds — throttle disk writes
+_spread_save_state   = {"ts": 0.0}
+
+def _spread_history_paths():
+    """Both backup locations: repo copy (→GitHub) first, home copy second."""
+    return [BACKTEST_DIR / _SPREAD_HISTORY_NAME,
+            HOME_BACKTEST_DIR / _SPREAD_HISTORY_NAME]
+
+def _save_game_spreads(force: bool = False):
+    """Write the per-game spread history to disk (repo + home backup).
+    Throttled so the closing-window writes don't hammer the disk."""
+    now = time.time()
+    if not force and (now - _spread_save_state["ts"]) < _SPREAD_SAVE_EVERY:
+        return
+    _spread_save_state["ts"] = now
+    # JSON object keys must be strings, so bucket ints → str on save.
+    payload = {
+        "version": 1,
+        "saved_at": now,
+        "game_secs": _GAME_SECS,
+        "spreads": {sym: {str(b): v for b, v in buckets.items()}
+                    for sym, buckets in _token_game_spreads.items()},
+    }
+    blob = json.dumps(payload, indent=2)
+    for p in _spread_history_paths():
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(blob, encoding="utf-8")
+        except Exception as e:
+            print(f"[backtest] save to {p} failed: {e}")
+
+def _load_game_spreads():
+    """Restore per-game spread history on startup. Prefer whichever copy
+    (repo or home backup) was saved most recently, so the freshest data wins."""
+    best = None  # (saved_at, parsed_dict)
+    for p in _spread_history_paths():
+        try:
+            if p.exists():
+                d = json.loads(p.read_text(encoding="utf-8"))
+                ts = float(d.get("saved_at", 0))
+                if best is None or ts > best[0]:
+                    best = (ts, d)
+        except Exception as e:
+            print(f"[backtest] load from {p} failed: {e}")
+    if not best:
+        return
+    for sym, buckets in (best[1].get("spreads") or {}).items():
+        dst = _token_game_spreads.setdefault(sym, {})
+        for b, v in buckets.items():
+            try:
+                dst[int(b)] = float(v)
+            except (ValueError, TypeError):
+                continue
+    # Trim to the retention window in case an older file held more games.
+    for buckets in _token_game_spreads.values():
+        if len(buckets) > _MAX_GAMES:
+            for old in sorted(buckets)[:-_MAX_GAMES]:
+                del buckets[old]
+    n = sum(len(b) for b in _token_game_spreads.values())
+    print(f"[backtest] restored {n} game spreads from disk")
+
+_load_game_spreads()
+
+def _calculate_safe_spread(symbol: str, current_spread: float, exclude_bucket=None) -> float:
     """AI-recommended safe spread = 75th percentile of recent closing spreads.
 
     This threshold is FIXED (doesn't chase current spread) but adapts to volatility:
@@ -2381,8 +2463,10 @@ def _calculate_safe_spread(symbol: str, current_spread: float) -> float:
     Avoids the earlier circular problem where avg+1.5σ trapped us in Lotto ~93% of
     the time because current spread IS drawn from that same distribution.
 
-    Computed from the last 16 games (4h). Scales to each token's magnitude automatically."""
-    vals = _recent_game_spreads(symbol, _GAMES_4H)
+    Computed from the last 16 COMPLETED games (4h) — the current in-progress game
+    is excluded (see exclude_bucket) so the line holds steady for the whole game.
+    Scales to each token's magnitude automatically."""
+    vals = _recent_game_spreads(symbol, _GAMES_4H, exclude_bucket=exclude_bucket)
     if len(vals) < 3:
         # Not enough games yet — cushion proportional to the live spread (25% over).
         # No absolute floor, so cent-scale (DOGE/XRP) and dollar-scale (BTC/ETH)
@@ -2419,7 +2503,11 @@ def _compute_safe_spread_recommendations(token_spreads):
         if (nspread and nclose and nsecs is not None and 0 <= nsecs <= _CLOSING_WINDOW):
             _record_closing_spread(symbol, nclose, nspread)
         if spread > 0:
-            recommendations[symbol] = _calculate_safe_spread(symbol, spread)
+            # Exclude the current (still-open) game from its own threshold so the
+            # line stays FIXED for the whole 15-min game and the live spread can
+            # cross it to trigger a Scanner/Lotto switch.
+            cur_bucket = int(nclose // _GAME_SECS) if nclose else None
+            recommendations[symbol] = _calculate_safe_spread(symbol, spread, exclude_bucket=cur_bucket)
     if recommendations:
         # Cache so the bot's auto-switch can read fresh thresholds without the UI open.
         _safe_spread_cache["data"] = recommendations
