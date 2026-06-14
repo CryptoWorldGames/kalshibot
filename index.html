@@ -703,6 +703,12 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 
   <!-- Expandable Panel with Individual Token Cards -->
   <div id="smartStrategyPanel" style="display:block;padding:16px;border-top:1px solid #2a4a2a">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <span style="font-size:11px;color:#8a8;font-weight:700">Card size:</span>
+      <button type="button" id="ssSizeSm" onclick="setSSCardSize('sm')" style="padding:4px 12px;font-size:12px;font-weight:700;border:1px solid var(--green);border-radius:6px;background:transparent;color:var(--green);cursor:pointer">S</button>
+      <button type="button" id="ssSizeMd" onclick="setSSCardSize('md')" style="padding:4px 12px;font-size:12px;font-weight:700;border:1px solid var(--green);border-radius:6px;background:transparent;color:var(--green);cursor:pointer">M</button>
+      <button type="button" id="ssSizeLg" onclick="setSSCardSize('lg')" style="padding:4px 12px;font-size:12px;font-weight:700;border:1px solid var(--green);border-radius:6px;background:transparent;color:var(--green);cursor:pointer">L</button>
+    </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px" id="smartStrategyTokens"></div>
   </div>
 </div>
@@ -6733,6 +6739,7 @@ async function fetchWithTimeout(url, timeoutMs = 20000) {
 // Load Smart Strategy per-token settings from backend
 let _perTokenSettings = {};
 let _aiRecommendations = {};
+let _learningData = {};  // {SYM: {n, wins, losses, win_rate, threshold_multiplier, tilt}}
 let _avgSpread4h = {};  // {SYM: {avg, span_mins}} — reference for manual thresholds
 
 async function loadPerTokenSettings() {
@@ -6802,6 +6809,41 @@ function fmtSpread(v) {
   return Math.round(v).toString();
 }
 
+// ── Card size toggle (S/M/L) ──────────────────────────────────────────────
+// Bumps the whole Smart Strategy card grid up via CSS zoom so the small fonts
+// are easy to read. Persisted, so it sticks across reloads. Default = small.
+function setSSCardSize(size) {
+  try { localStorage.setItem("kb_ss_card_size", size); } catch(e) {}
+  applySSCardSize();
+}
+function applySSCardSize() {
+  let size = "sm";
+  try { size = localStorage.getItem("kb_ss_card_size") || "sm"; } catch(e) {}
+  const zoom = size === "lg" ? 1.5 : size === "md" ? 1.25 : 1.0;
+  const grid = document.getElementById("smartStrategyTokens");
+  if (grid) grid.style.zoom = zoom;
+  ["sm","md","lg"].forEach(s => {
+    const b = document.getElementById("ssSize" + s.charAt(0).toUpperCase() + s.slice(1));
+    if (!b) return;
+    const on = (s === size);
+    b.style.background = on ? "var(--green)" : "transparent";
+    b.style.color = on ? "#000" : "var(--green)";
+  });
+}
+
+// Per-token learning (this user's own win-rate + aggressiveness tilt). Small line
+// on each card; empty until the user has their own settled trades for that token.
+function learnHelperHtml(symbol) {
+  const d = _learningData[symbol];
+  if (!d || d.win_rate == null) return "";
+  const pct = Math.round(d.win_rate * 100);
+  const n = d.n || 0;
+  let color = "#6a8a6a", tilt = "neutral";
+  if (d.tilt === "more aggressive")        { color = "#e0a44a"; tilt = "↑ aggressive"; }
+  else if (d.tilt === "more conservative") { color = "#6aa6e0"; tilt = "↓ conservative"; }
+  return `<span style="color:${color}">your win-rate ${pct}% (${n} trade${n === 1 ? "" : "s"}) · ${tilt}</span>`;
+}
+
 // Badge shows the SAFE-SPREAD CUTOFF (labeled), not an opaque "AI" number: at or
 // above it = Scanner (safe); below it = Lotto (flip risk).
 function smartStrategyRec(symbol) {
@@ -6858,6 +6900,12 @@ async function loadSmartStrategyTokens() {
       fetchWithTimeout("/api/smart-strategy/tokens", 120000),
       loadPerTokenSettings()
     ]);
+    // Best-effort: this user's per-token win-rate/tilt. Never block the cards on it.
+    try {
+      const lr = await fetchWithTimeout("/api/learning", 10000);
+      const lj = await lr.json();
+      _learningData = (lj && lj.tokens) ? lj.tokens : {};
+    } catch(e) { /* keep prior learning data */ }
     const tokensData = await tokensResp.json();
     const tokens = tokensData.tokens || [];
 
@@ -6867,6 +6915,7 @@ async function loadSmartStrategyTokens() {
       renderSmartStrategyTokenCards(tokens);
     }
     applyTokenLiveData(tokens);
+    applySSCardSize();  // keep the chosen card size + active button in sync
     // Keep the spreads live (server caches, so this is cheap).
     if (!_tokenPollTimer) _tokenPollTimer = setInterval(loadSmartStrategyTokens, 10000);
   } catch(e) {
@@ -6918,6 +6967,8 @@ function renderSmartStrategyTokenCards(tokens) {
         <div id="ss_${symbol}_avgline" style="font-size:10px;color:#8a8;margin-top:3px">${avgSpreadHelperText(symbol)}</div>
         <div id="ss_${symbol}_volline" style="font-size:10px;margin-top:2px"
           title="How much the closing spread jumps from game to game. Higher = riskier (a position can flip faster). You don't have to do anything — the bot already widens the safe cushion automatically when it's elevated. If you're on manual, consider raising your safe spread when this is high.">${volHelperHtml(symbol)}</div>
+        <div id="ss_${symbol}_learnline" style="font-size:10px;margin-top:2px"
+          title="Learned from YOUR own settled trades for this token. A weak win-rate makes the bot a bit more conservative; a strong one lets it be a bit more aggressive (capped ±15%). Stays neutral until you have 5+ trades.">${learnHelperHtml(symbol)}</div>
       </div>
 
       <div style="border-top:1px solid #2a4a2a;padding-top:10px">
@@ -7039,6 +7090,8 @@ function refreshTokenDynamicFields(symbol) {
   if (avgLine) avgLine.textContent = avgSpreadHelperText(symbol);
   const volLine = document.getElementById(`ss_${symbol}_volline`);
   if (volLine) volLine.innerHTML = volHelperHtml(symbol);
+  const learnLine = document.getElementById(`ss_${symbol}_learnline`);
+  if (learnLine) learnLine.innerHTML = learnHelperHtml(symbol);
 }
 
 async function updatePerTokenSetting(symbol, field, value) {
