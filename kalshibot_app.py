@@ -5546,7 +5546,9 @@ def coach():
         snap = {k: dict(v) for k, v in tracked.items()}
 
     # ── Build settlement lookup (last 7 days) ────────────────────────────────
-    settle_pnl = {}  # ticker -> pnl (dollars, from settlements)
+    settle_pnl = {}       # ticker -> pnl
+    settle_ts  = {}       # ticker -> epoch float (for trend analysis)
+    settle_list = []      # [(epoch, pnl)] for loss-streak + trend
     try:
         cutoff = datetime.now(timezone.utc) - timedelta(days=7)
         cursor = None
@@ -5572,7 +5574,12 @@ def coach():
                 cost = yes_cost if yes_cnt > 0.001 else no_cost
                 cnt  = yes_cnt if yes_cnt > 0.001 else no_cnt
                 fee  = _kalshi_fee(cnt, (cost / cnt * 100) if cnt > 0.001 else 0)
-                settle_pnl[s.get("ticker","")] = rev - cost - fee
+                pnl  = rev - cost - fee
+                tkr  = s.get("ticker", "")
+                ep   = ts.timestamp()
+                settle_pnl[tkr]  = pnl
+                settle_ts[tkr]   = ep
+                settle_list.append((ep, pnl))
             if stop: break
             cursor = data.get("cursor")
             if not cursor: break
@@ -5608,6 +5615,7 @@ def coach():
     sides    = defaultdict(lambda: {"n":0,"wins":0,"pnl":0.0})
     hours    = defaultdict(lambda: {"n":0,"wins":0,"pnl":0.0})
     profs    = defaultdict(lambda: {"n":0,"wins":0,"pnl":0.0})   # by bot tab (T1/T2)
+    tokens   = defaultdict(lambda: {"n":0,"wins":0,"pnl":0.0})  # per crypto token
     # Odds-band performance for the Lotto bot specifically (T2 long-shots).
     lotto_bands = defaultdict(lambda: {"n":0,"wins":0,"pnl":0.0})
 
@@ -5638,10 +5646,15 @@ def coach():
         if won: total_wins += 1
 
         prof = pos.get("profile") or "T1"
+        tok = _ticker_token(ticker)
         for bucket, key in [(cats,cat), (bands, price_band(bp)), (sides, side), (profs, prof)]:
             bucket[key]["n"]    += 1
             bucket[key]["pnl"]  += pnl
             if won: bucket[key]["wins"] += 1
+        if tok:
+            tokens[tok]["n"]   += 1
+            tokens[tok]["pnl"] += pnl
+            if won: tokens[tok]["wins"] += 1
         if prof == "T2":  # Lotto bot — track which odds bands actually hit
             lb = lotto_bands[price_band(bp)]
             lb["n"] += 1; lb["pnl"] += pnl
@@ -5667,12 +5680,38 @@ def coach():
             })
         return sorted(out, key=lambda r: (-r["total_pnl"], -r["n"]))
 
-    cat_rows  = rows_from(cats)
-    band_rows = rows_from(bands)
-    side_rows = rows_from(sides)
-    hour_rows = sorted(rows_from(hours), key=lambda r: r["key"])
-    profile_rows = rows_from(profs)        # T1 vs T2 head-to-head
-    lotto_band_rows = rows_from(lotto_bands)  # Lotto bot's odds-band hit rates
+    cat_rows      = rows_from(cats)
+    band_rows     = rows_from(bands)
+    side_rows     = rows_from(sides)
+    hour_rows     = sorted(rows_from(hours), key=lambda r: r["key"])
+    profile_rows  = rows_from(profs)
+    lotto_band_rows = rows_from(lotto_bands)
+    token_rows    = rows_from(tokens)
+
+    # ── Trend: last 24h vs prior 24h (from raw settlement list) ─────────────
+    now_ep  = time.time()
+    cut24   = now_ep - 86400
+    cut48   = now_ep - 2 * 86400
+    def _period(ep_lo, ep_hi):
+        trades = [(ep, pnl) for (ep, pnl) in settle_list if ep_lo <= ep < ep_hi]
+        n = len(trades); wins = sum(1 for _, p in trades if p > 0.001)
+        pnl_sum = sum(p for _, p in trades)
+        return {"n": n, "wins": wins, "losses": n - wins,
+                "win_rate": round(wins/n*100, 1) if n else None,
+                "pnl": round(pnl_sum, 2)}
+    trend = {
+        "last_24h":  _period(cut24, now_ep),
+        "prior_24h": _period(cut48, cut24),
+    }
+
+    # ── Loss streak: consecutive losses in the most recent N settlements ─────
+    recent_sorted = sorted(settle_list, key=lambda x: x[0], reverse=True)  # newest first
+    loss_streak = 0
+    for _, pnl in recent_sorted:
+        if pnl < -0.001:
+            loss_streak += 1
+        else:
+            break  # streak broken
 
     # ── Recommendations ──────────────────────────────────────────────────────
     recs = []
@@ -5895,8 +5934,11 @@ def coach():
         "by_price_band": band_rows,
         "by_side":       side_rows,
         "by_hour_utc":   hour_rows,
-        "by_profile":    profile_rows,      # T1 (Scanner) vs T2 (Lotto)
-        "lotto_odds":    lotto_band_rows,   # Lotto bot's hit rate by odds band
+        "by_profile":    profile_rows,
+        "lotto_odds":    lotto_band_rows,
+        "by_token":      token_rows,        # per-crypto-token breakdown
+        "trend":         trend,             # last 24h vs prior 24h
+        "loss_streak":   loss_streak,       # consecutive losing settlements
         "recommendations": recs,
         "strategies": strategies,
     })
