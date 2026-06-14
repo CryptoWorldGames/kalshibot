@@ -160,3 +160,19 @@ document.querySelectorAll(".tab-pane").forEach(p => {
 
 **Rule:** Always validate numeric parameters for magnitude limits, especially those feeding into datetime calculations.
 
+---
+
+## BUG-011: Sell voice announcement never played (FIXED)
+
+**Symptom:** Buy voice works fine. Sell/profit/loss voice never fires. Sell popup shows but no audio.
+
+**Root Cause 1 (primary):** `const prev = allPositions;` was a reference, not a copy. `renderBotPositions()` replaced the `allPositions` array before the diff loop ran, so no positions ever appeared to "disappear" — meaning no sells were ever detected.
+
+**Fix 1:** `const prev = allPositions.slice();` — snapshot before `renderBotPositions()` is called.
+
+**Root Cause 2 (secondary):** Even after Fix 1, `announceSell()` was gated on `profit != null`, which required `current_yes`/`current_no` to be cached on the position object. If the position had no current price at sell time, the popup showed but voice was silently skipped.
+
+**Fix 2:** Always call `announceSell()` on sell detection regardless of whether price/profit is known. If unknown, it just says "you sold N contracts of [token]" — user always hears something.
+
+**Rule:** Never gate voice announcements on optional data fields. Always announce, even if detail is incomplete.
+
