@@ -6282,73 +6282,95 @@ async function loadSummary() {
       const pag = paginate(trades, pageSize, summaryPage);
       summaryPage = pag.page; // Ensure page is within bounds
 
-      const tradesHtml = pag.items.map(x => {
-        const isBuy = x.kind === "buy";
-        const isSell = x.kind === "sell";
-        const isSettled = x.kind === "settlement";
-
-        let color, tag;
-        if (isBuy) {
-          color = "var(--blue)";
-          tag = "BUY";
-        } else if (isSettled) {
-          color = x.won ? "var(--green)" : "var(--red)";
-          tag = "SETTLED";
-        } else {
-          color = "var(--green)";
-          tag = "SELL";
+      // Group buys with their matching sell/settlement by ticker (same page items)
+      const grouped = [];
+      const usedSells = new Set();
+      const sellMap = {}; // ticker -> [sell/settlement trades]
+      pag.items.forEach(x => {
+        if (x.kind === "sell" || x.kind === "settlement") {
+          if (!sellMap[x.ticker]) sellMap[x.ticker] = [];
+          sellMap[x.ticker].push(x);
         }
-
-        const title = esc(x.title || x.ticker || "");
-        const side = (x.side || "").toUpperCase();
-        const price = x.price != null ? `${x.price}¢` : "";
-        const cnt = x.count != null ? `×${x.count}` : "";
-        let result = "";
-        if ((isSell || isSettled) && x.profit != null) {
-          const pcls = x.profit >= 0 ? "pos" : "neg";
-          result = ` · <span class="${pcls}" style="font-weight:700">${x.profit >= 0 ? "+" : ""}$${Number(x.profit).toFixed(2)}</span>`;
-          if (x.reason) result += ` <span style="color:#888">(${esc(x.reason)})</span>`;
-        } else if (isBuy && x.spent != null) {
-          result = ` · <span style="color:#aaa">-$${Number(x.spent).toFixed(2)}</span>`;
+      });
+      pag.items.forEach(x => {
+        if (x.kind === "buy") {
+          // Find closest sell/settlement for this ticker
+          const candidates = (sellMap[x.ticker] || []).filter(s => !usedSells.has(s));
+          const match = candidates.length ? candidates.reduce((a, b) =>
+            Math.abs(a.ts - x.ts) < Math.abs(b.ts - x.ts) ? a : b) : null;
+          if (match) usedSells.add(match);
+          grouped.push({ buy: x, close: match || null });
+        } else if (!usedSells.has(x)) {
+          grouped.push({ buy: null, close: x });
         }
+      });
 
-        // For SELL/SETTLEMENT: show detailed P&L breakdown
-        let detailLine = "";
-        if ((isSell || isSettled) && x.count != null && x.price != null) {
-          const qty = Number(x.count);
-          const sellEach = Number(x.price);
-          const totalSell = (qty * sellEach / 100).toFixed(2);
-          // Attempt to derive cost-each from the activity log (if available)
-          const profit = Number(x.profit || 0);
-          const costEach = totalSell > 0 ? ((Number(totalSell) - profit) / qty).toFixed(2) : "—";
-          const totalCost = (Number(costEach) * qty).toFixed(2);
-          detailLine = `<div style="font-size:11px;color:#aaa;margin-top:6px;padding-top:6px;border-top:1px solid #333;display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px">
-            <div><span style="color:#666">Qty:</span> ${qty}</div>
-            <div><span style="color:#666">Cost each:</span> $${costEach}</div>
-            <div><span style="color:#666">Total cost:</span> $${totalCost === "NaN" ? "—" : totalCost}</div>
-            <div><span style="color:#666">Sell each:</span> $${(sellEach / 100).toFixed(2)}</div>
-            <div><span style="color:#666">Total sell:</span> $${totalSell}</div>
-            <div style="font-weight:700;color:${profit >= 0 ? "var(--green)" : "var(--red)"}"><span style="color:#666">Profit:</span> ${profit >= 0 ? "+" : ""}$${profit.toFixed(2)}</div>
+      function _tradeRow(buy, close) {
+        const hasClose = close && (close.kind === "sell" || close.kind === "settlement");
+        const isSettled = close && close.kind === "settlement";
+        const profit = hasClose && close.profit != null ? Number(close.profit) : null;
+        const profitCls = profit == null ? "" : profit > 0 ? "var(--green)" : profit < 0 ? "var(--red)" : "#aaa";
+        const profitStr = profit == null ? "—" : `${profit >= 0 ? "+" : ""}$${profit.toFixed(2)}`;
+        const borderColor = !hasClose ? "var(--blue)" : profit > 0 ? "var(--green)" : profit < 0 ? "var(--red)" : "#aaa";
+
+        const buyQty   = buy  ? Number(buy.count  || 0) : null;
+        const buyPrice = buy  ? Number(buy.price   || 0) : null;
+        const sellQty  = close ? Number(close.count || 0) : null;
+        const sellPrice= close ? Number(close.price || 0) : null;
+        const title    = esc((close || buy).title || (close || buy).ticker || "");
+        const profile  = (close || buy).profile || buy?.profile || "";
+        const side     = ((close || buy).side || "").toUpperCase();
+
+        // SELL / SETTLED row
+        let closeRow = "";
+        if (hasClose) {
+          const tag = isSettled ? "SETTLED" : "SELL";
+          const tagColor = profit > 0 ? "var(--green)" : profit < 0 ? "var(--red)" : "#aaa";
+          closeRow = `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid #1a1a1a">
+            <span style="color:${tagColor};font-weight:900;font-size:13px;min-width:58px">${tag}</span>
+            <span style="color:#fff;font-weight:700;font-size:13px;flex:1">${title}</span>
+            <span style="color:#aaa;font-size:12px">${side}${sellQty ? ` ×${sellQty}` : ""}${sellPrice ? ` @ ${sellPrice}¢` : ""}</span>
+            <span style="font-weight:900;font-size:14px;color:${profitCls};white-space:nowrap">${profitStr}</span>
+            <span style="color:#555;font-size:11px;white-space:nowrap">${fmtTime(close.ts, true)}</span>
           </div>`;
         }
 
-        // Mobile: First line = timestamp (left) + profit/loss (right), both always visible
-        // Second line = tag + profile + title with details
-        // Third line (SELL/SETTLEMENT only) = detailed P&L breakdown
-        return `<div class="summary-trade-row" style="border-left:3px solid ${color};background:#0c0c0e;border-radius:4px;font-size:13px">
-          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
-            <span data-part="timestamp" style="color:#777;min-width:max-content;font-variant-numeric:tabular-nums;font-size:12px">${fmtTime(x.ts, true)}</span>
-            <span data-part="result" style="font-size:12px;font-weight:700;white-space:nowrap">${result || "—"}</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-            <span data-part="tag" style="color:${color};font-weight:800;font-size:12px">${tag}</span>
-            ${x.profile ? `<span data-part="profile" style="color:#888;font-size:10px;padding:1px 4px;background:#1a1a1a;border-radius:2px;font-weight:600">${x.profile}</span>` : ""}
-            <span data-part="title" style="color:#fff;font-size:12px">${title}</span>
-            <span data-part="details" style="color:#888;font-size:11px">${side} ${cnt}${price ? ` @ ${price}` : ""}</span>
-          </div>
-          ${detailLine}
+        // BUY row
+        let buyRow = "";
+        if (buy) {
+          const spent = buy.spent != null ? `-$${Number(buy.spent).toFixed(2)}` : (buyQty && buyPrice ? `-$${(buyQty * buyPrice / 100).toFixed(2)}` : "");
+          buyRow = `<div style="display:flex;align-items:center;gap:10px;padding:7px 12px;background:#0a0a0c">
+            <span style="color:#4a9eff;font-weight:900;font-size:13px;min-width:58px">BUY</span>
+            <span style="color:#fff;font-size:12px;flex:1">${hasClose ? "" : esc(buy.title || buy.ticker || "")}</span>
+            <span style="color:#aaa;font-size:12px">${(buy.side||"").toUpperCase()}${buyQty ? ` ×${buyQty}` : ""}${buyPrice ? ` @ ${buyPrice}¢` : ""}</span>
+            <span style="color:#aaa;font-size:13px;white-space:nowrap">${spent}</span>
+            <span style="color:#555;font-size:11px;white-space:nowrap">${fmtTime(buy.ts, true)}</span>
+          </div>`;
+        }
+
+        // Standalone sell (no matching buy on this page)
+        if (!buy && hasClose) {
+          const tag = isSettled ? "SETTLED" : "SELL";
+          const tagColor = profit > 0 ? "var(--green)" : profit < 0 ? "var(--red)" : "#aaa";
+          return `<div style="border-left:3px solid ${borderColor};border-radius:4px;overflow:hidden;background:#0c0c0e">
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 12px">
+              <span style="color:${tagColor};font-weight:900;font-size:13px;min-width:58px">${tag}</span>
+              ${profile ? `<span style="color:#888;font-size:10px;padding:1px 4px;background:#1a1a1a;border-radius:2px;font-weight:600">${esc(profile)}</span>` : ""}
+              <span style="color:#fff;font-weight:700;font-size:13px;flex:1">${title}</span>
+              <span style="color:#aaa;font-size:12px">${side}${sellQty ? ` ×${sellQty}` : ""}${sellPrice ? ` @ ${sellPrice}¢` : ""}</span>
+              <span style="font-weight:900;font-size:14px;color:${profitCls};white-space:nowrap">${profitStr}</span>
+              <span style="color:#555;font-size:11px;white-space:nowrap">${fmtTime(close.ts, true)}</span>
+            </div>
+          </div>`;
+        }
+
+        return `<div style="border-left:3px solid ${borderColor};border-radius:4px;overflow:hidden;background:#0c0c0e;margin-bottom:0">
+          ${closeRow}
+          ${buyRow}
         </div>`;
-      }).join("");
+      }
+
+      const tradesHtml = grouped.map(g => _tradeRow(g.buy, g.close)).join("");
 
       tradesEl.innerHTML = tradesHtml +
         (pag.pages > 1 ? `<div style="font-size:11px;color:#888;margin-top:10px;margin-bottom:10px">Showing ${pag.start + 1}–${pag.end} of ${pag.total}</div>` : "") +

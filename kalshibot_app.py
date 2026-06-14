@@ -4830,15 +4830,17 @@ def api_summary():
         import traceback
         traceback.print_exc()
 
-    # Filter out stale BUY entries: if a BUY is 20+ minutes old and doesn't have a
-    # corresponding SETTLED entry, it's probably an expired market waiting for Kalshi's
-    # settlement API to catch up. Hide it so the Summary doesn't fill with zombie BUYs.
+    # Filter out zombie BUY entries: only hide buys that are 20-60 min old with no
+    # corresponding settlement — this is the "Kalshi API still catching up" window.
+    # Buys older than 60 min are always shown (settlement API has had time to sync).
     now_epoch = time.time()
-    settled_tickers = {(s.get("ticker"), s.get("kind")) for s in trades if s.get("kind") == "settlement"}
+    settled_tickers = {s.get("ticker") for s in trades if s.get("kind") == "settlement"}
+    sell_tickers = {s.get("ticker") for s in trades if s.get("kind") == "sell"}
     trades = [t for t in trades if not (
         t.get("kind") == "buy" and
-        (now_epoch - float(t.get("ts", 0))) > 20 * 60 and  # older than 20 min
-        (t.get("ticker"), "settlement") not in settled_tickers  # no corresponding settlement
+        20 * 60 < (now_epoch - float(t.get("ts", 0))) < 60 * 60 and  # 20-60 min window only
+        t.get("ticker") not in settled_tickers and
+        t.get("ticker") not in sell_tickers
     )]
     # Recount after filtering
     buys = sum(1 for t in trades if t.get("kind") == "buy")
