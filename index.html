@@ -4687,7 +4687,7 @@ function renderPositionsTable(positions) {
     return;
   }
 
-  const pageSize = 25;
+  const pageSize = 50;   // match the Summary page so Positions shows as much per page
   const pag = paginate(positions, pageSize, posPage);
   posPage = pag.page;
 
@@ -6630,11 +6630,12 @@ function switchTab(name) {
     if (window._posTabRefresh) clearInterval(window._posTabRefresh);
     if (window._posEnrich)     clearInterval(window._posEnrich);
     if (window._posSettle)     clearInterval(window._posSettle);
-    if (!document.hidden) {
-      window._posTabRefresh = setInterval(loadPositionsFast, 30000);       // keep list current (reduced from 8s)
-      window._posEnrich     = setInterval(enrichPositionMarkets, 60000);   // refresh prices (reduced from 15s)
-      window._posSettle     = setInterval(loadSettlements, 60000);         // refresh settlements
-    }
+    // Always create the intervals (don't gate on !document.hidden — that left the
+    // list stale forever if the tab was opened while backgrounded). Browsers throttle
+    // background timers but resume on focus, and the window 'focus' handler force-refreshes.
+    window._posTabRefresh = setInterval(loadPositionsFast, 15000);       // keep list current
+    window._posEnrich     = setInterval(enrichPositionMarkets, 60000);   // refresh prices
+    window._posSettle     = setInterval(loadSettlements, 60000);         // refresh settlements
   } else {
     if (window._posTabRefresh) { clearInterval(window._posTabRefresh); window._posTabRefresh = null; }
     if (window._posEnrich)     { clearInterval(window._posEnrich); window._posEnrich = null; }
