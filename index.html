@@ -6278,33 +6278,40 @@ async function loadSummary() {
     if (!trades.length) {
       tradesEl.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:10px 0">No activity in this window.</div>`;
     } else {
-      const pageSize = 100;
-      const pag = paginate(trades, pageSize, summaryPage);
-      summaryPage = pag.page; // Ensure page is within bounds
+      // GROUP FIRST across the full list, THEN paginate the pairs.
+      // This ensures a BUY and its SETTLED are always in the same card
+      // even if they are 15+ minutes apart in the sorted list.
+      const _allBuys   = trades.filter(x => x.kind === "buy");
+      const _allCloses = trades.filter(x => x.kind === "sell" || x.kind === "settlement");
+      const _cByTicker = {};
+      _allCloses.forEach(c => { (_cByTicker[c.ticker] = _cByTicker[c.ticker] || []).push(c); });
+      const _usedC = new Set();
+      const allGrouped = [];
 
-      // Strict 1:1 pairing: each buy gets at most one close (sell/settlement).
-      // Remaining unpaired closes shown standalone. Sort pairs newest-first.
-      const _buys   = pag.items.filter(x => x.kind === "buy");
-      const _closes = pag.items.filter(x => x.kind === "sell" || x.kind === "settlement");
-      const _closesByTicker = {};
-      _closes.forEach(c => { (_closesByTicker[c.ticker] = _closesByTicker[c.ticker] || []).push(c); });
-      const _usedCloses = new Set();
-      const grouped = [];
-
-      _buys.forEach(buy => {
-        const candidates = (_closesByTicker[buy.ticker] || []).filter(c => !_usedCloses.has(c));
+      // Pair each buy with the closest close for the same ticker (within 25 min for 15-min markets)
+      _allBuys.forEach(buy => {
+        const candidates = (_cByTicker[buy.ticker] || []).filter(c => !_usedC.has(c) && c.ts > buy.ts && (c.ts - buy.ts) < 25 * 60);
         const match = candidates.length
-          ? candidates.reduce((a, b) => Math.abs(a.ts - buy.ts) < Math.abs(b.ts - buy.ts) ? a : b)
+          ? candidates.reduce((a, b) => (a.ts - buy.ts) < (b.ts - buy.ts) ? a : b)
           : null;
-        if (match) _usedCloses.add(match);
-        grouped.push({ buy, close: match || null });
+        if (match) _usedC.add(match);
+        allGrouped.push({ buy, close: match || null });
       });
-      _closes.forEach(c => { if (!_usedCloses.has(c)) grouped.push({ buy: null, close: c }); });
-      grouped.sort((a, b) => {
-        const aTs = Math.max(a.close ? a.close.ts : 0, a.buy ? a.buy.ts : 0);
-        const bTs = Math.max(b.close ? b.close.ts : 0, b.buy ? b.buy.ts : 0);
+      // Unpaired closes (orphan settlements — no buy found in the window)
+      _allCloses.forEach(c => { if (!_usedC.has(c)) allGrouped.push({ buy: null, close: c }); });
+
+      // Sort: most recent event (close time if available, else buy time) at top
+      allGrouped.sort((a, b) => {
+        const aTs = a.close ? a.close.ts : (a.buy ? a.buy.ts : 0);
+        const bTs = b.close ? b.close.ts : (b.buy ? b.buy.ts : 0);
         return bTs - aTs;
       });
+
+      const pageSize = 50;
+      const pag = paginate(allGrouped, pageSize, summaryPage);
+      summaryPage = pag.page;
+
+      const grouped = pag.items;
 
       function _tradeRow(buy, close) {
         const hasClose  = !!close;
@@ -6345,7 +6352,7 @@ async function loadSummary() {
           const paidStr = paidDol != null && paidDol > 0 ? `<span style="color:#aaa;font-size:12px">paid $${paidDol.toFixed(2)}</span>` : "";
           buyRow = `<div style="display:flex;align-items:center;gap:8px;padding:7px 12px;background:#090909;flex-wrap:wrap">
             <span style="color:#4a9eff;font-weight:900;font-size:13px;min-width:56px">BUY</span>
-            <span style="color:#fff;font-size:12px;flex:1;min-width:80px">${hasClose ? "" : esc(buy.title || buy.ticker || "")}</span>
+            <span style="color:#fff;font-size:12px;flex:1;min-width:80px">${esc(buy.title || buy.ticker || "")}</span>
             <span style="color:#666;font-size:11px">${(buy.side||"").toUpperCase()}${buy.count ? ` ×${buy.count}` : ""}${buy.price ? ` @ ${buy.price}¢` : ""}</span>
             ${paidStr}
             <span style="color:#444;font-size:11px;white-space:nowrap">${fmtTime(buy.ts, true)}</span>
@@ -6357,7 +6364,7 @@ async function loadSummary() {
         </div>`;
       }
 
-      const tradesHtml = grouped.map(g => _tradeRow(g.buy, g.close)).join("");
+      const tradesHtml = grouped.map(g => _tradeRow(g.buy, g.close)).join('<div style="height:6px;background:transparent"></div>');
 
       tradesEl.innerHTML = tradesHtml +
         (pag.pages > 1 ? `<div style="font-size:11px;color:#888;margin-top:10px;margin-bottom:10px">Showing ${pag.start + 1}–${pag.end} of ${pag.total}</div>` : "") +
