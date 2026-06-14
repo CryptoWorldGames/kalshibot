@@ -6434,28 +6434,28 @@ async function loadSummary() {
           // Right-side reads as a sentence: "Sold NO ×1 @ 100¢ = received $1.00 = +$0.18 profit"
           const verb     = isSettled ? "Settled" : "Sold";
           const pnlStr   = profit == null ? "" : `<span style="font-weight:900;font-size:14px;color:${profitCls}">= ${profit >= 0 ? "+" : "-"}$${Math.abs(profit).toFixed(2)} ${profit >= 0 ? "profit" : "loss"}</span>`;
-          const recvStr  = recvDol != null && recvDol > 0 ? `<span style="color:#aaa;font-size:12px">= received $${recvDol.toFixed(2)}</span>` : "";
+          const recvStr  = recvDol != null && recvDol > 0 ? `<span style="color:#fff;font-size:12px">= received $${recvDol.toFixed(2)}</span>` : "";
           closeRow = `<div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:${tagBg};border-bottom:1px solid #252525;flex-wrap:wrap">
             <span style="color:${tagColor};font-weight:900;font-size:13px;min-width:62px">${tag}</span>
             ${profile ? `<span style="color:#888;font-size:10px;padding:1px 4px;background:#1a1a1a;border-radius:2px;font-weight:600">${esc(profile)}</span>` : ""}
             <span style="color:#fff;font-weight:700;font-size:13px;flex:1;min-width:80px">${title}</span>
-            <span style="color:#999;font-size:11px;font-weight:600">${verb} ${side}${close.count ? ` ×${close.count}` : ""}${close.price != null ? ` @ ${close.price}¢` : ""}</span>
+            <span style="color:#fff;font-size:11px;font-weight:600">${verb} ${side}${close.count ? ` ×${close.count}` : ""}${close.price != null ? ` @ ${close.price}¢` : ""}</span>
             ${recvStr}
             ${pnlStr}
-            <span style="color:#444;font-size:11px;white-space:nowrap">${fmtTime(close.ts, true)}</span>
+            <span style="color:#e8e8e8;font-size:11px;white-space:nowrap">${fmtTime(close.ts, true)}</span>
           </div>`;
         }
 
         // BUY row
         let buyRow = "";
         if (buy) {
-          const paidStr = paidDol != null && paidDol > 0 ? `<span style="color:#aaa;font-size:12px">= paid $${paidDol.toFixed(2)}</span>` : "";
+          const paidStr = paidDol != null && paidDol > 0 ? `<span style="color:#fff;font-size:12px">= paid $${paidDol.toFixed(2)}</span>` : "";
           buyRow = `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#08090c;flex-wrap:wrap">
             <span style="color:#4a9eff;font-weight:900;font-size:13px;min-width:62px">BUY</span>
-            <span style="color:#ccc;font-size:12px;flex:1;min-width:80px">${esc(buy.title || buy.ticker || "")}</span>
-            <span style="color:#777;font-size:11px;font-weight:600">Bought ${(buy.side||"").toUpperCase()}${buy.count ? ` ×${buy.count}` : ""}${buy.price != null ? ` @ ${buy.price}¢` : ""}</span>
+            <span style="color:#fff;font-size:12px;flex:1;min-width:80px">${esc(buy.title || buy.ticker || "")}</span>
+            <span style="color:#fff;font-size:11px;font-weight:600">Bought ${(buy.side||"").toUpperCase()}${buy.count ? ` ×${buy.count}` : ""}${buy.price != null ? ` @ ${buy.price}¢` : ""}</span>
             ${paidStr}
-            <span style="color:#444;font-size:11px;white-space:nowrap">${fmtTime(buy.ts, true)}</span>
+            <span style="color:#e8e8e8;font-size:11px;white-space:nowrap">${fmtTime(buy.ts, true)}</span>
           </div>`;
         }
 
