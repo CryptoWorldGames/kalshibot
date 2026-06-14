@@ -286,7 +286,9 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 .pos-title-wrapper{position:relative;display:inline-block}
 .pos-title-link{text-decoration:none}
 /* Desktop default style for the Update button */
-#updateBtn{background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:13px;font-weight:700;padding:6px 12px;margin-left:6px}
+#updateBtn{background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:13px;font-weight:700;padding:6px 12px;margin-left:6px;transition:all .2s}
+@keyframes updateGlow{0%,100%{box-shadow:0 0 0px 0px rgba(0,230,130,0);border-color:var(--border);color:var(--muted)}50%{box-shadow:0 0 16px 5px rgba(0,230,130,0.75);border-color:var(--green);color:var(--green)}}
+#updateBtn.has-update{animation:updateGlow 1.8s ease-in-out infinite;font-weight:800}
 @media(min-width:768px){
   .pos-title-link:hover::after{
     content:attr(data-tooltip);
@@ -335,6 +337,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   /* Push the action buttons hard-right and lock them visible — never clipped. */
   #snoozeBtn{display:none !important}  /* available in ⚙️ Settings; frees space on mobile */
   #updateBtn{display:inline-block !important;visibility:visible !important;opacity:1 !important;margin-left:auto !important;padding:8px 12px !important;font-size:13px !important;flex:0 0 auto;color:#0a0a0a !important;background:var(--green) !important;border:1px solid var(--green) !important;font-weight:800 !important}
+  #updateBtn.has-update{background:transparent !important;color:var(--green) !important;animation:updateGlow 1.8s ease-in-out infinite !important}
   /* Totals as a fixed strip under the nav. It SWIPES horizontally so you get
      EVERYTHING (Cash, Portfolio, Total, and every P&L column) with zero overlap —
      the first 3 (Cash/Portfolio/Total) are visible, swipe left for the P&L. */
@@ -2077,12 +2080,16 @@ function _showUpdateBanner(latest, current) {
   if (!banner) return;
   if (txt) txt.textContent = `v${latest} is available (you have v${current})`;
   banner.style.display = "flex";
+  const btn = document.getElementById("updateBtn");
+  if (btn) { btn.classList.add("has-update"); btn.textContent = "🆕 New Update!"; }
 }
 
 function dismissUpdateBanner() {
   _updateBannerDismissed = true;
   const b = document.getElementById("updateBanner");
   if (b) b.style.display = "none";
+  const btn = document.getElementById("updateBtn");
+  if (btn) { btn.classList.remove("has-update"); btn.textContent = "⟳ Update"; }
 }
 
 async function applyUpdate() {
