@@ -743,6 +743,7 @@ def _settle_counts(s: dict):
     return yes_cnt, no_cnt, yc, nc
 
 
+def _recent_fills(hours: int = 24 * 30) -> list:
     """Fetch all fills in the window, paginated (200/page, capped at 25 pages)."""
     out = []
     min_ts = int(time.time() - hours * 3600)
