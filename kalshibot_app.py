@@ -3933,10 +3933,10 @@ def scan():
             crypto_times = set(t.strip() for t in crypto_times_raw.split(",") if t.strip())
         hide_multi = request.args.get("hide_multi", "false").lower() == "true"
 
-        # Cap minutes to prevent timedelta overflow (max ~1 year = 525600 min)
-        max_minutes = 525600
-        if minutes > max_minutes:
-            minutes = max_minutes
+        # Clamp minutes: lower bound 0.25 (mirrors the bot's _posfloat) so a 0 or
+        # negative value can't make cutoff land in the past and silently return
+        # nothing; upper bound 525600 (~1yr) to prevent timedelta overflow.
+        minutes = max(0.25, min(minutes, 525600))
 
         # Convert "show" logic to "exclude" logic for the filter function
         no_crypto    = not show_crypto
