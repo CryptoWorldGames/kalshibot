@@ -2377,11 +2377,9 @@ async function loadBalance(enrich=true) {
           const cur    = side === "yes" ? p.current_yes : p.current_no;
           const qty    = Math.abs(p.quantity ?? 0);
           const profit = cur != null ? qty * (cur - p.buy_price) / 100 : null;
-          if (profit != null) {
-            const totalReceived = cur != null ? qty * cur / 100 : null;
-            setTimeout(() => announceSell(qty, profit, cur, totalReceived, p.category, p.ticker), announceDelay);
-            announceDelay += 4000;  // 4 seconds between announcements to prevent overlapping voices
-          }
+          const totalReceived = cur != null ? qty * cur / 100 : null;
+          setTimeout(() => announceSell(qty, profit, cur, totalReceived, p.category, p.ticker), announceDelay);
+          announceDelay += 4000;  // 4 seconds between announcements to prevent overlapping voices
           // Determine if this was a bot auto-sell or market resolution
           const wasResolution = cur != null && (cur <= 1 || cur >= 99);
           showSellPopup(p.title || p.ticker, profit, wasResolution ? "resolved" : "sold");
@@ -5164,7 +5162,11 @@ function playSadTrumpet() {
 
 function announceSell(count, profit, sellPriceCents, totalReceived, category, ticker) {
   // Smart announcement: show price and profit per contract (more detailed)
-  const profitPerContract = profit / count;
+  if (profit == null && sellPriceCents == null) {
+    speakText(`you sold ${contractPhrase(count, null)}${ticker ? " of " + cryptoName(ticker) : ""}`);
+    return;
+  }
+  const profitPerContract = (profit != null && count) ? profit / count : null;
   let detail = `you sold ${contractPhrase(count, null)}`;
   if (ticker) detail += ` of ${cryptoName(ticker)}`;
 
