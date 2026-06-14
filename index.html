@@ -237,7 +237,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 .tab-btn.active{border-bottom-color:var(--green);color:#fff}
 /* Little LED on a bot tab: lit orange when that tab's bot is the ACTIVE one,
    dark when not — visible from any tab so you can see which bot is running. */
-.tabLed{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle;background:#3a3a3a;box-shadow:none;transition:all .2s}
+.tabLed{display:none;/* hidden 2026-06-14 per request — was inline-block; restore that to bring the Scanner/Lotto tab LEDs back. All toggle JS (.on) left intact. */width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle;background:#3a3a3a;box-shadow:none;transition:all .2s}
 .tabLed.on{background:#ff9416;box-shadow:0 0 6px 1px #ff9416cc}
 /* Per-bot ON/OFF switch + its header box (identical on the Scanner & Lotto tabs). */
 .botHeader{display:flex;align-items:center;gap:12px;border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin:10px 0 14px;background:#0d0d0f}
