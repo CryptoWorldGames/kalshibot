@@ -7237,9 +7237,9 @@ async function setActiveProfile(p) {
   if (isSmartStrategyManaging()) {
     alert(
       "🔒 Bot selection is managed by Smart Strategy.\n\n" +
-      "To turn this bot on or off yourself, first switch OFF Smart Strategy AND every " +
-      "per-token crypto card (BTC, ETH, SOL, HYPE, DOGE, BNB, XRP).\n\n" +
-      "While Smart Strategy or any token card is on, it decides which bots run each cycle, " +
+      "To turn this bot on or off yourself, first switch OFF every per-token crypto " +
+      "card (BTC, ETH, SOL, HYPE, DOGE, BNB, XRP) in the Smart Strategy panel.\n\n" +
+      "While any token card is on, Smart Strategy decides which bots run each cycle, " +
       "so a manual change here would just be overridden."
     );
     loadActiveProfile();   // revert any optimistic UI
