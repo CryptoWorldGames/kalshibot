@@ -2927,6 +2927,18 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
+// Window-focus refresh: switching between APPLICATIONS (e.g. browser ↔ terminal)
+// does NOT fire visibilitychange — only tab switches do. While the window is in
+// the background the OS can throttle the per-tab interval, so data goes stale.
+// Forcing an immediate refresh on focus guarantees you see the latest settled
+// rows the moment you click back to the browser.
+window.addEventListener("focus", () => {
+  const activeBtn = document.querySelector(".tab-btn.active");
+  const tab = activeBtn?.getAttribute("onclick")?.match(/'(\w+)'/)?.[1];
+  if (tab === "summary") loadSummary();
+  else if (tab === "positions") loadPositionsFast();
+});
+
 
 // ── Filter pills ──────────────────────────────────────────────────────────
 
@@ -6386,13 +6398,15 @@ async function loadSummary() {
           const tag      = isSettled ? "SETTLED" : "SELL";
           const tagColor = profit > 0 ? "var(--green)" : profit < 0 ? "var(--red)" : "#aaa";
           const tagBg    = profit > 0 ? "#0d2b14" : profit < 0 ? "#2b0d0d" : "#111";
-          const pnlStr   = profit == null ? "" : `<span style="font-weight:900;font-size:15px;color:${profitCls}">${profit >= 0 ? "+" : ""}$${Math.abs(profit).toFixed(2)}</span>`;
-          const recvStr  = recvDol != null && recvDol > 0 ? `<span style="color:#aaa;font-size:12px">rcvd $${recvDol.toFixed(2)}</span>` : "";
+          // Right-side reads as a sentence: "Sold NO ×1 @ 100¢ = received $1.00 = +$0.18 profit"
+          const verb     = isSettled ? "Settled" : "Sold";
+          const pnlStr   = profit == null ? "" : `<span style="font-weight:900;font-size:14px;color:${profitCls}">= ${profit >= 0 ? "+" : "-"}$${Math.abs(profit).toFixed(2)} ${profit >= 0 ? "profit" : "loss"}</span>`;
+          const recvStr  = recvDol != null && recvDol > 0 ? `<span style="color:#aaa;font-size:12px">= received $${recvDol.toFixed(2)}</span>` : "";
           closeRow = `<div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:${tagBg};border-bottom:1px solid #252525;flex-wrap:wrap">
             <span style="color:${tagColor};font-weight:900;font-size:13px;min-width:62px">${tag}</span>
             ${profile ? `<span style="color:#888;font-size:10px;padding:1px 4px;background:#1a1a1a;border-radius:2px;font-weight:600">${esc(profile)}</span>` : ""}
             <span style="color:#fff;font-weight:700;font-size:13px;flex:1;min-width:80px">${title}</span>
-            <span style="color:#666;font-size:11px">${side}${close.count ? ` ×${close.count}` : ""}${close.price ? ` @ ${close.price}¢` : ""}</span>
+            <span style="color:#999;font-size:11px;font-weight:600">${verb} ${side}${close.count ? ` ×${close.count}` : ""}${close.price != null ? ` @ ${close.price}¢` : ""}</span>
             ${recvStr}
             ${pnlStr}
             <span style="color:#444;font-size:11px;white-space:nowrap">${fmtTime(close.ts, true)}</span>
@@ -6402,11 +6416,11 @@ async function loadSummary() {
         // BUY row
         let buyRow = "";
         if (buy) {
-          const paidStr = paidDol != null && paidDol > 0 ? `<span style="color:#aaa;font-size:12px">paid $${paidDol.toFixed(2)}</span>` : "";
+          const paidStr = paidDol != null && paidDol > 0 ? `<span style="color:#aaa;font-size:12px">= paid $${paidDol.toFixed(2)}</span>` : "";
           buyRow = `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#08090c;flex-wrap:wrap">
             <span style="color:#4a9eff;font-weight:900;font-size:13px;min-width:62px">BUY</span>
             <span style="color:#ccc;font-size:12px;flex:1;min-width:80px">${esc(buy.title || buy.ticker || "")}</span>
-            <span style="color:#555;font-size:11px">${(buy.side||"").toUpperCase()}${buy.count ? ` ×${buy.count}` : ""}${buy.price ? ` @ ${buy.price}¢` : ""}</span>
+            <span style="color:#777;font-size:11px;font-weight:600">Bought ${(buy.side||"").toUpperCase()}${buy.count ? ` ×${buy.count}` : ""}${buy.price != null ? ` @ ${buy.price}¢` : ""}</span>
             ${paidStr}
             <span style="color:#444;font-size:11px;white-space:nowrap">${fmtTime(buy.ts, true)}</span>
           </div>`;
@@ -6417,8 +6431,10 @@ async function loadSummary() {
         </div>`;
       }
 
-      // Pairs separated by a visible divider line; within each pair rows are separated by border-bottom
-      const tradesHtml = grouped.map(g => _tradeRow(g.buy, g.close)).join('<div style="height:1px;background:#1e1e2a;margin:5px 0"></div>');
+      // BETWEEN pairs (different contracts) / between buy-only rows: bright white divider.
+      // WITHIN a pair (buy↔settled, same contract): the dim #252525 border-bottom in the
+      // close row keeps them reading as one unit.
+      const tradesHtml = grouped.map(g => _tradeRow(g.buy, g.close)).join('<div style="height:2px;background:rgba(255,255,255,0.55);margin:7px 0;border-radius:1px"></div>');
 
       tradesEl.innerHTML = tradesHtml +
         (pag.pages > 1 ? `<div style="font-size:11px;color:#888;margin-top:10px;margin-bottom:10px">Showing ${pag.start + 1}–${pag.end} of ${pag.total}</div>` : "") +
@@ -6503,7 +6519,11 @@ function switchTab(name) {
     loadSummary();
     startSummaryClock();
     if (window._summaryRefresh) clearInterval(window._summaryRefresh);
-    if (!document.hidden) window._summaryRefresh = setInterval(loadSummary, 15000);
+    // Always create the interval (even if currently hidden). Browsers throttle
+    // background timers but resume full speed on focus — gating creation on
+    // !document.hidden meant the refresh never started if you switched here while
+    // the tab was backgrounded, so settled rows never auto-appeared.
+    window._summaryRefresh = setInterval(loadSummary, 15000);
   } else {
     if (window._summaryRefresh) { clearInterval(window._summaryRefresh); window._summaryRefresh = null; }
     stopSummaryClock();
