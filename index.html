@@ -6462,7 +6462,7 @@ const SUMMARY_RANGES = [
   {label:"2d", mins:2880}, {label:"3d", mins:4320},
   {label:"7d", mins:10080}, {label:"14d", mins:20160}, {label:"30d", mins:43200},
 ];
-let _summaryMins = parseInt(localStorage.getItem("summaryMins") || "15");
+let _summaryMins = parseInt(localStorage.getItem("summaryMins") || "240");
 
 function renderSummaryRanges() {
   const el = document.getElementById("summaryRanges");
