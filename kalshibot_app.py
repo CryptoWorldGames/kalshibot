@@ -2453,6 +2453,99 @@ def _load_game_spreads():
 
 _load_game_spreads()
 
+# ── First-run seeder: smart start instead of ~4h cold start ─────────────────
+# A brand-new install has no spread history, so without this it would use a
+# cautious fallback for ~4h before the data-driven threshold kicks in. Instead we
+# reconstruct the last day of per-game spreads from PUBLIC market history so the
+# threshold is meaningful from minute one. We rebuild the SAME metric the live bot
+# records — distance from the underlying's close price to the nearest strike of
+# that game — using Coinbase 15-min closes + Kalshi settled strikes. It uses only
+# public market data (never personal trades) and is fully best-effort: any failure
+# just leaves the normal cold-start fallback in place. Runs once, in the
+# background, only when there's no history yet.
+_COINBASE_CANDLE = {  # tokens with a Coinbase USD candle feed (others skip → fallback)
+    "BTC": "BTC-USD", "ETH": "ETH-USD", "SOL": "SOL-USD",
+    "XRP": "XRP-USD", "DOGE": "DOGE-USD",
+}
+
+def _coinbase_closes_by_bucket(symbol):
+    """{game_bucket: close_price} for the last ~24h of 15-min candles, or {}."""
+    prod = _COINBASE_CANDLE.get(symbol)
+    if not prod:
+        return {}
+    try:
+        r = req.get(f"https://api.exchange.coinbase.com/products/{prod}/candles",
+                    params={"granularity": _GAME_SECS}, timeout=8)
+        if not r.ok:
+            return {}
+        out = {}
+        for row in r.json():
+            # Coinbase candle = [start_ts, low, high, open, close, volume].
+            # The close at start_ts+900 is the price at the game's CLOSE, so it
+            # buckets to the same game the live bot would have recorded.
+            start_ts = int(row[0]); close_px = float(row[4])
+            close_ts = start_ts + _GAME_SECS
+            out[int(close_ts // _GAME_SECS)] = close_px
+        return out
+    except Exception:
+        return {}
+
+def _settled_strikes_by_bucket(series_prefix):
+    """{game_bucket: [strike, ...]} from recently-settled Kalshi markets, or {}."""
+    since = int(time.time() - 24 * 3600)
+    out = {}
+    try:
+        d = kalshi_get("/markets", {"series_ticker": series_prefix,
+                                    "status": "settled",
+                                    "min_close_ts": since,
+                                    "limit": 1000})
+        for m in (d or {}).get("markets", []):
+            strike = _strike_from_market(m)
+            ct_str = m.get("close_time") or m.get("expiration_time") or ""
+            if not (strike and ct_str):
+                continue
+            try:
+                close_ts = datetime.fromisoformat(ct_str.replace("Z", "+00:00")).timestamp()
+            except Exception:
+                continue
+            out.setdefault(int(close_ts // _GAME_SECS), []).append(strike)
+    except Exception:
+        pass
+    return out
+
+def _seed_game_spreads_from_history():
+    """Reconstruct recent per-game spreads from public market history (first run)."""
+    seeded = 0
+    for symbol, prefix in _SMART_TOKENS.items():
+        try:
+            closes = _coinbase_closes_by_bucket(symbol)
+            if not closes:
+                continue
+            strikes = _settled_strikes_by_bucket(prefix)
+            if not strikes:
+                continue
+            dst = _token_game_spreads.setdefault(symbol, {})
+            for b in sorted(set(closes) & set(strikes))[-_MAX_GAMES:]:
+                spot = closes[b]
+                # Nearest strike = the truest "how close to flipping" cushion.
+                dst[b] = _round_spread(min(abs(spot - k) for k in strikes[b]))
+                seeded += 1
+        except Exception as e:
+            print(f"[backtest] seed {symbol} failed: {e}")
+    if seeded:
+        _save_game_spreads(force=True)
+        print(f"[backtest] first-run seed: filled {seeded} games from market history")
+    else:
+        print("[backtest] first-run seed: no public history available, using cold-start fallback")
+
+def _maybe_seed_game_spreads():
+    """Run the seeder once, in the background, only when we have no history yet."""
+    if any(_token_game_spreads.get(s) for s in _SMART_TOKENS):
+        return
+    threading.Thread(target=_seed_game_spreads_from_history, daemon=True).start()
+
+_maybe_seed_game_spreads()
+
 def _calculate_safe_spread(symbol: str, current_spread: float, exclude_bucket=None) -> float:
     """AI-recommended safe spread = 75th percentile of recent closing spreads.
 
