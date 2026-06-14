@@ -688,6 +688,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
   <button class="tab-btn" id="tabCoach" onclick="switchTab('coach')">Coach</button>
   <button class="tab-btn" id="tabApiLog" onclick="switchTab('apilog')">API Log</button>
   <button class="tab-btn" id="tabPolling" onclick="switchTab('polling')">Polling</button>
+  <button class="tab-btn" id="tabArb" onclick="switchTab('arb')">🔒 Arbitrage</button>
 </div>
 
 <!-- ── Smart Strategy Status (Live Per-Token Spreads) ──────────────────────────── -->
@@ -1600,6 +1601,25 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     </div>
   </div>
 </div><!-- /tab-polling -->
+
+<!-- ── Arbitrage / Lock-In (collateral-return netting) — PLACEHOLDER, not built yet ── -->
+<div id="tab-arb" class="tab-pane">
+  <div class="card">
+    <div class="card-title">🔒 Arbitrage / Lock-In <span style="font-size:11px;color:#e0a44a;font-weight:700">(under construction)</span></div>
+    <div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:14px">
+      Idea: buy both sides of a market for a combined cost under $1.00 (e.g. YES 40¢ + NO 40¢) to
+      lock in guaranteed profit via Kalshi's collateral-return netting — legging in over time as the
+      price flips. Off by default; this only saves the toggle for now.
+    </div>
+    <label class="check-row" style="font-size:14px;gap:10px">
+      <input type="checkbox" id="arbEnabled" onchange="toggleArb(this.checked)">
+      Enable Arbitrage mode
+    </label>
+    <div id="arbNotice" style="display:none;margin-top:14px;padding:14px;border:1px solid #e0a44a;border-radius:8px;background:#2a1f0a;color:#e0a44a;font-weight:700">
+      🚧 Under construction — this feature isn't built yet. Your toggle is saved; it'll start working once we wire it up.
+    </div>
+  </div>
+</div><!-- /tab-arb -->
 
 <!-- ── Debug tab — real-time status + background report generator ── -->
 <div id="tab-debug" class="tab-pane">
@@ -6014,6 +6034,14 @@ function stopSummaryClock() {
   if (window._summaryClock) { clearInterval(window._summaryClock); window._summaryClock = null; }
 }
 
+// Arbitrage tab — placeholder toggle. Saves state + shows the under-construction
+// notice; no trading logic yet (built later).
+function toggleArb(on) {
+  try { localStorage.setItem("kb_arb_enabled", on ? "1" : "0"); } catch(e) {}
+  const n = document.getElementById("arbNotice");
+  if (n) n.style.display = on ? "block" : "none";
+}
+
 function switchTab(name) {
   window.scrollTo(0, 0); // Jump to top when switching tabs
   document.querySelectorAll(".tab-btn").forEach(b => {
@@ -6024,6 +6052,13 @@ function switchTab(name) {
     p.classList.toggle("active", p.id === "tab-" + name);
   });
   localStorage.setItem("activeTab", name);
+  if (name === "arb") {
+    const cb = document.getElementById("arbEnabled");
+    let on = false; try { on = localStorage.getItem("kb_arb_enabled") === "1"; } catch(e) {}
+    if (cb) cb.checked = on;
+    const n = document.getElementById("arbNotice");
+    if (n) n.style.display = on ? "block" : "none";
+  }
   if (name === "debug") {
     loadStats();
     if (window._statsRefresh) clearInterval(window._statsRefresh);
