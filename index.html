@@ -6844,6 +6844,50 @@ function learnHelperHtml(symbol) {
   return `<span style="color:${color}">your win-rate ${pct}% (${n} trade${n === 1 ? "" : "s"}) · ${tilt}</span>`;
 }
 
+// Price formatter — magnitude-aware so BTC shows $64,626.03 and DOGE $0.40826.
+function fmtPrice(v) {
+  v = Number(v);
+  if (!isFinite(v)) return "—";
+  const a = Math.abs(v);
+  const dp = a >= 100 ? 2 : a >= 1 ? 3 : 5;
+  return "$" + v.toLocaleString(undefined, {minimumFractionDigits: dp, maximumFractionDigits: dp});
+}
+
+// "To Beat" (strike) + "Now" (live spot) with the signed $/% gap — mirrors Kalshi.
+function toBeatHtml(t) {
+  const spot = Number(t.spot) || 0;
+  const strike = Number(t.nearest_strike);
+  if (!spot || !isFinite(strike) || !strike) return "";
+  const diff = spot - strike;
+  const pct  = strike ? (diff / strike * 100) : 0;
+  const up   = diff >= 0;
+  const col  = up ? "var(--green)" : "var(--red)";
+  const sign = up ? "+" : "−";
+  const a    = Math.abs(diff);
+  const adp  = Math.abs(a) >= 100 ? 2 : Math.abs(a) >= 1 ? 2 : 4;
+  const dStr = `${sign}$${a.toLocaleString(undefined, {minimumFractionDigits: adp, maximumFractionDigits: adp})}`;
+  const pStr = `${sign}${Math.abs(pct).toFixed(Math.abs(pct) < 1 ? 3 : 2)}%`;
+  return `<div>To Beat: <b style="color:#ddd">${fmtPrice(strike)}</b></div>`
+       + `<div>Now: <b style="color:#ddd">${fmtPrice(spot)}</b> `
+       + `<span style="color:${col};font-weight:700">${dStr} · ${pStr}</span></div>`;
+}
+
+// Live route badge: what Auto is routing this token to RIGHT NOW (or the pin).
+function routeBadgeHtml(symbol) {
+  const cfg = _perTokenSettings[symbol] || {};
+  let route;
+  if (cfg.mode === "scanner") route = "SCANNER";
+  else if (cfg.mode === "lotto") route = "LOTTO";
+  else {
+    const spread = _tokenSpreads[symbol];
+    const line = cfg.ai_choice ? (_aiRecommendations[symbol] != null ? _aiRecommendations[symbol] : cfg.threshold) : cfg.threshold;
+    if (spread == null || !spread || line == null) return "";
+    route = (spread >= line) ? "SCANNER" : "LOTTO";
+  }
+  const col = route === "SCANNER" ? "var(--green)" : "#e0a44a";
+  return `<span style="color:${col};font-weight:700">→ now: ${route}</span>`;
+}
+
 // Badge shows the SAFE-SPREAD CUTOFF (labeled), not an opaque "AI" number: at or
 // above it = Scanner (safe); below it = Lotto (flip risk).
 function smartStrategyRec(symbol) {
@@ -6864,6 +6908,8 @@ function updateTokenRecBadge(symbol) {
 function applyTokenLiveData(tokens) {
   tokens.forEach(t => {
     _tokenSpreads[t.symbol] = t.spread || 0;
+    const tbEl = document.getElementById(`ss_${t.symbol}_tobeat`);
+    if (tbEl) tbEl.innerHTML = toBeatHtml(t);
     const spreadEl = document.getElementById(`ss_${t.symbol}_spread`);
     if (spreadEl) {
       if (t.spread) {
@@ -6963,6 +7009,7 @@ function renderSmartStrategyTokenCards(tokens) {
       </div>
 
       <div style="font-size:11px;color:#aaa">
+        <div id="ss_${symbol}_tobeat" style="margin-bottom:4px">${toBeatHtml(t)}</div>
         <div>Current Spread: <span id="ss_${symbol}_spread" style="color:var(--green);font-weight:700">${spreadDisplay}</span></div>
         <div id="ss_${symbol}_avgline" style="font-size:10px;color:#8a8;margin-top:3px">${avgSpreadHelperText(symbol)}</div>
         <div id="ss_${symbol}_volline" style="font-size:10px;margin-top:2px"
@@ -6993,7 +7040,7 @@ function renderSmartStrategyTokenCards(tokens) {
       </div>
 
       <div style="border-top:1px solid #2a4a2a;padding-top:10px">
-        <div style="font-size:11px;color:#888;margin-bottom:6px">Strategy routing:</div>
+        <div style="font-size:11px;color:#888;margin-bottom:6px">Strategy routing: <span id="ss_${symbol}_route">${routeBadgeHtml(symbol)}</span></div>
         <div style="display:flex;gap:6px">
           <label style="flex:1;display:flex;align-items:center;gap:6px;font-size:11px" title="Spread ≥ safe → Scanner, below → Lotto. Recommended.">
             <input type="radio" name="ss_${symbol}_mode" value="both" ${cfg.mode === "both" ? "checked" : ""}
@@ -7092,6 +7139,8 @@ function refreshTokenDynamicFields(symbol) {
   if (volLine) volLine.innerHTML = volHelperHtml(symbol);
   const learnLine = document.getElementById(`ss_${symbol}_learnline`);
   if (learnLine) learnLine.innerHTML = learnHelperHtml(symbol);
+  const routeEl = document.getElementById(`ss_${symbol}_route`);
+  if (routeEl) routeEl.innerHTML = routeBadgeHtml(symbol);
 }
 
 async function updatePerTokenSetting(symbol, field, value) {

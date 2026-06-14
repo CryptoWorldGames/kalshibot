@@ -2261,7 +2261,7 @@ def _fetch_one_token_spread(symbol, series_prefix):
             return {"symbol": symbol, "spread": 0, "spot": 0, "volume": 0, "message": "No open markets"}
         cushions = []
         total_vol = 0
-        nearest = None  # (secs_to_close, close_ts, spread) for the soonest-closing game
+        nearest = None  # (secs_to_close, close_ts, spread, strike) for soonest game
         now_ts = time.time()
         for m in markets:
             strike = _strike_from_market(m)
@@ -2276,19 +2276,20 @@ def _fetch_one_token_spread(symbol, series_prefix):
                     close_ts = datetime.fromisoformat(ct_str.replace("Z", "+00:00")).timestamp()
                     secs = close_ts - now_ts
                     if secs > 0 and (nearest is None or secs < nearest[0]):
-                        nearest = (secs, close_ts, cush)
+                        nearest = (secs, close_ts, cush, strike)
                 except Exception:
                     pass
         if not spot:
             return {"symbol": symbol, "spread": 0, "spot": 0, "volume": total_vol, "message": "No spot price"}
         if not cushions:
-            return {"symbol": symbol, "spread": 0, "spot": round(spot, 2), "volume": total_vol, "message": "No strike data"}
+            return {"symbol": symbol, "spread": 0, "spot": round(spot, 6), "volume": total_vol, "message": "No strike data"}
         out = {"symbol": symbol, "spread": round(sum(cushions) / len(cushions), 2),
-               "spot": round(spot, 2), "volume": total_vol, "ticker": markets[0].get("ticker", "")}
+               "spot": round(spot, 6), "volume": total_vol, "ticker": markets[0].get("ticker", "")}
         if nearest:
             out["nearest_secs"] = round(nearest[0])
             out["nearest_close_ts"] = nearest[1]
             out["nearest_spread"] = round(nearest[2], 4)
+            out["nearest_strike"] = round(nearest[3], 6)  # the "To Beat" price
         return out
     except Exception as e:
         return {"symbol": symbol, "spread": 0, "spot": 0, "volume": 0, "message": f"error: {e}"}
