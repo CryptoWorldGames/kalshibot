@@ -4501,6 +4501,49 @@ def get_recent_buys():
     return jsonify({"buys": buys})
 
 
+@app.route("/api/api-key-status")
+def api_api_key_status():
+    """Return a masked version of the current API key ID so the UI can confirm credentials are loaded."""
+    try:
+        key_file = _find_cred_file(_API_KEY_NAMES)
+        if key_file and key_file.exists():
+            raw = key_file.read_text(encoding="utf-8").strip()
+            # Mask middle — show first 8 and last 4 chars
+            masked = raw[:8] + "…" + raw[-4:] if len(raw) > 12 else raw[:4] + "…"
+            return jsonify({"ok": True, "key_id": masked})
+        return jsonify({"ok": True, "key_id": None})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+
+@app.route("/api/update-api-key", methods=["POST"])
+def api_update_api_key():
+    """Write new API key ID and private key PEM to disk, then hot-reload credentials."""
+    global API_KEY, PRIVATE_KEY
+    data = request.get_json(silent=True) or {}
+    key_id  = (data.get("key_id") or "").strip()
+    priv_pem = (data.get("private_key") or "").strip()
+
+    if not key_id or not priv_pem:
+        return jsonify({"ok": False, "error": "Both key_id and private_key are required"})
+    if "BEGIN" not in priv_pem:
+        return jsonify({"ok": False, "error": "private_key must be PEM format (-----BEGIN…-----)"})
+
+    CREDS_DIR.mkdir(parents=True, exist_ok=True)
+    key_path  = CREDS_DIR / _API_KEY_NAMES[0]
+    priv_path = CREDS_DIR / _PRIV_KEY_NAMES[0]
+
+    try:
+        key_path.write_text(key_id, encoding="utf-8")
+        priv_path.write_bytes(priv_pem.encode())
+        # Hot-reload
+        API_KEY, PRIVATE_KEY, _, _ = _load_creds()
+        _log("[api-key] credentials updated and reloaded via web UI")
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+
 REGISTRATIONS_FILE = HERE / "registrations.jsonl"
 REGISTRATION_WEBHOOK = os.getenv("KALSHIBOT_REG_WEBHOOK", "")  # optional: set to receive signups
 
