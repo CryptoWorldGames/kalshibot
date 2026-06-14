@@ -4501,6 +4501,54 @@ def get_recent_buys():
     return jsonify({"buys": buys})
 
 
+REGISTRATIONS_FILE = HERE / "registrations.jsonl"
+REGISTRATION_WEBHOOK = os.getenv("KALSHIBOT_REG_WEBHOOK", "")  # optional: set to receive signups
+
+@app.route("/api/register-user", methods=["POST"])
+def api_register_user():
+    """Store optional user registration data locally and forward to dev webhook."""
+    data = request.get_json(silent=True) or {}
+    entry = {
+        "ts": time.time(),
+        "date": datetime.now(timezone.utc).isoformat(),
+        "nickname": str(data.get("nickname", ""))[:64],
+        "email": str(data.get("email", ""))[:128],
+        "state": str(data.get("state", ""))[:64],
+        "country": str(data.get("country", ""))[:64],
+        "version": BOT_VERSION,
+    }
+    try:
+        with open(REGISTRATIONS_FILE, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception as e:
+        _log(f"[register] local write failed: {e}")
+
+    if REGISTRATION_WEBHOOK:
+        try:
+            req.post(REGISTRATION_WEBHOOK, json=entry, timeout=5)
+        except Exception:
+            pass
+
+    return jsonify({"ok": True})
+
+
+@app.route("/api/check-update")
+def api_check_update():
+    """Hit GitHub releases API and compare to current version."""
+    try:
+        r = req.get(
+            "https://api.github.com/repos/CryptoWorldGames/kalshibot/releases/latest",
+            timeout=8, headers={"User-Agent": "KalshiBot"}
+        )
+        r.raise_for_status()
+        d = r.json()
+        latest = d.get("tag_name", "").lstrip("v")
+        return jsonify({"ok": True, "latest": latest, "current": BOT_VERSION,
+                        "update_available": latest > BOT_VERSION})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e), "current": BOT_VERSION})
+
+
 @app.route("/api/version")
 def api_version():
     """Bot name + version + uptime, for the web UI header so you always know which

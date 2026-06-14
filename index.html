@@ -51,6 +51,17 @@
 body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:20px;padding-top:64px}
 
 /* ── Settings Modal ── */
+/* ── Setup Wizard ── */
+.wcard{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.wdot{width:32px;height:32px;border-radius:50%;background:#1e1e1e;border:2px solid #333;color:#555;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;transition:all .3s;flex-shrink:0}
+.wdot.active{background:var(--green);border-color:var(--green);color:#000}
+.wdot.done{background:#1e3a1e;border-color:var(--green);color:var(--green)}
+.wline{height:2px;flex:1;background:#222;transition:background .3s}
+.wline.done{background:var(--green)}
+.wstep-block{display:flex;gap:12px;margin-bottom:14px;align-items:flex-start}
+.wstep-num{width:28px;height:28px;border-radius:50%;background:var(--green);color:#000;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.wstep-title{font-size:13px;font-weight:700;color:#fff;margin-bottom:4px}
+.wstep-body{font-size:12px;color:#aaa;line-height:1.6}
 #settingsModal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center}
 #settingsModal.open{display:flex}
 .settings-dialog{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;width:90%;max-width:450px;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)}
@@ -503,71 +514,205 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 <body>
 
 <!-- ── SPLASH PAGE (First Load) ──────────────────────────────────── -->
-<div id="splashPage" style="position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:2000;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:32px;padding:40px 20px;text-align:center">
-  <div>
-    <div style="font-size:72px;font-weight:900;letter-spacing:-2px;margin-bottom:16px">
-      <span style="color:#fff">Kalshi</span><span style="color:var(--green)">Bot</span>
+<!-- ── SETUP WIZARD (first-time only, multi-step) ──────────────────────── -->
+<div id="setupWizard" style="position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto">
+  <div style="width:100%;max-width:560px;margin:auto">
+
+    <!-- Step indicators -->
+    <div style="display:flex;align-items:center;justify-content:center;gap:0;margin-bottom:28px" id="wizardStepDots">
+      <div class="wdot active" id="wdot1">1</div><div class="wline"></div>
+      <div class="wdot" id="wdot2">2</div><div class="wline"></div>
+      <div class="wdot" id="wdot3">3</div><div class="wline"></div>
+      <div class="wdot" id="wdot4">4</div>
     </div>
-    <div style="font-size:14px;color:#aaa;max-width:400px;line-height:1.6;margin-bottom:20px">
-      This is a trading bot that you can use on <b>Kalshi.com</b> to buy and sell for you <b>24/7</b>.
-      <br/><br/>
-      <span style="color:var(--yellow)">⚠️ It is still under development — use at your own risk!</span>
+
+    <!-- ── STEP 1: Welcome + Risk Disclaimer ── -->
+    <div id="wStep1" class="wcard">
+      <div style="text-align:center;margin-bottom:20px">
+        <div style="font-size:52px;font-weight:900;letter-spacing:-2px"><span style="color:#fff">Kalshi</span><span style="color:var(--green)">Bot</span></div>
+        <div id="splashVersion" style="font-size:12px;color:#555;margin-top:4px">v—</div>
+      </div>
+
+      <div style="background:#1a1a00;border:1px solid #ffcc00;border-radius:8px;padding:16px;margin-bottom:16px">
+        <div style="font-size:13px;font-weight:800;color:#ffcc00;margin-bottom:10px">⚠️ RISK WARNING — READ BEFORE CONTINUING</div>
+        <div style="font-size:12px;color:#ddd;line-height:1.7">
+          KalshiBot places <b>real-money trades</b> on <b>Kalshi.com</b> using your API key.
+          By using this bot you <b>may profit, break even, or lose all your money</b>.<br/><br/>
+          We advise conservative settings:<br/>
+          &bull; <b>No more than $1 per contract</b><br/>
+          &bull; <b>No more than 1 contract per scan</b><br/>
+          &bull; <b>Narrow buy ranges</b> (e.g. 70–95%) — wide ranges (1–95%) bleed money fast<br/><br/>
+          This bot accesses your Kalshi account <b>only to buy and sell</b> on your behalf.
+          We <b>cannot and will never withdraw</b> your money — only trade it.
+          Your funds stay in your Kalshi account at all times.<br/><br/>
+          <span style="color:#ff6b6b;font-weight:700">Only use KalshiBot if prediction market trading is <u>legal where you live</u> and you are <u>18 years or older</u>. Use at your own risk.</span>
+        </div>
+      </div>
+
+      <label style="display:flex;align-items:flex-start;gap:10px;font-size:13px;color:#ccc;cursor:pointer;margin-bottom:20px;line-height:1.5">
+        <input type="checkbox" id="riskAck" style="margin-top:2px;width:16px;height:16px;flex-shrink:0;accent-color:var(--green)">
+        I am 18 or older, trading is legal where I live, and I understand I may lose money using this bot.
+      </label>
+
+      <button onclick="wizardNext(1)" id="wBtn1" style="width:100%;background:#333;border:none;color:#666;padding:13px;border-radius:8px;font-weight:700;font-size:14px;cursor:not-allowed;transition:all .2s" disabled>
+        I Understand — Continue →
+      </button>
+      <div style="text-align:center;margin-top:12px">
+        <button onclick="wizardSkipAll()" style="background:none;border:none;color:#444;font-size:11px;cursor:pointer;text-decoration:underline">Already set up — skip to the bot</button>
+      </div>
     </div>
-    <div style="font-size:12px;color:#666;margin-bottom:24px" id="splashVersion">v—</div>
-    <button onclick="closeSplashAndSetup()" style="background:var(--green);border:none;color:#000;padding:12px 28px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;transition:all .2s">
-      Get Started →
-    </button>
+
+    <!-- ── STEP 2: Kalshi Account + API Key Setup ── -->
+    <div id="wStep2" class="wcard" style="display:none">
+      <div style="font-size:20px;font-weight:800;color:#fff;margin-bottom:4px">Setting Up Kalshi</div>
+      <div style="font-size:12px;color:#888;margin-bottom:20px">You need a funded Kalshi account with an API key before the bot can trade.</div>
+
+      <div class="wstep-block">
+        <div class="wstep-num">1</div>
+        <div>
+          <div class="wstep-title">Create a Kalshi Account</div>
+          <div class="wstep-body">Go to <b style="color:var(--green)">kalshi.com</b> and sign up for a free account. It only takes a few minutes. You'll need to verify your identity (standard for financial platforms).</div>
+        </div>
+      </div>
+
+      <div class="wstep-block">
+        <div class="wstep-num">2</div>
+        <div>
+          <div class="wstep-title">Fund Your Account</div>
+          <div class="wstep-body">Deposit at least <b>$10</b> to start. Kalshi accepts CashApp, debit cards, and bank transfers. You can start very small — <b>we recommend $1 max per buy</b> to limit your risk while you learn how the bot behaves.</div>
+        </div>
+      </div>
+
+      <div class="wstep-block">
+        <div class="wstep-num">3</div>
+        <div>
+          <div class="wstep-title">Generate an API Key</div>
+          <div class="wstep-body">
+            In Kalshi: go to <b>Settings → API Access</b> and create a new API key.<br/>
+            It will give you a <b>Key ID</b> and ask you to upload a <b>Public Key</b> (RSA or EC).<br/>
+            The bot uses this key to buy/sell on your behalf — it <b>cannot withdraw money</b>, only trade.
+            <div style="background:#111;border:1px solid var(--border);border-radius:6px;padding:10px;margin-top:8px;font-size:11px;color:#aaa;line-height:1.6">
+              Your API key file goes in the same folder as the bot:<br/>
+              <span style="color:var(--green);font-family:monospace">kalshi_api_key.example</span> → rename it to <span style="color:var(--green);font-family:monospace">kalshi_api_key</span> and paste your private key in.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <button onclick="wizardBack(2)" style="flex:1;background:transparent;border:1px solid var(--border);color:var(--muted);padding:12px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">← Back</button>
+        <button onclick="wizardNext(2)" style="flex:2;background:var(--green);border:none;color:#000;padding:12px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer">Next →</button>
+      </div>
+    </div>
+
+    <!-- ── STEP 3: Recommended Settings ── -->
+    <div id="wStep3" class="wcard" style="display:none">
+      <div style="font-size:20px;font-weight:800;color:#fff;margin-bottom:4px">Recommended Settings</div>
+      <div style="font-size:12px;color:#888;margin-bottom:16px">Start conservative. You can loosen these later once you know how the bot performs.</div>
+
+      <div style="background:#0f1a0f;border:1px solid #2d5a2d;border-radius:8px;padding:16px;margin-bottom:14px">
+        <div style="font-size:12px;font-weight:800;color:var(--green);margin-bottom:10px">✅ SAFE STARTER SETTINGS</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px">
+          <div style="background:#0a0a0a;border:1px solid var(--border);border-radius:6px;padding:10px">
+            <div style="color:#888;margin-bottom:4px">Buy Range (YES)</div>
+            <div style="color:#fff;font-weight:700;font-size:16px">70 – 95%</div>
+          </div>
+          <div style="background:#0a0a0a;border:1px solid var(--border);border-radius:6px;padding:10px">
+            <div style="color:#888;margin-bottom:4px">Max per Buy</div>
+            <div style="color:#fff;font-weight:700;font-size:16px">$1.00</div>
+          </div>
+          <div style="background:#0a0a0a;border:1px solid var(--border);border-radius:6px;padding:10px">
+            <div style="color:#888;margin-bottom:4px">Contracts per Scan</div>
+            <div style="color:#fff;font-weight:700;font-size:16px">1</div>
+          </div>
+          <div style="background:#0a0a0a;border:1px solid var(--border);border-radius:6px;padding:10px">
+            <div style="color:#888;margin-bottom:4px">Ends Within</div>
+            <div style="color:#fff;font-weight:700;font-size:16px">15 min</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#1a0a0a;border:1px solid #5a2d2d;border-radius:8px;padding:14px;margin-bottom:16px;font-size:12px;color:#ddd;line-height:1.6">
+        <b style="color:#ff6b6b">⛔ Avoid wide ranges like 1–95%.</b> Buying at any price means you'll catch a lot of bad bets — you'll lose money faster than the wins can cover it. Start narrow, watch it for a few days, and only expand if you're profitable.
+      </div>
+
+      <div style="display:flex;gap:10px">
+        <button onclick="wizardBack(3)" style="flex:1;background:transparent;border:1px solid var(--border);color:var(--muted);padding:12px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">← Back</button>
+        <button onclick="wizardNext(3)" style="flex:2;background:var(--green);border:none;color:#000;padding:12px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer">Next →</button>
+      </div>
+    </div>
+
+    <!-- ── STEP 4: Registration + Update Prefs ── -->
+    <div id="wStep4" class="wcard" style="display:none">
+      <div style="font-size:20px;font-weight:800;color:#fff;margin-bottom:4px">Almost Done!</div>
+      <div style="font-size:12px;color:#888;margin-bottom:16px">A couple of optional things before you start trading.</div>
+
+      <!-- Auto-update prefs -->
+      <div style="background:#0f0f1a;border:1px solid #2d2d5a;border-radius:8px;padding:14px;margin-bottom:16px">
+        <div style="font-size:12px;font-weight:800;color:#4f9eff;margin-bottom:10px">🔄 UPDATES</div>
+        <label style="display:flex;align-items:center;gap:10px;font-size:13px;color:#ccc;cursor:pointer;margin-bottom:8px">
+          <input type="checkbox" id="autoUpdateChk" style="width:16px;height:16px;accent-color:#4f9eff" checked>
+          Check for updates once per hour automatically
+        </label>
+        <div style="font-size:11px;color:#666;line-height:1.5">
+          When an update is found, you'll see a banner at the top. Click <b>Apply Update</b> to restart the bot with the latest version automatically. No command line needed.
+        </div>
+      </div>
+
+      <!-- Optional registration -->
+      <div style="background:#0f0f0f;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:16px">
+        <div style="font-size:12px;font-weight:800;color:#aaa;margin-bottom:6px">👋 OPTIONAL — Tell Us About Yourself</div>
+        <div style="font-size:11px;color:#666;margin-bottom:12px;line-height:1.5">
+          None of this is required. We're just curious how many people are using our bot and where they're from. This info is sent to the dev. <b>Your info will never be sold.</b>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div>
+            <div style="font-size:10px;color:#888;margin-bottom:4px">Nickname / First Name</div>
+            <input type="text" id="regNickname" placeholder="e.g. CryptoKing" maxlength="64"
+              style="width:100%;background:#111;border:1px solid var(--border);border-radius:6px;color:#fff;padding:8px 10px;font-size:12px;box-sizing:border-box">
+          </div>
+          <div>
+            <div style="font-size:10px;color:#888;margin-bottom:4px">Email Address</div>
+            <input type="email" id="regEmail" placeholder="optional" maxlength="128"
+              style="width:100%;background:#111;border:1px solid var(--border);border-radius:6px;color:#fff;padding:8px 10px;font-size:12px;box-sizing:border-box">
+          </div>
+          <div>
+            <div style="font-size:10px;color:#888;margin-bottom:4px">State / Province</div>
+            <input type="text" id="regState" placeholder="e.g. Texas" maxlength="64"
+              style="width:100%;background:#111;border:1px solid var(--border);border-radius:6px;color:#fff;padding:8px 10px;font-size:12px;box-sizing:border-box">
+          </div>
+          <div>
+            <div style="font-size:10px;color:#888;margin-bottom:4px">Country</div>
+            <input type="text" id="regCountry" placeholder="e.g. USA" maxlength="64"
+              style="width:100%;background:#111;border:1px solid var(--border);border-radius:6px;color:#fff;padding:8px 10px;font-size:12px;box-sizing:border-box">
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px">
+        <button onclick="wizardBack(4)" style="flex:1;background:transparent;border:1px solid var(--border);color:var(--muted);padding:12px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">← Back</button>
+        <button onclick="wizardFinish()" style="flex:2;background:var(--green);border:none;color:#000;padding:12px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer">🚀 Start Trading</button>
+      </div>
+    </div>
+
   </div>
 </div>
 
-<!-- ── ONBOARDING MODAL ──────────────────────────────────────────── -->
-<div id="onboardingModal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:1999;display:none;align-items:center;justify-content:center">
-  <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:40px;width:90%;max-width:500px;text-align:center">
-    <div style="font-size:28px;font-weight:700;color:#fff;margin-bottom:12px">Welcome to KalshiBot!</div>
-    <div style="font-size:13px;color:#aaa;margin-bottom:32px;line-height:1.6">
-      Let's set up your bot. We'll store your Kalshi API keys safely on your computer in a dedicated folder.
-    </div>
-
-    <div style="text-align:left;margin-bottom:20px;background:#0f0f0f;padding:20px;border-radius:8px;border:1px solid var(--border)">
-      <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:12px">📁 STORAGE FOLDER</div>
-
-      <!-- Windows username -->
-      <div style="font-size:12px;color:#fff;font-weight:700;margin-bottom:4px">
-        ⚠️ Your Windows username
-      </div>
-      <div style="font-size:11px;color:#f5a623;margin-bottom:8px;line-height:1.5">
-        This MUST be your real PC login name (the folder under <b>C:\Users\</b>).
-        We auto-filled it below — only change it if it's wrong. <b>No spaces.</b>
-      </div>
-      <input type="text" id="winUsername" placeholder="e.g. your-username"
-        oninput="sanitizeNoSpaces(this); updateStoragePath()"
-        style="width:100%;background:#111;border:1px solid #f5a623;border-radius:6px;color:#fff;padding:10px 12px;font-size:13px;font-family:monospace;margin-bottom:16px">
-
-      <!-- Profile / computer label -->
-      <div style="font-size:12px;color:#fff;font-weight:700;margin-bottom:4px">
-        This computer's label
-      </div>
-      <div style="font-size:11px;color:#aaa;margin-bottom:8px;line-height:1.5">
-        A short name so home vs. laptop data stay separate (e.g. <b>home-pc</b>, <b>laptop</b>). No spaces.
-      </div>
-      <input type="text" id="computerName" placeholder="home-pc"
-        oninput="sanitizeNoSpaces(this); updateStoragePath()"
-        style="width:100%;background:#111;border:1px solid var(--border);border-radius:6px;color:#fff;padding:10px 12px;font-size:13px;font-family:monospace;margin-bottom:16px">
-
-      <div style="font-size:11px;color:#666;line-height:1.5">
-        Your files will be stored in:<br/>
-        <span id="storagePath" style="color:var(--green);font-weight:700;font-family:monospace">C:\Users\your-username\KalshiBots\home-pc\</span>
-      </div>
-    </div>
-
-    <button onclick="skipOnboarding()" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:10px 20px;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer;margin-right:10px;transition:all .2s;width:calc(50% - 5px)">
-      Skip for Now
-    </button>
-    <button onclick="completeOnboarding()" style="background:var(--green);border:none;color:#000;padding:10px 20px;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer;width:calc(50% - 5px);transition:all .2s">
-      Continue
-    </button>
+<!-- Update available banner (hidden until an update is found) -->
+<div id="updateBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:1500;background:#1a2a1a;border-bottom:2px solid var(--green);padding:10px 20px;display:none;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+  <div style="font-size:13px;color:#fff">
+    🆕 <b>Update available!</b> <span id="updateBannerText"></span>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <button onclick="applyUpdate()" style="background:var(--green);border:none;color:#000;padding:7px 16px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer">Apply Update (will restart bot)</button>
+    <button onclick="dismissUpdateBanner()" style="background:transparent;border:1px solid var(--border);color:#aaa;padding:7px 12px;border-radius:6px;font-size:12px;cursor:pointer">Dismiss</button>
   </div>
 </div>
+
+<!-- Hidden inputs preserved for old code that reads them -->
+<input type="text" id="winUsername" style="display:none" placeholder="username">
+<input type="text" id="computerName" style="display:none" placeholder="home-pc">
+<span id="storagePath" style="display:none"></span>
 
 <!-- ── NAV ──────────────────────────────────────────────────────── -->
 <nav>
@@ -650,9 +795,15 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
           <span id="settingsVersion" style="font-weight:700;color:var(--green);font-family:monospace">v—</span>
         </div>
         <div style="margin-bottom:12px">
-          <div style="font-size:11px;color:#888;margin-bottom:6px">Check for updates</div>
-          <button onclick="checkForUpdates()" style="background:transparent;border:1px solid var(--border);color:var(--blue);padding:6px 12px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;transition:all .2s;width:100%">
-            🔄 Check GitHub for Updates
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <div style="font-size:11px;color:#888">Check for updates</div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:#aaa;cursor:pointer">
+              <input type="checkbox" id="settingsAutoUpdate" style="accent-color:#4f9eff" onchange="saveAutoUpdatePref()">
+              Auto-check every hour
+            </label>
+          </div>
+          <button onclick="checkForUpdatesManual()" style="background:transparent;border:1px solid var(--border);color:var(--blue);padding:6px 12px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;transition:all .2s;width:100%">
+            🔄 Check GitHub for Updates Now
           </button>
           <div id="updateStatus" style="font-size:11px;color:#888;margin-top:8px;display:none"></div>
         </div>
@@ -1709,145 +1860,198 @@ let pnlCurrentTotal = 0;
 
 function cyclePnlPeriod() {} // kept for compatibility
 
-// ── Splash Page & Onboarding ──────────────────────────────────────────
+// ── Version Info ─────────────────────────────────────────────────────
 function loadVersionInfo() {
   fetch("/api/version")
     .then(r => r.json())
     .then(data => {
       const v = data.version;
-      document.getElementById("splashVersion").textContent = `v${v}`;
-      document.getElementById("navVersion").textContent = `v${v}`;
-      document.getElementById("settingsVersion").textContent = `v${v}`;
-      document.getElementById("footerVersion").textContent = `v${v}`;
+      const splV = document.getElementById("splashVersion");
+      if (splV) splV.textContent = `v${v}`;
+      const nv = document.getElementById("navVersion");
+      if (nv) nv.textContent = `v${v}`;
+      const sv = document.getElementById("settingsVersion");
+      if (sv) sv.textContent = `v${v}`;
+      const fv = document.getElementById("footerVersion");
+      if (fv) fv.textContent = `v${v}`;
     })
     .catch(() => {});
 }
 
-function closeSplashAndSetup() {
-  const splash = document.getElementById("splashPage");
-  if (splash) splash.style.display = "none";
+// ── Setup Wizard ──────────────────────────────────────────────────────
+let _wizardCurrentStep = 1;
 
-  // Check if localStorage works (not in private mode)
-  let isPrivateMode = false;
-  try {
-    localStorage.setItem("_test", "1");
-    localStorage.removeItem("_test");
-  } catch (e) {
-    isPrivateMode = true;  // Private mode detected
-  }
-
-  // Skip onboarding in private mode OR if user has already onboarded
-  const hasSeenOnboarding = localStorage.getItem("kalshibot_onboarded");
-  if (!hasSeenOnboarding && !isPrivateMode) {
-    showOnboarding();
-  }
-}
-
-async function showOnboarding() {
-  const modal = document.getElementById("onboardingModal");
-  if (modal) modal.style.display = "flex";
-
-  // Wait a tick for DOM to fully render, then fetch and pre-fill the username
-  await new Promise(r => setTimeout(r, 10));
-
-  try {
-    const res = await fetch("/api/system-info");
-    if (res.ok) {
-      const data = await res.json();
-      const userInput = document.getElementById("winUsername");
-      if (userInput && data.username) userInput.value = data.username;
+function _setWizardStep(n) {
+  _wizardCurrentStep = n;
+  [1,2,3,4].forEach(i => {
+    const pane = document.getElementById(`wStep${i}`);
+    if (pane) pane.style.display = (i === n) ? "block" : "none";
+    const dot = document.getElementById(`wdot${i}`);
+    if (dot) {
+      dot.classList.remove("active", "done");
+      if (i < n) dot.classList.add("done");
+      else if (i === n) dot.classList.add("active");
     }
-  } catch (e) {
-    console.error("Failed to fetch system info:", e);
+  });
+  // Color the lines between done steps
+  document.querySelectorAll(".wline").forEach((el, idx) => {
+    el.classList.toggle("done", idx < n - 1);
+  });
+}
+
+function wizardNext(fromStep) {
+  if (fromStep === 1) {
+    if (!document.getElementById("riskAck").checked) return;
   }
-  updateStoragePath();  // always render the path (with whatever we have)
+  _setWizardStep(fromStep + 1);
 }
 
-// Strip spaces live — folder names with spaces break the storage path.
-function sanitizeNoSpaces(el) {
-  const clean = el.value.replace(/\s+/g, "");
-  if (clean !== el.value) el.value = clean;
+function wizardBack(fromStep) {
+  _setWizardStep(fromStep - 1);
 }
 
-function updateStoragePath() {
-  const username = document.getElementById("winUsername")?.value?.trim() || "YourUsername";
-  const computerName = document.getElementById("computerName")?.value?.trim() || "home-pc";
-  const pathEl = document.getElementById("storagePath");
+async function wizardFinish() {
+  // Save auto-update pref
+  const autoUp = document.getElementById("autoUpdateChk")?.checked;
+  localStorage.setItem("kalshibot_auto_update", autoUp ? "1" : "0");
+  const settingsChk = document.getElementById("settingsAutoUpdate");
+  if (settingsChk) settingsChk.checked = !!autoUp;
 
-  if (pathEl) {
-    const isWindows = /Windows|MSIE|Trident/.test(navigator.userAgent);
-    const path = isWindows
-      ? `C:\\Users\\${username}\\KalshiBots\\${computerName}\\`
-      : `~/KalshiBots/${computerName}/`;
-    pathEl.textContent = path;
+  // Send optional registration
+  const nickname = document.getElementById("regNickname")?.value?.trim() || "";
+  const email    = document.getElementById("regEmail")?.value?.trim() || "";
+  const state    = document.getElementById("regState")?.value?.trim() || "";
+  const country  = document.getElementById("regCountry")?.value?.trim() || "";
+  if (nickname || email || state || country) {
+    fetch("/api/register-user", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({nickname, email, state, country})
+    }).catch(() => {});
+  }
+
+  localStorage.setItem("kalshibot_wizard_done", "1");
+  const wiz = document.getElementById("setupWizard");
+  if (wiz) wiz.style.display = "none";
+
+  if (autoUp) _scheduleAutoUpdate();
+  toast("🚀 Welcome to KalshiBot!", "ok");
+}
+
+function wizardSkipAll() {
+  localStorage.setItem("kalshibot_wizard_done", "1");
+  const wiz = document.getElementById("setupWizard");
+  if (wiz) wiz.style.display = "none";
+}
+
+// Enable/disable the Step 1 continue button based on checkbox
+function _initWizard() {
+  const ackChk = document.getElementById("riskAck");
+  const btn    = document.getElementById("wBtn1");
+  if (ackChk && btn) {
+    ackChk.addEventListener("change", () => {
+      btn.disabled = !ackChk.checked;
+      btn.style.background = ackChk.checked ? "var(--green)" : "#333";
+      btn.style.color      = ackChk.checked ? "#000" : "#666";
+      btn.style.cursor     = ackChk.checked ? "pointer" : "not-allowed";
+    });
   }
 }
 
-function completeOnboarding() {
-  const username = document.getElementById("winUsername")?.value?.trim() || "";
-  const computerName = document.getElementById("computerName")?.value?.trim() || "home-pc";
-  if (!username) {
-    alert("Please enter your Windows username (the folder name under C:\\Users\\).");
-    return;
-  }
-  localStorage.setItem("kalshibot_win_username", username);
-  localStorage.setItem("kalshibot_computer_name", computerName);
-  localStorage.setItem("kalshibot_onboarded", "true");
-
-  const modal = document.getElementById("onboardingModal");
-  if (modal) modal.style.display = "none";
-
-  toast(`✓ Setup saved: ${computerName}`, "ok");
-}
-
-function skipOnboarding() {
-  localStorage.setItem("kalshibot_onboarded", "true");
-  const modal = document.getElementById("onboardingModal");
-  if (modal) modal.style.display = "none";
-}
+// Compat shims for old code that may reference these
+function sanitizeNoSpaces(el) { el.value = el.value.replace(/\s+/g, ""); }
+function updateStoragePath() {}
+function completeOnboarding() { wizardSkipAll(); }
+function skipOnboarding()     { wizardSkipAll(); }
+function closeSplashAndSetup() { wizardSkipAll(); }
 
 // ── Update Checking ───────────────────────────────────────────────────
-async function checkForUpdates() {
+let _autoUpdateTimer = null;
+let _updateBannerDismissed = false;
+
+async function _doCheckUpdate(showStatusEl) {
   const statusEl = document.getElementById("updateStatus");
-  if (!statusEl) return;
-
-  statusEl.style.display = "block";
-  statusEl.textContent = "Checking GitHub...";
-  statusEl.style.color = "#888";
-
+  if (showStatusEl && statusEl) {
+    statusEl.style.display = "block";
+    statusEl.textContent = "Checking GitHub...";
+    statusEl.style.color = "#888";
+  }
   try {
-    const resp = await fetch("https://api.github.com/repos/CryptoWorldGames/kalshibot/releases/latest", {cache: "no-store"});
-    if (!resp.ok) throw new Error("GitHub API error");
-
-    const data = await resp.json();
-    const latestVersion = data.tag_name?.replace("v", "") || "unknown";
-    const currentVersion = (document.getElementById("navVersion").textContent || "v1.3.0").replace("v", "");
-
-    if (latestVersion === "unknown") {
-      statusEl.textContent = "Could not check version";
-      statusEl.style.color = "#f5c542";
-      return;
+    const r = await fetch("/api/check-update", {cache: "no-store"});
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || "check failed");
+    if (d.update_available && !_updateBannerDismissed) {
+      _showUpdateBanner(d.latest, d.current);
     }
-
-    if (latestVersion > currentVersion) {
-      statusEl.innerHTML = `
-        <div style="color:var(--green);margin-bottom:8px">
-          ✓ <b>Update available: v${latestVersion}</b> (current: v${currentVersion})
-        </div>
-        <div style="font-size:10px;line-height:1.5;color:#aaa">
-          Open Command Prompt and run:<br/>
-          <span style="color:#666;font-family:monospace">cd C:\Users\YourName\Documents\kalshibot</span><br/>
-          <span style="color:#666;font-family:monospace">git pull origin main</span><br/>
-          Then restart the bot.
-        </div>
-      `;
-    } else {
-      statusEl.textContent = `✓ You're up to date (v${currentVersion})`;
-      statusEl.style.color = "var(--green)";
+    if (showStatusEl && statusEl) {
+      if (d.update_available) {
+        statusEl.innerHTML = `<span style="color:var(--green)">🆕 Update available: <b>v${d.latest}</b> (current v${d.current})</span>`;
+      } else {
+        statusEl.innerHTML = `<span style="color:var(--green)">✓ You're up to date (v${d.current})</span>`;
+      }
     }
   } catch(e) {
-    statusEl.textContent = `Error checking updates: ${e.message}`;
-    statusEl.style.color = "var(--red)";
+    if (showStatusEl && statusEl) {
+      statusEl.innerHTML = `<span style="color:var(--red)">Error: ${e.message}</span>`;
+    }
+  }
+}
+
+function checkForUpdatesManual() { _doCheckUpdate(true); }
+function checkForUpdates()       { _doCheckUpdate(true); }  // compat alias
+
+function _showUpdateBanner(latest, current) {
+  const banner = document.getElementById("updateBanner");
+  const txt    = document.getElementById("updateBannerText");
+  if (!banner) return;
+  if (txt) txt.textContent = `v${latest} is available (you have v${current})`;
+  banner.style.display = "flex";
+}
+
+function dismissUpdateBanner() {
+  _updateBannerDismissed = true;
+  const b = document.getElementById("updateBanner");
+  if (b) b.style.display = "none";
+}
+
+async function applyUpdate() {
+  if (!confirm("Apply update now? The bot will restart automatically (~15 seconds of downtime).")) return;
+  try {
+    const r = await fetch("/api/restart", {method:"POST"});
+    const d = await r.json();
+    toast("🔄 " + (d.msg || "Restarting…"), "ok");
+    dismissUpdateBanner();
+    // Poll until the bot comes back
+    setTimeout(() => { location.reload(); }, 18000);
+  } catch(e) {
+    toast("Restart request failed: " + e.message, "err");
+  }
+}
+
+function saveAutoUpdatePref() {
+  const on = document.getElementById("settingsAutoUpdate")?.checked;
+  localStorage.setItem("kalshibot_auto_update", on ? "1" : "0");
+  if (on) _scheduleAutoUpdate(); else _cancelAutoUpdate();
+}
+
+function _scheduleAutoUpdate() {
+  _cancelAutoUpdate();
+  _autoUpdateTimer = setInterval(() => { _doCheckUpdate(false); }, 60 * 60 * 1000);
+}
+
+function _cancelAutoUpdate() {
+  if (_autoUpdateTimer) { clearInterval(_autoUpdateTimer); _autoUpdateTimer = null; }
+}
+
+function _initAutoUpdate() {
+  const savedPref = localStorage.getItem("kalshibot_auto_update");
+  const enabled = savedPref === null ? true : savedPref === "1";  // default ON
+  const chk = document.getElementById("settingsAutoUpdate");
+  if (chk) chk.checked = enabled;
+  if (enabled) {
+    _scheduleAutoUpdate();
+    // Do an immediate quiet check so the banner shows right away if stale
+    setTimeout(() => _doCheckUpdate(false), 5000);
   }
 }
 
@@ -2558,26 +2762,17 @@ window.addEventListener("load", () => {
   const _tzSel = document.getElementById("tzSelect");
   if (_tzSel) _tzSel.value = getTimezone();
 
-  // Set up onboarding and computer name input listener
-  const computerNameInput = document.getElementById("computerName");
-  if (computerNameInput) {
-    computerNameInput.addEventListener("input", updateStoragePath);
-    // Populate with saved name if available
-    const savedName = localStorage.getItem("kalshibot_computer_name");
-    if (savedName) computerNameInput.value = savedName;
+  // Setup wizard — show only on first visit
+  _initWizard();
+  const wizardDone = localStorage.getItem("kalshibot_wizard_done") ||
+                     localStorage.getItem("kalshibot_splash_seen") ||
+                     localStorage.getItem("kalshibot_onboarded");
+  if (wizardDone) {
+    const wiz = document.getElementById("setupWizard");
+    if (wiz) wiz.style.display = "none";
   }
-  updateStoragePath();  // Update path on load
-
-  // Check if we should show splash page (first time)
-  const hasSeenSplash = localStorage.getItem("kalshibot_splash_seen");
-  if (!hasSeenSplash) {
-    localStorage.setItem("kalshibot_splash_seen", "true");
-    // Splash page is visible by default - will be closed when user clicks button
-  } else {
-    // Hide splash page if not first visit
-    const splash = document.getElementById("splashPage");
-    if (splash) splash.style.display = "none";
-  }
+  // Auto-update
+  _initAutoUpdate();
   // Load bot status (running/stopped) and cash first
   loadBotStatus();
   loadCash();
@@ -4704,11 +4899,7 @@ function chaChing() {
 
 // Web Speech API for voice announcements
 // ── Voice snooze (mute announcements for a set period) ───────────────────
-// Remote deploy: tell the manager (Flask port + 100) to `git pull` + restart Flask.
-// Lets you ship new code from phone/laptop with zero desktop access.
-function showUpdateInfo() {
-  alert("✓ Updates are automatic!\n\nChanges are deployed to the server instantly. Just do a HARD REFRESH to see them:\n\n🔹 Windows/Linux: Ctrl + Shift + R\n🔹 Mac: Cmd + Shift + R\n\nNo need to restart the bot — it's already running the latest code.");
-}
+function showUpdateInfo() { _doCheckUpdate(true); }
 
 let _voiceSnoozeUntil = 0;     // epoch ms; voice is muted while Date.now() < this
 let _snoozeTickTimer  = null;
