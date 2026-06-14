@@ -1149,6 +1149,7 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
     <div style="text-align:center">
       <div style="font-size:13px;color:var(--muted);font-weight:700;margin-bottom:8px">Max Spend Per Purchase</div>
       <input type="number" id="buyAmount" value="1.00" min="0.01" step="0.01" style="width:100%;padding:8px;margin-bottom:8px;font-size:14px;background:#1a1f26;color:#fff;border:1px solid var(--border);border-radius:6px" oninput="saveSettings()">
+      <div id="buyAmountWarn" style="display:none;font-size:11px;color:#ffb020;margin-bottom:8px;line-height:1.4"></div>
       <div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:center">
         <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="setAmt(0.01)">$0.01</button>
         <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="setAmt(0.05)">$0.05</button>
@@ -1493,7 +1494,8 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
       <!-- Max Spend Per Purchase -->
       <div style="text-align:center">
         <div style="font-size:13px;color:var(--muted);font-weight:700;margin-bottom:8px">Max Spend Per Purchase</div>
-        <input type="number" id="L_buyAmount" min="0.01" step="0.01" value="0.15" onchange="pushLottoSettings()" style="width:100%;padding:8px;margin-bottom:8px;font-size:14px;background:#1a1f26;color:#fff;border:1px solid var(--border);border-radius:6px">
+        <input type="number" id="L_buyAmount" min="0.01" step="0.01" value="0.25" onchange="pushLottoSettings()" oninput="checkBudgetWarning('lotto')" style="width:100%;padding:8px;margin-bottom:8px;font-size:14px;background:#1a1f26;color:#fff;border:1px solid var(--border);border-radius:6px">
+        <div id="L_buyAmountWarn" style="display:none;font-size:11px;color:#ffb020;margin-bottom:8px;line-height:1.4"></div>
         <div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:center">
           <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="L_buyAmount.value='0.01';pushLottoSettings()">$0.01</button>
           <button class="sm ghost" style="padding:5px 10px;font-size:12px;background:var(--green);color:#000;font-weight:600" onclick="L_buyAmount.value='0.05';pushLottoSettings()">$0.05</button>
@@ -7096,6 +7098,7 @@ function saveSettings() {
   SETTINGS_CHECKBOXES.forEach(id => { const el = document.getElementById(id); if (el) s[id] = el.checked; });
   SETTINGS_INPUTS.forEach(id => { const el = document.getElementById(id); if (el) s[id] = el.value; });
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch(e) {}
+  try { checkBudgetWarning("scanner"); } catch(e) {}
   // Bridge the BUY filters to the backend so the headless bot trades what the UI shows.
   pushBuySettings();
 }
@@ -7187,8 +7190,58 @@ async function loadActiveProfile() {
   } catch(e) {}
 }
 
+// Smart Strategy is "managing" the bots whenever the global switch is ON, OR any
+// per-token crypto card (BTC/ETH/SOL/HYPE/DOGE/BNB/XRP) is enabled — in either case
+// it re-picks which bots run every cycle, so a manual toggle wouldn't stick.
+// Warn when the Max-Spend budget is too small to buy even one contract at the
+// cheapest price in the selected range (the bot floors budget/price to 0 and buys
+// NOTHING). Cheapest price the bot would pay = up_min for YES, or (100 - down_max)
+// for NO, across whichever sides are enabled.
+function checkBudgetWarning(scope) {
+  const ids = scope === "lotto"
+    ? {amt:"L_buyAmount", up:"L_enableBuyUp", upMin:"L_minProb", down:"L_enableBuyDown", downMax:"L_maxProbDown", warn:"L_buyAmountWarn"}
+    : {amt:"buyAmount",   up:"enableBuyUp",   upMin:"minProb",   down:"enableBuyDown",   downMax:"maxProbDown",   warn:"buyAmountWarn"};
+  const warnEl = document.getElementById(ids.warn);
+  if (!warnEl) return;
+  const amt = parseFloat(document.getElementById(ids.amt)?.value) || 0;
+  const prices = [];
+  if (document.getElementById(ids.up)?.checked) {
+    const m = parseFloat(document.getElementById(ids.upMin)?.value);
+    if (!isNaN(m)) prices.push(m);                 // YES costs ~up_min ¢
+  }
+  if (document.getElementById(ids.down)?.checked) {
+    const dm = parseFloat(document.getElementById(ids.downMax)?.value);
+    if (!isNaN(dm)) prices.push(100 - dm);         // NO costs ~(100 - down_max) ¢
+  }
+  if (!prices.length) { warnEl.style.display = "none"; return; }
+  const cheapest = Math.min(...prices);
+  if (Math.round(amt * 100) < cheapest) {
+    warnEl.textContent = `⚠ $${amt.toFixed(2)} can't buy a single contract — the cheapest in your range is ${cheapest}¢. ` +
+      `Raise the budget to at least $${(cheapest/100).toFixed(2)} or widen the range, or the bot will buy nothing.`;
+    warnEl.style.display = "block";
+  } else {
+    warnEl.style.display = "none";
+  }
+}
+
+function isSmartStrategyManaging() {
+  const anyToken = Object.values(_perTokenSettings || {}).some(c => c && c.enabled);
+  return !!(window._smartStrategyEnabled || anyToken);
+}
+
 // Toggle one bot on/off independently (multiple bots may run at the same time).
 async function setActiveProfile(p) {
+  if (isSmartStrategyManaging()) {
+    alert(
+      "🔒 Bot selection is managed by Smart Strategy.\n\n" +
+      "To turn this bot on or off yourself, first switch OFF Smart Strategy AND every " +
+      "per-token crypto card (BTC, ETH, SOL, HYPE, DOGE, BNB, XRP).\n\n" +
+      "While Smart Strategy or any token card is on, it decides which bots run each cycle, " +
+      "so a manual change here would just be overridden."
+    );
+    loadActiveProfile();   // revert any optimistic UI
+    return;
+  }
   const cur = Array.isArray(_activeProfile) ? _activeProfile : [];
   const turningOn = !cur.includes(p);
   // optimistic UI
@@ -7212,6 +7265,7 @@ async function loadSmartStrategyStatus() {
   try {
     const r = await fetch("/api/smart-strategy");
     const d = await r.json();
+    window._smartStrategyEnabled = !!d.enabled;   // used to lock the manual bot toggle
     document.querySelectorAll(".smartStrategyEnabled").forEach(chk => { chk.checked = d.enabled || false; });
     const state = d.enabled ? "✓ ON" : "○ OFF";
     const mode = d.active_mode || "manual";
@@ -7936,6 +7990,7 @@ function reflectLottoTime(mins) {
 
 let _pushLottoTimer = null;
 function pushLottoSettings() {
+  try { checkBudgetWarning("lotto"); } catch(e) {}
   saveSettings(); // persist Lotto inputs to localStorage too
   const chk = id => { const el = document.getElementById(id); return el ? el.checked : false; };
   const num = (id,d) => { const el = document.getElementById(id); const v = parseFloat(el?.value); return isNaN(v)?d:v; };
@@ -8019,6 +8074,7 @@ async function loadLottoSettings() {
     if (s.auto_mins) set("L_autoMins", s.auto_mins);
     if (s.auto_buys_max) set("L_autoBuysMax", s.auto_buys_max);
     updateLottoMinsHint();
+    try { checkBudgetWarning("lotto"); } catch(e) {}
   } catch(e) {}
 }
 
@@ -8165,7 +8221,7 @@ function seedLottoMemDefaults() {
   _lottoMemSet(1, {
     L_enableBuyUp:true, L_minProb:"1", L_maxProb:"15",
     L_enableBuyDown:false, L_minProbDown:"1", L_maxProbDown:"15",
-    L_minutes:"525600", L_buyAmount:"0.15", L_autoMaxPerScan:"10",
+    L_minutes:"525600", L_buyAmount:"0.25", L_autoMaxPerScan:"10",
     L_autoMaxConcurrent:"999", L_maxBuysPerMarket:"1",
     L_showCrypto:true, L_showCombo:true, L_showSports:true, L_showPolitics:true, L_showEconomics:true,
     L_goodLiq:false, L_hideMultiOutcome:false,
@@ -8451,6 +8507,7 @@ function loadSettings() {
 
   if (s.selTime != null) reflectScanTime(s.selTime);
   if (s.autoRunMode) setRunMode(s.autoRunMode);
+  try { checkBudgetWarning("scanner"); } catch(e) {}
 
   // Ensure visual state matches actual state (prevent both buttons appearing selected)
   setTimeout(() => setRunMode(autoRunMode), 50);

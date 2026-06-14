@@ -435,7 +435,7 @@ _DEFAULT_BUY_SETTINGS = {
     "enable_buy_up":   True,  "up_min":   80.0, "up_max":   96.0,  # YES side range
     "enable_buy_down": False, "down_min": 80.0, "down_max": 96.0,  # NO side range
     "minutes":         15,        # only markets closing within this many minutes
-    "buy_amount":      0.50,      # MAX dollars to spend per buy
+    "buy_amount":      1.00,      # MAX dollars to spend per buy (matches the UI default)
     "max_per_scan":    3,         # max NEW buys per 15s cycle (rate-limit safety)
     "max_concurrent":  999,       # max total open positions
     "max_per_market":  1,         # max buys per ticker
@@ -495,7 +495,7 @@ _LOTTO_BUY_DEFAULTS = {
     "enable_buy_up":   True,  "up_min":   1.0,  "up_max":   15.0,
     "enable_buy_down": False, "down_min": 1.0,  "down_max": 15.0,
     "minutes":         525600,    # 365 days
-    "buy_amount":      0.15,       # max cost ~15¢ per contract
+    "buy_amount":      0.25,       # max dollars per buy (matches the UI default)
     "max_per_scan":    10,
     "max_concurrent":  999,
     "max_per_market":  1,          # max 1 buy per contract
