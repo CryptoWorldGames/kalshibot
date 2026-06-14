@@ -3295,9 +3295,14 @@ def _recent_settlements(hours: int = 24) -> list:
                 yes_cnt, no_cnt, yes_cost, no_cost = _settle_counts(s)
                 revenue  = float(s.get("revenue") or 0) / 100   # cents → dollars
                 result   = s.get("market_result", "")
+                # Debug: log first settlement we encounter so we can see actual API field names
+                if not getattr(_recent_settlements, "_logged_sample", False):
+                    print(f"[settle-debug] sample keys for {ticker}: {list(s.keys())}")
+                    print(f"[settle-debug] yes_cnt={yes_cnt} no_cnt={no_cnt} yes_cost={yes_cost} no_cost={no_cost} revenue={revenue} result={result}")
+                    _recent_settlements._logged_sample = True
 
-                # Skip entries with no actual position (combo placeholders, settled-zero rows)
-                if yes_cnt < 0.001 and no_cnt < 0.001 and yes_cost < 0.001 and no_cost < 0.001:
+                # Skip entries with truly no position data — require at least count or cost or revenue
+                if yes_cnt < 0.001 and no_cnt < 0.001 and yes_cost < 0.001 and no_cost < 0.001 and revenue < 0.001:
                     continue
 
                 # Skip hedged positions (bought both sides → net zero, closed pre-settlement).
