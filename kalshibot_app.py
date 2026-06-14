@@ -2863,6 +2863,8 @@ def portfolio():
             api_positions_value = round(_pv_raw / 100, 2)  # always cents (BUGLOG-001)
     except Exception:
         pass
+    _buy_ts_by_ticker = {}  # ticker → most-recent BUY fill time (defined before the
+                            # try so the tracked-fallback block below is always safe)
     try:
         # Fetch ALL open positions with cursor pagination. If the first attempt
         # comes back empty WHILE the balance API says we hold open positions, the
@@ -2887,6 +2889,24 @@ def portfolio():
             if raw_positions or api_positions_value <= 0:
                 break
             time.sleep(0.4)  # brief backoff, then re-fetch (high-priority UI call)
+
+        # Real "bought at" fallback from Kalshi fills, for positions the bot didn't
+        # record itself (manual/adopted). Without this, bought_at is blank → the
+        # "Most Recent" sort breaks and the Bought At column shows "—". Use the most
+        # recent BUY fill per ticker (ISO strings compare correctly lexicographically).
+        _buy_ts_by_ticker = {}
+        try:
+            for f in (_cached_fills_nonblocking() or []):
+                if str(f.get("action", "")).lower() != "buy":
+                    continue
+                tk = f.get("ticker", "")
+                ct = f.get("created_time")
+                if not tk or not ct:
+                    continue
+                if tk not in _buy_ts_by_ticker or str(ct) > str(_buy_ts_by_ticker[tk]):
+                    _buy_ts_by_ticker[tk] = ct
+        except Exception as e:
+            print(f"[portfolio] fills bought_at fallback failed: {e}")
 
         for p in raw_positions:
             ticker = p.get("market_id") or p.get("ticker", "")
@@ -2993,7 +3013,7 @@ def portfolio():
                 "buy_price":      buy_price,
                 "strategy":       bot_info.get("strategy") if bot_info else None,
                 "target_pct":     bot_info.get("target_pct") if bot_info else None,
-                "bought_at":      bot_info.get("bought_at") if bot_info else None,
+                "bought_at":      (bot_info.get("bought_at") if bot_info else None) or _buy_ts_by_ticker.get(ticker),
                 "status":         bot_info.get("status", "open") if bot_info else "open",
                 "profile":        bot_info.get("profile") if bot_info else None,
             })
@@ -3123,7 +3143,7 @@ def portfolio():
             "buy_price":      info.get("buy_price"),
             "strategy":       info.get("strategy"),
             "target_pct":     info.get("target_pct"),
-            "bought_at":      info.get("bought_at"),
+            "bought_at":      info.get("bought_at") or _buy_ts_by_ticker.get(ticker),
             "status":         info.get("status", "open"),
             "profile":        info.get("profile"),
         })
