@@ -707,7 +707,42 @@ _fills_cache: dict = {"data": [], "ts": 0.0}
 _FILLS_CACHE_TTL = 120.0
 _fills_refresh_inflight = threading.Event()
 
-def _recent_fills(hours: int = 24 * 30) -> list:
+def _settle_counts(s: dict):
+    """Extract (yes_cnt, no_cnt, yes_cost_dollars, no_cost_dollars) from a Kalshi
+    settlement object, trying multiple known field-name variants across API versions.
+    yes_count/no_count may be integers or _fp floats; costs may be in cents or dollars."""
+    def _fv(*keys):
+        for k in keys:
+            v = s.get(k)
+            try:
+                fv = float(v)
+                if fv > 0:
+                    return fv
+            except (TypeError, ValueError):
+                continue
+        return 0.0
+    yes_cnt  = _fv("yes_count_fp", "yes_count")
+    no_cnt   = _fv("no_count_fp",  "no_count")
+    # Cost fields: dollars variant is direct; cents variant needs /100
+    yes_cost = s.get("yes_total_cost_dollars") or s.get("yes_total_cost")
+    no_cost  = s.get("no_total_cost_dollars")  or s.get("no_total_cost")
+    try:
+        yc = float(yes_cost or 0)
+        # if the value looks like cents (e.g. 75 for 75¢ when we have 1 contract at 75¢)
+        # and yes_cnt > 0, a per-contract value >1 means it's in cents
+        if yc > 1 and yes_cnt > 0 and (yc / yes_cnt) > 1.5:
+            yc /= 100
+    except (TypeError, ValueError):
+        yc = 0.0
+    try:
+        nc = float(no_cost or 0)
+        if nc > 1 and no_cnt > 0 and (nc / no_cnt) > 1.5:
+            nc /= 100
+    except (TypeError, ValueError):
+        nc = 0.0
+    return yes_cnt, no_cnt, yc, nc
+
+
     """Fetch all fills in the window, paginated (200/page, capped at 25 pages)."""
     out = []
     min_ts = int(time.time() - hours * 3600)
@@ -3256,10 +3291,7 @@ def _recent_settlements(hours: int = 24) -> list:
                 except Exception:
                     pass
 
-                yes_cnt  = float(s.get("yes_count_fp") or 0)
-                no_cnt   = float(s.get("no_count_fp")  or 0)
-                yes_cost = float(s.get("yes_total_cost_dollars") or 0)
-                no_cost  = float(s.get("no_total_cost_dollars")  or 0)
+                yes_cnt, no_cnt, yes_cost, no_cost = _settle_counts(s)
                 revenue  = float(s.get("revenue") or 0) / 100   # cents → dollars
                 result   = s.get("market_result", "")
 
@@ -4267,10 +4299,7 @@ def pnl_history():
                     ts_float = ts.timestamp()
                 except ValueError:
                     continue
-                yes_cnt = float(s.get("yes_count_fp") or 0)
-                no_cnt = float(s.get("no_count_fp") or 0)
-                yes_cost = float(s.get("yes_total_cost_dollars") or 0)
-                no_cost = float(s.get("no_total_cost_dollars") or 0)
+                yes_cnt, no_cnt, yes_cost, no_cost = _settle_counts(s)
                 rev = float(s.get("revenue") or 0) / 100
                 cost = yes_cost if yes_cnt > 0.001 else no_cost
                 cnt = yes_cnt if yes_cnt > 0.001 else no_cnt
@@ -5234,10 +5263,7 @@ def stats():
                 except ValueError:
                     continue
                 if ts < cutoff: stop = True; break
-                yes_cnt  = float(s.get("yes_count_fp") or 0)
-                no_cnt   = float(s.get("no_count_fp")  or 0)
-                yes_cost = float(s.get("yes_total_cost_dollars") or 0)
-                no_cost  = float(s.get("no_total_cost_dollars")  or 0)
+                yes_cnt, no_cnt, yes_cost, no_cost = _settle_counts(s)
                 rev      = float(s.get("revenue")  or 0) / 100
                 cost     = yes_cost if yes_cnt > 0.001 else no_cost
                 cnt      = yes_cnt if yes_cnt > 0.001 else no_cnt
@@ -5354,12 +5380,9 @@ def coach():
                 except ValueError:
                     continue
                 if ts < cutoff: stop = True; break
-                yes_cnt = float(s.get("yes_count_fp") or 0)
-                no_cnt  = float(s.get("no_count_fp") or 0)
+                yes_cnt, no_cnt, yes_cost, no_cost = _settle_counts(s)
                 if yes_cnt > 0.001 and no_cnt > 0.001:
                     continue  # hedged
-                yes_cost = float(s.get("yes_total_cost_dollars") or 0)
-                no_cost  = float(s.get("no_total_cost_dollars") or 0)
                 rev  = float(s.get("revenue") or 0) / 100
                 cost = yes_cost if yes_cnt > 0.001 else no_cost
                 cnt  = yes_cnt if yes_cnt > 0.001 else no_cnt
