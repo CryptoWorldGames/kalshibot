@@ -2490,6 +2490,37 @@ def _coinbase_closes_by_bucket(symbol):
     except Exception:
         return {}
 
+def _kraken_closes_by_bucket(symbol):
+    """Kraken OHLC fallback for historical closes (same public source the spot
+    price already falls back to), so the seeder doesn't depend on the Coinbase
+    exchange host being reachable. {game_bucket: close_price} or {}."""
+    pair = _KRAKEN_PAIRS.get(symbol)
+    if not pair:
+        return {}
+    try:
+        r = req.get("https://api.kraken.com/0/public/OHLC",
+                    params={"pair": pair, "interval": _GAME_SECS // 60}, timeout=8)
+        if not r.ok:
+            return {}
+        res = (r.json() or {}).get("result", {})
+        # result holds the pair series plus a "last" cursor; pick the list value.
+        series = next((v for k, v in res.items() if k != "last" and isinstance(v, list)), None)
+        if not series:
+            return {}
+        out = {}
+        for row in series:
+            # Kraken OHLC = [time, open, high, low, close, vwap, volume, count].
+            start_ts = int(row[0]); close_px = float(row[4])
+            close_ts = start_ts + _GAME_SECS
+            out[int(close_ts // _GAME_SECS)] = close_px
+        return out
+    except Exception:
+        return {}
+
+def _underlying_closes_by_bucket(symbol):
+    """Historical 15-min closes for a token — Coinbase first, Kraken fallback."""
+    return _coinbase_closes_by_bucket(symbol) or _kraken_closes_by_bucket(symbol)
+
 def _settled_strikes_by_bucket(series_prefix):
     """{game_bucket: [strike, ...]} from recently-settled Kalshi markets, or {}."""
     since = int(time.time() - 24 * 3600)
@@ -2518,7 +2549,7 @@ def _seed_game_spreads_from_history():
     seeded = 0
     for symbol, prefix in _SMART_TOKENS.items():
         try:
-            closes = _coinbase_closes_by_bucket(symbol)
+            closes = _underlying_closes_by_bucket(symbol)
             if not closes:
                 continue
             strikes = _settled_strikes_by_bucket(prefix)
