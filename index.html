@@ -2376,12 +2376,22 @@ async function loadBalance(enrich=true) {
           const side   = (p.quantity ?? 0) > 0 ? "yes" : "no";
           const cur    = side === "yes" ? p.current_yes : p.current_no;
           const qty    = Math.abs(p.quantity ?? 0);
-          const profit = cur != null ? qty * (cur - p.buy_price) / 100 : null;
-          const totalReceived = cur != null ? qty * cur / 100 : null;
-          setTimeout(() => announceSell(qty, profit, cur, totalReceived, p.category, p.ticker), announceDelay);
-          announceDelay += 4000;  // 4 seconds between announcements to prevent overlapping voices
-          // Determine if this was a bot auto-sell or market resolution
-          const wasResolution = cur != null && (cur <= 1 || cur >= 99);
+          // If current price not cached, try to infer from recent settlements
+          let resolvedPrice = null;
+          let wasResolution = cur != null && (cur <= 1 || cur >= 99);
+          if (cur == null) {
+            const matchedS = (window._lastSettlements || []).find(s => s.ticker === p.ticker);
+            if (matchedS) {
+              const res = (matchedS.market_result || matchedS.result || '').toLowerCase();
+              resolvedPrice = res === 'yes' ? 100 : res === 'no' ? 0 : null;
+              wasResolution = true;
+            }
+          }
+          const effectiveCur = cur ?? resolvedPrice;
+          const profit = effectiveCur != null ? qty * (effectiveCur - p.buy_price) / 100 : null;
+          const totalReceived = effectiveCur != null ? qty * effectiveCur / 100 : null;
+          setTimeout(() => announceSell(qty, profit, effectiveCur, totalReceived, p.category, p.ticker, wasResolution), announceDelay);
+          announceDelay += 4000;
           showSellPopup(p.title || p.ticker, profit, wasResolution ? "resolved" : "sold");
           addToSaleTicker(p.title || p.ticker, profit, side);
         }
@@ -5075,19 +5085,24 @@ function contractPhrase(count, category) {
 
 // Map ticker symbols to pronounceable crypto names
 function cryptoName(ticker) {
-  const map = {
-    'KXBTC': 'bitcoin', 'KXBTCD': 'bitcoin', 'KXBTCW': 'bitcoin', 'KXBTCM': 'bitcoin',
-    'KXBTC15M': 'bitcoin', 'KXBTC30M': 'bitcoin', 'KXBTC1H': 'bitcoin',
-    'KXETH': 'ethereum', 'KXETHD': 'ethereum', 'KXETHUSD': 'ethereum',
-    'KXETH15M': 'ethereum', 'KXETH30M': 'ethereum', 'KXETH1H': 'ethereum',
-    'KXSOL': 'solana', 'KXSOLD': 'solana', 'KXSOL15M': 'solana', 'KXSOL30M': 'solana', 'KXSOL1H': 'solana',
-    'KXDOGE': 'doge', 'KXDOGE15M': 'doge',
-    'KXBNB': 'binance coin', 'KXBNB15M': 'binance coin',
-    'KXXRP': 'ripple', 'KXXRP15M': 'ripple',
-    'KXHYPE': 'hype', 'KXHYPE15M': 'hype',
-  };
-  if (map[ticker]) return map[ticker];
-  return ticker.toLowerCase().replace(/^kx/, '');
+  // Prefix-match so KXBTC15M-25JUN14-T64379 → "bitcoin" (exact-key lookup fails on suffixed tickers)
+  const prefixes = [
+    ['KXBTC15M','bitcoin'],['KXBTC30M','bitcoin'],['KXBTC1H','bitcoin'],
+    ['KXBTCD','bitcoin'],['KXBTCW','bitcoin'],['KXBTCM','bitcoin'],['KXBTC','bitcoin'],
+    ['KXETH15M','ethereum'],['KXETH30M','ethereum'],['KXETH1H','ethereum'],
+    ['KXETHUSD','ethereum'],['KXETHD','ethereum'],['KXETH','ethereum'],
+    ['KXSOL15M','solana'],['KXSOL30M','solana'],['KXSOL1H','solana'],
+    ['KXSOLD','solana'],['KXSOL','solana'],
+    ['KXDOGE15M','doge'],['KXDOGE','doge'],
+    ['KXBNB15M','binance coin'],['KXBNB','binance coin'],
+    ['KXXRP15M','ripple'],['KXXRP','ripple'],
+    ['KXHYPE15M','hype'],['KXHYPE','hype'],
+  ];
+  const t = (ticker || '').toUpperCase();
+  for (const [pfx, name] of prefixes) {
+    if (t.startsWith(pfx)) return name;
+  }
+  return t.toLowerCase().replace(/^kx/, '') || ticker;
 }
 
 // Batch rapid buys (within 300ms) into one announcement to avoid stuttering
@@ -5160,14 +5175,15 @@ function playSadTrumpet() {
   } catch(e) {}
 }
 
-function announceSell(count, profit, sellPriceCents, totalReceived, category, ticker) {
-  // Smart announcement: show price and profit per contract (more detailed)
+function announceSell(count, profit, sellPriceCents, totalReceived, category, ticker, wasResolution) {
+  const verb = wasResolution ? "settled" : "sold";
+  const coinName = ticker ? ` of ${cryptoName(ticker)}` : "";
   if (profit == null && sellPriceCents == null) {
-    speakText(`you sold ${contractPhrase(count, null)}${ticker ? " of " + cryptoName(ticker) : ""}`);
+    speakText(`you ${verb} ${contractPhrase(count, null)}${coinName}`);
     return;
   }
   const profitPerContract = (profit != null && count) ? profit / count : null;
-  let detail = `you sold ${contractPhrase(count, null)}`;
+  let detail = `you ${verb} ${contractPhrase(count, null)}`;
   if (ticker) detail += ` of ${cryptoName(ticker)}`;
 
   if (count === 1 && sellPriceCents != null && profit != null) {
