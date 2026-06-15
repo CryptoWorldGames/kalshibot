@@ -9,7 +9,7 @@ Windows Defender Firewall is blocking port 5003 (Flask) from incoming remote con
 ## Solution
 
 ### Step 1: Run Firewall Fix (ONE TIME)
-1. On your desktop machine (oiokum2)
+1. On your desktop machine
 2. Right-click **FIREWALL_FIX.bat** → "Run as administrator"
 3. Wait for ✅ confirmation message
 4. Close the window
@@ -31,6 +31,8 @@ On your mobile/laptop via Tailscale, try:
 ```
 http://100.x.y.z:5003/
 ```
+(Replace `100.x.y.z` with your home PC's Tailscale IP — shown in the Tailscale app or the bot's startup output)
+
 Should load the KalshiBot UI ✅
 
 ---
@@ -59,7 +61,7 @@ You should see 4 rules. If not, run FIREWALL_FIX.bat again.
 ### Debug Step 3: Check Tailscale Connection
 On your mobile, open Tailscale app:
 - Make sure "Connected" shows at the top (blue toggle ON)
-- You should see "your-pc-name" with IP "100.x.y.z"
+- You should see your home PC listed with its Tailscale IP
 - Try to ping it: `ping 100.x.y.z` in Command Prompt
 
 ### Debug Step 4: Check Router/Network
@@ -86,10 +88,10 @@ On your mobile, open Tailscale app:
 ---
 
 ## Remote Workflow at Work
-1. Open `http://100.x.y.z:5003/` on mobile
+1. Open `http://100.x.y.z:5003/` on mobile (your Tailscale IP)
 2. Check **Summary** tab - bot is alive and buying/selling
 3. Check **Positions** tab - see current trades
 4. Toggle **Spread Guard** ON/OFF in Scanner tab if needed
-5. If you need to edit code: tell me on Slack, I push fix, bot auto-updates in 5 min
+5. If you need to edit code: push fix, bot auto-updates in 5 min
 
 **Nothing to do on your end - bot handles everything.**
