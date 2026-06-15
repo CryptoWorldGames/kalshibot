@@ -1819,6 +1819,7 @@ threading.Thread(target=_monitor, daemon=True).start()
 _bot_running = False
 _bot_start_time = None
 _bot_lock = threading.RLock()
+_trading_paused = False
 
 BOT_CONFIG_FILE = HERE / "bot_config.json"  # Persists bot state across restarts
 
@@ -1852,6 +1853,9 @@ def _scan_and_buy_for_profile(prof, bs, ss, cycle_start):
     profiles each get their own pass per cycle so a Lotto bot and the regular bot can
     run side by side. Shares the global rate limiter, so total API traffic stays
     within Kalshi's limits regardless of how many bots are active."""
+    if _trading_paused:
+        _log(f"[bot:{prof}] cycle: skipped — trading is paused")
+        return 0
     up_on   = bool(bs.get("enable_buy_up"))
     down_on = bool(bs.get("enable_buy_down"))
     if not (up_on or down_on):
@@ -6016,7 +6020,25 @@ def bot_status():
         "uptime_seconds": uptime_seconds,
         "total_bought_session": buys_this_session,
         "start_time": start_time,
+        "paused": _trading_paused,
     })
+
+
+@app.route("/api/pause", methods=["POST"])
+def api_pause():
+    global _trading_paused
+    _trading_paused = True
+    return jsonify({"paused": True})
+
+@app.route("/api/resume", methods=["POST"])
+def api_resume():
+    global _trading_paused
+    _trading_paused = False
+    return jsonify({"paused": False})
+
+@app.route("/api/pause_status")
+def api_pause_status():
+    return jsonify({"paused": _trading_paused})
 
 
 def _already_running(port: int = 5003) -> bool:

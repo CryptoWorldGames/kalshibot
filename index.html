@@ -516,6 +516,8 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 </head>
 <body>
 
+<div id="pauseBanner" style="display:none;background:#7c2d12;color:#fed7aa;border-bottom:2px solid #ea580c;padding:10px 20px;text-align:center;font-size:15px;font-weight:bold;letter-spacing:0.5px;">⏸ TRADING PAUSED — bot is not placing new orders</div>
+
 <!-- ── SPLASH PAGE (First Load) ──────────────────────────────────── -->
 <!-- ── SETUP WIZARD (first-time only, multi-step) ──────────────────────── -->
 <script>fetch("/api/version").then(r=>r.json()).then(d=>{var e=document.getElementById("splashVersion");if(e)e.textContent="v"+(d.version||"?");});</script>
@@ -1887,6 +1889,8 @@ td.wrap{white-space:normal;width:100%;max-width:none;line-height:1.5;font-size:1
 <!-- ── Bot Control Bar (Bottom Floating) ────────────────────────────── -->
 <div style="position:fixed;bottom:0;left:0;right:0;z-index:50;background:var(--card);border-top:1px solid var(--border);padding:10px 16px;display:flex;gap:8px;align-items:center">
   <button id="botControlBtn" style="flex:1;background:#00d97e;color:#000;border:1px solid #fff;padding:14px 24px;font-size:16px;font-weight:700;cursor:pointer;text-align:center;white-space:nowrap;user-select:none;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;transition:all 0.3s;border-radius:0;min-height:50px;position:relative;z-index:10000;pointer-events:auto !important;line-height:1.2" title="Start or stop the auto-buy bot">▶ Start Bot</button>
+  <button id="stopTradingBtn" onclick="stopTrading()" style="background:#7f1d1d;color:#fca5a5;border:1px solid #ef4444;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px;">⏸ Stop Trading</button>
+  <button id="resumeTradingBtn" onclick="resumeTrading()" style="background:#14532d;color:#86efac;border:1px solid #22c55e;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px;display:none;">▶ Resume</button>
   <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;gap:2px;padding:0">
     <span id="botBarStatus" style="font-size:11px;color:#ff4d4d;background:#000;border:1px solid #ff4d4d;border-radius:3px;padding:2px 6px;white-space:nowrap;font-weight:600;text-align:center;pointer-events:none">✗ Stopped</span>
   </div>
@@ -6236,10 +6240,39 @@ if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("botControlBtn")?.addEventListener("click", handleBotButtonClick);
     renderSoundsList();
+    fetch("/api/pause_status").then(r=>r.json()).then(d=>{
+      if(d.paused){
+        document.getElementById("stopTradingBtn").style.display = "none";
+        document.getElementById("resumeTradingBtn").style.display = "";
+        document.getElementById("pauseBanner").style.display = "";
+      }
+    });
   });
 } else {
   document.getElementById("botControlBtn")?.addEventListener("click", handleBotButtonClick);
   renderSoundsList();
+  fetch("/api/pause_status").then(r=>r.json()).then(d=>{
+    if(d.paused){
+      document.getElementById("stopTradingBtn").style.display = "none";
+      document.getElementById("resumeTradingBtn").style.display = "";
+      document.getElementById("pauseBanner").style.display = "";
+    }
+  });
+}
+
+async function stopTrading() {
+  await fetch("/api/pause", {method:"POST"});
+  document.getElementById("stopTradingBtn").style.display = "none";
+  document.getElementById("resumeTradingBtn").style.display = "";
+  document.getElementById("pauseBanner").style.display = "";
+  toast("Trading paused — bot is still running, just not buying", "warn");
+}
+async function resumeTrading() {
+  await fetch("/api/resume", {method:"POST"});
+  document.getElementById("resumeTradingBtn").style.display = "none";
+  document.getElementById("stopTradingBtn").style.display = "";
+  document.getElementById("pauseBanner").style.display = "none";
+  toast("Trading resumed!", "ok");
 }
 
 // ── Notification Sounds Settings ──────────────────────────────────
