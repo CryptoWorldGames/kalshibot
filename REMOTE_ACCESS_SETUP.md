@@ -1,7 +1,7 @@
 # Remote Access Setup for KalshiBot
 
 ## Problem
-You can't access the bot remotely via Tailscale link: `http://100.110.168.114:5003/`
+You can't access the bot remotely via Tailscale link: `http://100.x.y.z:5003/`
 
 ## Root Cause
 Windows Defender Firewall is blocking port 5003 (Flask) from incoming remote connections.
@@ -9,7 +9,7 @@ Windows Defender Firewall is blocking port 5003 (Flask) from incoming remote con
 ## Solution
 
 ### Step 1: Run Firewall Fix (ONE TIME)
-1. On your desktop machine (oiokum2)
+1. On your desktop machine
 2. Right-click **FIREWALL_FIX.bat** → "Run as administrator"
 3. Wait for ✅ confirmation message
 4. Close the window
@@ -29,8 +29,10 @@ Should load the KalshiBot UI ✅
 ### Step 4: Test Remotely (from work via Tailscale)
 On your mobile/laptop via Tailscale, try:
 ```
-http://100.110.168.114:5003/
+http://100.x.y.z:5003/
 ```
+(Replace `100.x.y.z` with your home PC's Tailscale IP — shown in the Tailscale app or the bot's startup output)
+
 Should load the KalshiBot UI ✅
 
 ---
@@ -59,8 +61,8 @@ You should see 4 rules. If not, run FIREWALL_FIX.bat again.
 ### Debug Step 3: Check Tailscale Connection
 On your mobile, open Tailscale app:
 - Make sure "Connected" shows at the top (blue toggle ON)
-- You should see "desktop-oiokum2" with IP "100.110.168.114"
-- Try to ping it: `ping 100.110.168.114` in Command Prompt
+- You should see your home PC listed with its Tailscale IP
+- Try to ping it: `ping 100.x.y.z` in Command Prompt
 
 ### Debug Step 4: Check Router/Network
 - If on home WiFi, try local IP instead: `http://192.168.x.x:5003/`
@@ -86,10 +88,10 @@ On your mobile, open Tailscale app:
 ---
 
 ## Remote Workflow at Work
-1. Open `http://100.110.168.114:5003/` on mobile
+1. Open `http://100.x.y.z:5003/` on mobile (your Tailscale IP)
 2. Check **Summary** tab - bot is alive and buying/selling
 3. Check **Positions** tab - see current trades
 4. Toggle **Spread Guard** ON/OFF in Scanner tab if needed
-5. If you need to edit code: tell me on Slack, I push fix, bot auto-updates in 5 min
+5. If you need to edit code: push fix, bot auto-updates in 5 min
 
 **Nothing to do on your end - bot handles everything.**
