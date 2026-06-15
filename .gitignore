@@ -51,6 +51,8 @@ kalshi-keys/
 *.pem
 kalshi_api_key
 kalshi_private_key
+public_key_for_kalshi.txt
+*_key_for_kalshi.txt
 test2.txt
 
 # Virtual environment & logs

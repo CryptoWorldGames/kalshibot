@@ -3,7 +3,7 @@ REM ============================================================================
 REM  KalshiBot launcher + auto-updater  (same logic as run_bot.bat)
 REM  Use this if you need to manually restart the bot.
 REM ============================================================================
-set BRANCH=claude/practical-hawking-0faq18
+set BRANCH=main
 
 :loop
 cd /d "%USERPROFILE%\bots\kalshibot"
